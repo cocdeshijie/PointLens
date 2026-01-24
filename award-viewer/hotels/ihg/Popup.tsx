@@ -35,6 +35,12 @@ function IhgPopup() {
     setShowDetails(true)
     setIsLoading(true)
 
+    if (!chrome?.storage?.local) {
+      setRequestDetails(null)
+      setIsLoading(false)
+      return
+    }
+
     const result = await chrome.storage.local.get(IHG_STORAGE_KEY)
     const payload = result[IHG_STORAGE_KEY] as IhgRequestPayload | undefined
 

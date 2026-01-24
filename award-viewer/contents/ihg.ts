@@ -36,6 +36,10 @@ const handleMessage = (event: MessageEvent) => {
     timestamp: data.timestamp as number | undefined
   }
 
+  if (!chrome?.storage?.local) {
+    return
+  }
+
   chrome.storage.local.set({
     [IHG_STORAGE_KEY]: {
       ...payload,

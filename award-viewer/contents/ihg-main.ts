@@ -59,11 +59,18 @@ const hookFetch = () => {
 
   window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
     try {
-      const url = typeof input === "string" ? input : input?.url
+      const url =
+        typeof input === "string"
+          ? input
+          : input instanceof Request
+            ? input.url
+            : input instanceof URL
+              ? input.href
+              : undefined
       if (url && matchesTarget(url)) {
         const method =
           init?.method ||
-          (typeof input === "string" ? "GET" : input?.method || "GET")
+          (input instanceof Request ? input.method : "GET")
         const { bodyType, bodyText } = normalizeBody(init?.body)
         postCapture({
           kind: "fetch",
