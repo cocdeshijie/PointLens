@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 
 const IHG_STORAGE_KEY = "award-viewer:ihg-last-request"
 
@@ -162,6 +162,23 @@ const buildMinimalBody = (requestDetails: IhgRequestPayload | null) => {
   }
 }
 
+const buildSentRequestPayload = (
+  requestDetails: IhgRequestPayload | null,
+  requestHeaders: chrome.webRequest.HttpHeader[]
+): Pick<IhgSentRequest, "request"> => {
+  const headers = toHeaderRecord(requestHeaders)
+  headers["content-type"] = "application/json; charset=UTF-8"
+
+  return {
+    request: {
+      url: requestDetails?.url ?? "",
+      method: "POST",
+      headers,
+      body: buildMinimalBody(requestDetails)
+    }
+  }
+}
+
 function IhgPopup() {
   const [showDetails, setShowDetails] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
@@ -198,6 +215,67 @@ function IhgPopup() {
     () => buildMinimalBody(requestDetails),
     [requestDetails]
   )
+
+  useEffect(() => {
+    if (!requestDetails?.url) {
+      return
+    }
+
+    if (isSending || sentRequest) {
+      return
+    }
+
+    setActiveTab("sent")
+    setIsSending(true)
+
+    const headers = toHeaderRecord(requestHeaders)
+    headers["content-type"] = "application/json; charset=UTF-8"
+    const body = minimalBody
+
+    const sendRequest = async () => {
+      try {
+        const response = await fetch(requestDetails.url ?? "", {
+          method: "POST",
+          headers,
+          body: JSON.stringify(body)
+        })
+        const responseBodyText = await response.text()
+        const responseParsed = formatResponseText(responseBodyText)
+        setSentRequest({
+          request: {
+            url: requestDetails.url ?? "",
+            method: "POST",
+            headers,
+            body
+          },
+          response: {
+            status: response.status,
+            statusText: response.statusText,
+            bodyText: responseBodyText,
+            bodyParsed: responseParsed
+          },
+          error: null,
+          sentAt: new Date().toISOString()
+        })
+      } catch (error) {
+        setSentRequest({
+          request: {
+            url: requestDetails.url ?? "",
+            method: "POST",
+            headers,
+            body
+          },
+          response: null,
+          error: error instanceof Error ? error.message : "Request failed",
+          sentAt: new Date().toISOString()
+        })
+      } finally {
+        setIsSending(false)
+      }
+    }
+
+    void sendRequest()
+  }, [minimalBody, requestDetails, requestHeaders, isSending, sentRequest])
 
   return (
     <div
@@ -420,26 +498,23 @@ function IhgPopup() {
                   }
 
                   setIsSending(true)
-                  const headers = toHeaderRecord(requestHeaders)
-                  headers["content-type"] = "application/json; charset=UTF-8"
-
-                  const body = minimalBody
+                  const { request } = buildSentRequestPayload(
+                    requestDetails,
+                    requestHeaders
+                  )
+                  const body = request.body
+                  const headers = request.headers
 
                   try {
-                    const response = await fetch(requestDetails.url, {
-                      method: "POST",
+                    const response = await fetch(request.url, {
+                      method: request.method,
                       headers,
                       body: JSON.stringify(body)
                     })
                     const responseBodyText = await response.text()
                     const responseParsed = formatResponseText(responseBodyText)
                     setSentRequest({
-                      request: {
-                        url: requestDetails.url,
-                        method: "POST",
-                        headers,
-                        body
-                      },
+                      request,
                       response: {
                         status: response.status,
                         statusText: response.statusText,
@@ -451,12 +526,7 @@ function IhgPopup() {
                     })
                   } catch (error) {
                     setSentRequest({
-                      request: {
-                        url: requestDetails.url,
-                        method: "POST",
-                        headers,
-                        body
-                      },
+                      request,
                       response: null,
                       error:
                         error instanceof Error ? error.message : "Request failed",
