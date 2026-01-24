@@ -5,9 +5,23 @@ const IHG_STORAGE_KEY = "award-viewer:ihg-last-request"
 type IhgRequestPayload = {
   url?: string
   method?: string
-  body?: unknown
+  kind?: string
+  bodyType?: string
+  bodyText?: string | null
   timestamp?: number
   receivedAt?: string
+}
+
+const formatBody = (payload: IhgRequestPayload | null) => {
+  if (!payload?.bodyText) {
+    return null
+  }
+
+  try {
+    return JSON.parse(payload.bodyText)
+  } catch {
+    return payload.bodyText
+  }
 }
 
 function IhgPopup() {
@@ -27,6 +41,8 @@ function IhgPopup() {
     setRequestDetails(payload ?? null)
     setIsLoading(false)
   }
+
+  const formattedBody = formatBody(requestDetails)
 
   return (
     <div
@@ -72,7 +88,14 @@ function IhgPopup() {
                 whiteSpace: "pre-wrap",
                 wordBreak: "break-word"
               }}>
-              {JSON.stringify(requestDetails, null, 2)}
+              {JSON.stringify(
+                {
+                  ...requestDetails,
+                  bodyParsed: formattedBody
+                },
+                null,
+                2
+              )}
             </pre>
           ) : (
             <p>No request captured yet.</p>
