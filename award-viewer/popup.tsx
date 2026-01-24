@@ -30,6 +30,8 @@ function IndexPopup() {
   return (
     <div
       style={{
+        minHeight: 600,
+        minWidth: 420,
         padding: 16
       }}>
       <p>Open ihg.com to see the IHG popup.</p>

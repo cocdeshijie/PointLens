@@ -76,6 +76,8 @@ function IhgPopup() {
   return (
     <div
       style={{
+        minHeight: 600,
+        minWidth: 420,
         padding: 16
       }}>
       <p>im current on ihg.com</p>
