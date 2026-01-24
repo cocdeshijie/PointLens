@@ -11,6 +11,10 @@ const requestMap = new Map<
   }
 >()
 
+type IhgStoredPayload = {
+  responseBodyText?: string | null
+}
+
 type RawBodyItem = {
   bytes?: ArrayBuffer
 }
@@ -110,7 +114,7 @@ chrome.webRequest.onBeforeSendHeaders.addListener(
   ["requestHeaders"]
 )
 
-const handleIhgCompleted = (
+const handleIhgCompleted = async (
   details: chrome.webRequest.WebResponseCacheDetails
 ) => {
   const entry = requestMap.get(details.requestId)
@@ -122,6 +126,9 @@ const handleIhgCompleted = (
     return
   }
 
+  const existing = await chrome.storage.local.get(IHG_STORAGE_KEY)
+  const existingPayload = existing[IHG_STORAGE_KEY] as IhgStoredPayload | undefined
+
   chrome.storage.local.set({
     [IHG_STORAGE_KEY]: {
       kind: "webRequest",
@@ -132,6 +139,7 @@ const handleIhgCompleted = (
       requestHeaders: entry.requestHeaders ?? [],
       statusCode: details.statusCode,
       responseHeaders: details.responseHeaders ?? [],
+      responseBodyText: existingPayload?.responseBodyText ?? null,
       completedAt: new Date().toISOString()
     }
   })

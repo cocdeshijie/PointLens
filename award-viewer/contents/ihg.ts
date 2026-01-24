@@ -14,10 +14,14 @@ type IhgMessagePayload = {
   method?: string
   bodyType?: string
   bodyText?: string | null
+  responseBodyText?: string | null
+  responseStatus?: number
+  responseStatusText?: string
+  responseType?: string
   timestamp?: number
 }
 
-const handleMessage = (event: MessageEvent) => {
+const handleMessage = async (event: MessageEvent) => {
   if (event.source !== window) {
     return
   }
@@ -33,6 +37,10 @@ const handleMessage = (event: MessageEvent) => {
     method: data.method as string | undefined,
     bodyType: data.bodyType as string | undefined,
     bodyText: (data.bodyText as string | null) ?? null,
+    responseBodyText: (data.responseBodyText as string | null) ?? null,
+    responseStatus: data.responseStatus as number | undefined,
+    responseStatusText: data.responseStatusText as string | undefined,
+    responseType: data.responseType as string | undefined,
     timestamp: data.timestamp as number | undefined
   }
 
@@ -40,8 +48,12 @@ const handleMessage = (event: MessageEvent) => {
     return
   }
 
+  const existing = await chrome.storage.local.get(IHG_STORAGE_KEY)
+  const existingPayload = existing[IHG_STORAGE_KEY] as IhgMessagePayload | undefined
+
   chrome.storage.local.set({
     [IHG_STORAGE_KEY]: {
+      ...existingPayload,
       ...payload,
       receivedAt: new Date().toISOString()
     }

@@ -8,6 +8,10 @@ type IhgRequestPayload = {
   kind?: string
   bodyType?: string
   bodyText?: string | null
+  responseBodyText?: string | null
+  responseStatus?: number
+  responseStatusText?: string
+  responseType?: string
   requestHeaders?: chrome.webRequest.HttpHeader[]
   responseHeaders?: chrome.webRequest.HttpHeader[]
   statusCode?: number
@@ -25,6 +29,18 @@ const formatBody = (payload: IhgRequestPayload | null) => {
     return JSON.parse(payload.bodyText)
   } catch {
     return payload.bodyText
+  }
+}
+
+const formatResponseBody = (payload: IhgRequestPayload | null) => {
+  if (!payload?.responseBodyText) {
+    return null
+  }
+
+  try {
+    return JSON.parse(payload.responseBodyText)
+  } catch {
+    return payload.responseBodyText
   }
 }
 
@@ -53,6 +69,7 @@ function IhgPopup() {
   }
 
   const formattedBody = formatBody(requestDetails)
+  const formattedResponseBody = formatResponseBody(requestDetails)
   const requestHeaders = requestDetails?.requestHeaders ?? []
   const responseHeaders = requestDetails?.responseHeaders ?? []
 
@@ -116,7 +133,10 @@ function IhgPopup() {
                     bodyType: requestDetails.bodyType,
                     timestamp: requestDetails.timestamp,
                     receivedAt: requestDetails.receivedAt,
-                    completedAt: requestDetails.completedAt
+                    completedAt: requestDetails.completedAt,
+                    responseStatus: requestDetails.responseStatus,
+                    responseStatusText: requestDetails.responseStatusText,
+                    responseType: requestDetails.responseType
                   },
                   null,
                   2
@@ -143,6 +163,32 @@ function IhgPopup() {
                   {
                     bodyParsed: formattedBody,
                     bodyText: requestDetails.bodyText
+                  },
+                  null,
+                  2
+                )}
+              </pre>
+              <h4
+                style={{
+                  fontSize: 13,
+                  margin: "0 0 6px"
+                }}>
+                Response body
+              </h4>
+              <pre
+                style={{
+                  background: "#f7f7f7",
+                  borderRadius: 6,
+                  fontSize: 12,
+                  margin: "0 0 12px",
+                  padding: 8,
+                  whiteSpace: "pre-wrap",
+                  wordBreak: "break-word"
+                }}>
+                {JSON.stringify(
+                  {
+                    responseParsed: formattedResponseBody,
+                    responseBodyText: requestDetails.responseBodyText
                   },
                   null,
                   2

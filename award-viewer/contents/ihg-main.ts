@@ -58,6 +58,7 @@ const hookFetch = () => {
   const originalFetch = window.fetch
 
   window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+    let capturePayload: Record<string, unknown> | null = null
     try {
       const url =
         typeof input === "string"
@@ -72,19 +73,35 @@ const hookFetch = () => {
           init?.method ||
           (input instanceof Request ? input.method : "GET")
         const { bodyType, bodyText } = normalizeBody(init?.body)
-        postCapture({
+        capturePayload = {
           kind: "fetch",
           url,
           method,
           bodyType,
           bodyText,
           timestamp: Date.now()
-        })
+        }
       }
     } catch {
       // no-op
     }
-    return originalFetch(input, init)
+    const response = await originalFetch(input, init)
+    if (capturePayload) {
+      let responseBodyText: string | null = null
+      try {
+        responseBodyText = await response.clone().text()
+      } catch {
+        responseBodyText = null
+      }
+      postCapture({
+        ...capturePayload,
+        responseBodyText,
+        responseStatus: response.status,
+        responseStatusText: response.statusText,
+        responseType: response.type
+      })
+    }
+    return response
   }
 }
 
@@ -103,18 +120,48 @@ const hookXhr = () => {
       const tracked = this as XMLHttpRequest & {
         __ihgUrl?: string
         __ihgMethod?: string
+        __ihgCapture?: Record<string, unknown>
       }
       const url = tracked.__ihgUrl
       if (url && matchesTarget(url)) {
         const { bodyType, bodyText } = normalizeBody(body ?? null)
-        postCapture({
+        tracked.__ihgCapture = {
           kind: "xhr",
           url,
           method: tracked.__ihgMethod ?? "GET",
           bodyType,
           bodyText,
           timestamp: Date.now()
-        })
+        }
+        this.addEventListener(
+          "loadend",
+          () => {
+            let responseBodyText: string | null = null
+            try {
+              if (this.responseType === "" || this.responseType === "text") {
+                responseBodyText = this.responseText
+              } else if (this.responseType === "json") {
+                responseBodyText =
+                  this.response && typeof this.response === "object"
+                    ? JSON.stringify(this.response)
+                    : null
+              } else if (this.responseType === "document") {
+                responseBodyText = this.responseXML?.documentElement?.outerHTML ?? null
+              }
+            } catch {
+              responseBodyText = null
+            }
+
+            postCapture({
+              ...(tracked.__ihgCapture ?? {}),
+              responseBodyText,
+              responseStatus: this.status,
+              responseStatusText: this.statusText,
+              responseType: this.responseType
+            })
+          },
+          { once: true }
+        )
       }
     } catch {
       // no-op
