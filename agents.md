@@ -5,3 +5,4 @@
 - The extension popup should render a site-specific component from the matching `/hotels/<site>/...` folder when the active tab is on that site’s domain.
 - For IHG, the popup should display: "im current on ihg.com" when the active tab is on ihg.com.
 - Keep site-specific popup UI isolated to its site folder so future hotel sites can be added without mixing concerns.
+- Keep IHG background/content logic in `/hotels/ihg/`, with `contents/ihg*.ts` as thin entry points that import from that folder.
