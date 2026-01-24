@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react"
 
 const IHG_STORAGE_KEY = "award-viewer:ihg-last-request"
+const IS_DEV = import.meta.env.MODE === "development"
 
 type IhgRequestPayload = {
   url?: string
@@ -286,17 +287,19 @@ function IhgPopup() {
         padding: 16
       }}>
       <p>im current on ihg.com</p>
-      <button
-        type="button"
-        onClick={() => {
-          void handleDebugClick()
-        }}
-        style={{
-          marginTop: 12
-        }}>
-        Debug IHG Request
-      </button>
-      {showDetails ? (
+      {IS_DEV ? (
+        <button
+          type="button"
+          onClick={() => {
+            void handleDebugClick()
+          }}
+          style={{
+            marginTop: 12
+          }}>
+          Debug IHG Request
+        </button>
+      ) : null}
+      {showDetails && IS_DEV ? (
         <div
           style={{
             border: "1px solid #ccc",
