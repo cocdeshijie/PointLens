@@ -25,6 +25,7 @@
   },
   "manifest": {
     "permissions": [
+      "storage",
       "webRequest"
     ],
     "host_permissions": [

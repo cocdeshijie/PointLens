@@ -1,7 +1,11 @@
 const IHG_STORAGE_KEY = "award-viewer:ihg-last-request"
 const IHG_TARGET_URL = "https://apis.ihg.com/availability/v3/hotels/offers"
 
-const decodeRawBody = (raw: chrome.webRequest.UploadedFile[]) => {
+type RawBodyItem = {
+  bytes?: ArrayBuffer
+}
+
+const decodeRawBody = (raw: RawBodyItem[]) => {
   if (!raw.length || !raw[0].bytes) {
     return null
   }
@@ -37,14 +41,16 @@ const extractRequestBody = (details: chrome.webRequest.WebRequestBodyDetails) =>
   return { bodyType: "unknown", bodyText: null }
 }
 
-const handleIhgRequest = (
-  details: chrome.webRequest.WebRequestBodyDetails
-) => {
+const handleIhgRequest = (details: chrome.webRequest.WebRequestBodyDetails) => {
   if (details.method !== "POST") {
     return
   }
 
   const { bodyType, bodyText } = extractRequestBody(details)
+
+  if (!chrome?.storage?.local) {
+    return
+  }
 
   chrome.storage.local.set({
     [IHG_STORAGE_KEY]: {
