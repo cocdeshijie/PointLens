@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useState } from "react"
 
 const IHG_STORAGE_KEY = "award-viewer:ihg-last-request"
-const IS_DEV =
-  (import.meta as { env?: { MODE?: string } }).env?.MODE === "development"
+const IS_DEV =  process.env.NODE_ENV === "development"
 
 type IhgRequestPayload = {
   url?: string
