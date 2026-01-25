@@ -485,9 +485,7 @@ function IhgPopup() {
               </p>
               <button
                 type="button"
-                disabled={
-                  isSending || !requestDetails?.url || lastBookingType === "points"
-                }
+                disabled={isSending || !requestDetails?.url}
                 onClick={async () => {
                   if (!requestDetails?.url) {
                     setSentRequest({

@@ -266,8 +266,11 @@ const handleIhgCompleted = async (
     !backgroundSent.has(details.requestId) &&
     !details.initiator?.startsWith("chrome-extension://")
   ) {
-    backgroundSent.add(details.requestId)
-    void runBackgroundRequest(details.requestId)
+    const bookingType = detectBookingType(entry.bodyText)
+    if (bookingType !== "points") {
+      backgroundSent.add(details.requestId)
+      void runBackgroundRequest(details.requestId)
+    }
   }
 
   requestMap.delete(details.requestId)
