@@ -54,6 +54,8 @@ type IhgRateInfo = {
 }
 
 let ihgRatesByHotel = new Map<string, IhgRateInfo>()
+let ihgRateErrorsByHotel = new Map<string, string>()
+let ihgLastRateError: string | null = null
 
 const detectBookingType = (bodyText: string | null): IhgBookingType => {
   if (!bodyText) {
@@ -205,12 +207,28 @@ const updatePlaceholderText = (placeholder: HTMLElement) => {
   }
 
   if (!hotelId) {
-    placeholder.textContent = "placeholder"
+    placeholder.textContent = "CPP unavailable: missing hotel id"
     return
   }
 
   const info = ihgRatesByHotel.get(hotelId)
-  placeholder.textContent = formatCpp(info?.cpp)
+  if (info?.cpp !== undefined && Number.isFinite(info.cpp)) {
+    placeholder.textContent = formatCpp(info.cpp)
+    return
+  }
+
+  const hotelError = ihgRateErrorsByHotel.get(hotelId)
+  if (hotelError) {
+    placeholder.textContent = `CPP unavailable: ${hotelError}`
+    return
+  }
+
+  if (ihgLastRateError) {
+    placeholder.textContent = `CPP unavailable: ${ihgLastRateError}`
+    return
+  }
+
+  placeholder.textContent = "CPP unavailable"
 }
 
 const ensurePlaceholder = (priceElement: Element) => {
@@ -369,18 +387,35 @@ const getRateValue = (
 
 const parseRateMap = (responseBodyText: string | null) => {
   if (!responseBodyText) {
-    return new Map<string, IhgRateInfo>()
+    return {
+      map: new Map<string, IhgRateInfo>(),
+      errorsByHotel: new Map<string, string>(),
+      error: "Missing points response body"
+    }
   }
 
   let parsed: Record<string, unknown>
   try {
     parsed = JSON.parse(responseBodyText) as Record<string, unknown>
   } catch {
-    return new Map<string, IhgRateInfo>()
+    return {
+      map: new Map<string, IhgRateInfo>(),
+      errorsByHotel: new Map<string, string>(),
+      error: "Failed to parse points response"
+    }
   }
 
   const hotels = getHotelCollection(parsed)
   const nextMap = new Map<string, IhgRateInfo>()
+  const errorsByHotel = new Map<string, string>()
+
+  if (!Array.isArray(hotels) || hotels.length === 0) {
+    return {
+      map: nextMap,
+      errorsByHotel,
+      error: "No hotels found in points response"
+    }
+  }
 
   const cashPaths = [
     ["summary", "rateRanges", "lowestCashOnlyCost", "amountAfterTax"],
@@ -412,6 +447,14 @@ const parseRateMap = (responseBodyText: string | null) => {
 
     const cashAmount = getRateValue(record, cashPaths)
     const points = getRateValue(record, pointsPaths)
+    if (cashAmount === undefined && points === undefined) {
+      errorsByHotel.set(hotelId, "Missing cash and points rates")
+    } else if (cashAmount === undefined) {
+      errorsByHotel.set(hotelId, "Missing cash rate")
+    } else if (points === undefined || points <= 0) {
+      errorsByHotel.set(hotelId, "Missing points rate")
+    }
+
     const cpp =
       cashAmount !== undefined && points !== undefined && points > 0
         ? (cashAmount / points) * 100
@@ -424,7 +467,11 @@ const parseRateMap = (responseBodyText: string | null) => {
     })
   })
 
-  return nextMap
+  return {
+    map: nextMap,
+    errorsByHotel,
+    error: nextMap.size === 0 ? "No matching hotels in points response" : null
+  }
 }
 
 const getPointsResponseText = (
@@ -457,10 +504,17 @@ const refreshRatesFromStorage = async () => {
 
   const responseBodyText = getPointsResponseText(lastRequest, sentRequest)
   if (!responseBodyText) {
+    ihgRatesByHotel = new Map<string, IhgRateInfo>()
+    ihgRateErrorsByHotel = new Map<string, string>()
+    ihgLastRateError = "Awaiting points response"
+    updateExistingPlaceholders()
     return
   }
 
-  ihgRatesByHotel = parseRateMap(responseBodyText)
+  const parsed = parseRateMap(responseBodyText)
+  ihgRatesByHotel = parsed.map
+  ihgRateErrorsByHotel = parsed.errorsByHotel
+  ihgLastRateError = parsed.error
   updateExistingPlaceholders()
 }
 
