@@ -250,8 +250,13 @@ const updatePlaceholderText = (placeholder: HTMLElement) => {
     return
   }
 
+  if (info) {
+    placeholder.textContent = `CPP unavailable: incomplete rates for ${hotelId}`
+    return
+  }
+
   if (ihgRatesByHotel.size > 0 && !ihgRatesByHotel.has(hotelId)) {
-    placeholder.textContent = "CPP unavailable: hotel not in points response"
+    placeholder.textContent = `CPP unavailable: ${hotelId} not in points response`
     return
   }
 
@@ -260,7 +265,7 @@ const updatePlaceholderText = (placeholder: HTMLElement) => {
     return
   }
 
-  placeholder.textContent = "CPP unavailable"
+  placeholder.textContent = `CPP unavailable: no rate data (${ihgRatesByHotel.size} hotels parsed)`
 }
 
 const ensurePlaceholder = (priceElement: Element) => {
