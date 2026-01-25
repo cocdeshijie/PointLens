@@ -435,7 +435,7 @@ const getPointsResponseText = (
     return lastRequest.responseBodyText
   }
 
-  if (sentRequest?.bookingType === "points" && sentRequest.response?.bodyText) {
+  if (sentRequest?.response?.bodyText) {
     return sentRequest.response.bodyText
   }
 
