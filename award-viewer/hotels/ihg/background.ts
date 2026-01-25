@@ -129,13 +129,9 @@ const handleIhgCompleted = async (
     }
   })
 
-  if (
-    details.tabId >= 0 &&
-    !replaySent.has(details.requestId) &&
-    !existingPayload?.responseBodyText
-  ) {
+  if (!replaySent.has(details.requestId) && !existingPayload?.responseBodyText) {
     replaySent.add(details.requestId)
-    chrome.tabs.sendMessage(details.tabId, {
+    const replayPayload = {
       type: "ihg-replay",
       payload: {
         url: entry.url,
@@ -144,7 +140,18 @@ const handleIhgCompleted = async (
         bodyText: entry.bodyText,
         requestHeaders: entry.requestHeaders ?? []
       }
-    })
+    }
+
+    if (details.tabId >= 0) {
+      chrome.tabs.sendMessage(details.tabId, replayPayload)
+    } else {
+      chrome.tabs.query({ url: "https://www.ihg.com/*" }, (tabs) => {
+        const targetTab = tabs.find((tab) => tab.active) ?? tabs[0]
+        if (targetTab?.id !== undefined) {
+          chrome.tabs.sendMessage(targetTab.id, replayPayload)
+        }
+      })
+    }
   }
 
   requestMap.delete(details.requestId)
