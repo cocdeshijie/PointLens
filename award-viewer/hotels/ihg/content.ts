@@ -440,9 +440,9 @@ const refreshRatesFromStorage = async () => {
   const sentRequest = stored[IHG_SENT_STORAGE_KEY] as IhgSentRequest | undefined
 
   const responseBodyText =
-    lastRequest?.bookingType === "points"
-      ? lastRequest.responseBodyText ?? null
-      : sentRequest?.response?.bodyText ?? null
+    lastRequest?.bookingType === "points" && lastRequest.responseBodyText
+      ? lastRequest.responseBodyText
+      : sentRequest?.response?.bodyText ?? lastRequest?.responseBodyText ?? null
 
   ihgRatesByHotel = parseRateMap(responseBodyText)
   updateExistingPlaceholders()
