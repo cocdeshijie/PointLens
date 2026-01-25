@@ -44,6 +44,34 @@ const normalizeBody = (body: unknown) => {
   return { bodyType: typeof body, bodyText: null }
 }
 
+const decodeArrayBuffer = (buffer?: ArrayBuffer | null) => {
+  if (!buffer) {
+    return null
+  }
+
+  try {
+    const decoder = new TextDecoder("utf-8")
+    return decoder.decode(buffer)
+  } catch {
+    return null
+  }
+}
+
+const readResponseBody = async (response: Response) => {
+  try {
+    return await response.clone().text()
+  } catch {
+    // fall back to arrayBuffer decoding when text fails
+  }
+
+  try {
+    const buffer = await response.clone().arrayBuffer()
+    return decodeArrayBuffer(buffer)
+  } catch {
+    return null
+  }
+}
+
 const postCapture = (payload: Record<string, unknown>) => {
   window.postMessage(
     {
@@ -89,7 +117,7 @@ const hookFetch = () => {
     if (capturePayload) {
       let responseBodyText: string | null = null
       try {
-        responseBodyText = await response.clone().text()
+        responseBodyText = await readResponseBody(response)
       } catch {
         responseBodyText = null
       }
@@ -135,7 +163,7 @@ const hookXhr = () => {
         }
         this.addEventListener(
           "loadend",
-          () => {
+          async () => {
             let responseBodyText: string | null = null
             try {
               if (this.responseType === "" || this.responseType === "text") {
@@ -148,6 +176,15 @@ const hookXhr = () => {
               } else if (this.responseType === "document") {
                 responseBodyText =
                   this.responseXML?.documentElement?.outerHTML ?? null
+              } else if (this.responseType === "arraybuffer") {
+                responseBodyText = decodeArrayBuffer(
+                  this.response as ArrayBuffer | null
+                )
+              } else if (this.responseType === "blob") {
+                const responseBlob = this.response as Blob | null
+                responseBodyText = responseBlob
+                  ? decodeArrayBuffer(await responseBlob.arrayBuffer())
+                  : null
               }
             } catch {
               responseBodyText = null
