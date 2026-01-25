@@ -57,6 +57,7 @@ type IhgRateInfo = {
 let ihgRatesByHotel = new Map<string, IhgRateInfo>()
 let ihgRateErrorsByHotel = new Map<string, string>()
 let ihgLastRateError: string | null = null
+let ihgLastRateSource: string | null = null
 
 const normalizeHotelId = (id: string | null | undefined) => {
   if (!id) {
@@ -262,7 +263,10 @@ const updatePlaceholderText = (placeholder: HTMLElement) => {
   }
 
   if (ihgLastRateError) {
-    placeholder.textContent = `CPP unavailable: ${ihgLastRateError}`
+    const sourceSuffix = ihgLastRateSource
+      ? ` (source: ${ihgLastRateSource} request)`
+      : ""
+    placeholder.textContent = `CPP unavailable: ${ihgLastRateError}${sourceSuffix}`
     return
   }
 
@@ -581,13 +585,16 @@ const getPointsResponseText = (
       ? sentRequest.response.bodyParsed
       : null
   const candidates = [
-    lastRequest?.responseBodyText ?? null,
-    sentParsedText ?? sentRequest?.response?.bodyText ?? null
+    { responseBodyText: lastRequest?.responseBodyText ?? null, source: "last" },
+    {
+      responseBodyText: sentParsedText ?? sentRequest?.response?.bodyText ?? null,
+      source: "sent"
+    }
   ]
 
-  const withMeta = candidates.map((responseBodyText) => {
-    const meta = extractHotelIdsFromResponse(responseBodyText)
-    return { responseBodyText, ...meta }
+  const withMeta = candidates.map((candidate) => {
+    const meta = extractHotelIdsFromResponse(candidate.responseBodyText)
+    return { ...candidate, ...meta }
   })
 
   if (currentHotelIds && currentHotelIds.size > 0) {
@@ -600,7 +607,8 @@ const getPointsResponseText = (
     if (matchingWithPoints) {
       return {
         responseBodyText: matchingWithPoints.responseBodyText,
-        error: null
+        error: null,
+        source: matchingWithPoints.source
       }
     }
 
@@ -612,7 +620,8 @@ const getPointsResponseText = (
     if (matching) {
       return {
         responseBodyText: null,
-        error: "Points response missing for current search"
+        error: "Points response missing for current search",
+        source: matching.source
       }
     }
   }
@@ -623,7 +632,8 @@ const getPointsResponseText = (
   if (fallbackWithPoints) {
     return {
       responseBodyText: fallbackWithPoints.responseBodyText,
-      error: currentHotelIds?.size ? "Points response does not match current search" : null
+      error: currentHotelIds?.size ? "Points response does not match current search" : null,
+      source: fallbackWithPoints.source
     }
   }
 
@@ -631,11 +641,12 @@ const getPointsResponseText = (
   if (fallback) {
     return {
       responseBodyText: fallback.responseBodyText,
-      error: "Points response missing for current search"
+      error: "Points response missing for current search",
+      source: fallback.source
     }
   }
 
-  return { responseBodyText: null, error: null }
+  return { responseBodyText: null, error: null, source: null }
 }
 
 const refreshRatesFromStorage = async () => {
@@ -667,6 +678,7 @@ const refreshRatesFromStorage = async () => {
     ihgRatesByHotel = new Map<string, IhgRateInfo>()
     ihgRateErrorsByHotel = new Map<string, string>()
     ihgLastRateError = selected.error ?? "Awaiting points response"
+    ihgLastRateSource = selected.source
     updateExistingPlaceholders()
     return
   }
@@ -675,6 +687,7 @@ const refreshRatesFromStorage = async () => {
   ihgRatesByHotel = parsed.map
   ihgRateErrorsByHotel = parsed.errorsByHotel
   ihgLastRateError = selected.error ?? parsed.error
+  ihgLastRateSource = selected.source
   updateExistingPlaceholders()
 }
 
