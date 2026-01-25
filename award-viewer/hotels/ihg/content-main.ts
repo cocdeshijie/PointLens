@@ -44,20 +44,32 @@ const normalizeBody = (body: unknown) => {
   return { bodyType: typeof body, bodyText: null }
 }
 
-const decodeArrayBuffer = (buffer?: ArrayBuffer | null) => {
+const decodeArrayBuffer = (buffer?: ArrayBuffer | null, encoding = "utf-8") => {
   if (!buffer) {
     return null
   }
 
   try {
-    const decoder = new TextDecoder("utf-8")
+    const decoder = new TextDecoder(encoding)
     return decoder.decode(buffer)
   } catch {
     return null
   }
 }
 
+const getEncodingFromContentType = (contentType?: string | null) => {
+  if (!contentType) {
+    return "utf-8"
+  }
+  const match = /charset=([^;]+)/i.exec(contentType)
+  return match?.[1]?.trim().toLowerCase() ?? "utf-8"
+}
+
+const getResponseEncoding = (response: Response) =>
+  getEncodingFromContentType(response.headers.get("content-type"))
+
 const readResponseBody = async (response: Response) => {
+  const encoding = getResponseEncoding(response)
   try {
     return await response.clone().text()
   } catch {
@@ -66,7 +78,7 @@ const readResponseBody = async (response: Response) => {
 
   try {
     const buffer = await response.clone().arrayBuffer()
-    return decodeArrayBuffer(buffer)
+    return decodeArrayBuffer(buffer, encoding)
   } catch {
     return null
   }
@@ -114,13 +126,16 @@ const hookFetch = () => {
       // no-op
     }
     const response = await originalFetch(input, init)
-    if (capturePayload) {
-      let responseBodyText: string | null = null
-      try {
-        responseBodyText = await readResponseBody(response)
-      } catch {
-        responseBodyText = null
+    if (!capturePayload) {
+      return response
+    }
+
+    let didPost = false
+    const postOnce = (responseBodyText: string | null) => {
+      if (didPost) {
+        return
       }
+      didPost = true
       postCapture({
         ...capturePayload,
         responseBodyText,
@@ -129,6 +144,50 @@ const hookFetch = () => {
         responseType: response.type
       })
     }
+
+    const wrapResponseMethod = <T extends (...args: never[]) => Promise<unknown>>(
+      methodName: "text" | "json" | "arrayBuffer" | "blob",
+      formatter: (value: unknown) => Promise<string | null>
+    ) => {
+      const original = response[methodName].bind(response) as T
+      response[methodName] = (async (...args: never[]) => {
+        const result = await original(...args)
+        try {
+          const formatted = await formatter(result)
+          postOnce(formatted)
+        } catch {
+          postOnce(null)
+        }
+        return result
+      }) as T
+    }
+
+    wrapResponseMethod("text", async (value) =>
+      typeof value === "string" ? value : null
+    )
+    wrapResponseMethod("json", async (value) =>
+      value === undefined ? null : JSON.stringify(value)
+    )
+    wrapResponseMethod("arrayBuffer", async (value) =>
+      value instanceof ArrayBuffer
+        ? decodeArrayBuffer(value, getResponseEncoding(response))
+        : null
+    )
+    wrapResponseMethod("blob", async (value) => {
+      if (!(value instanceof Blob)) {
+        return null
+      }
+      const buffer = await value.arrayBuffer()
+      return decodeArrayBuffer(buffer, getResponseEncoding(response))
+    })
+
+    try {
+      const responseBodyText = await readResponseBody(response)
+      postOnce(responseBodyText)
+    } catch {
+      postOnce(null)
+    }
+
     return response
   }
 }
@@ -178,12 +237,20 @@ const hookXhr = () => {
                   this.responseXML?.documentElement?.outerHTML ?? null
               } else if (this.responseType === "arraybuffer") {
                 responseBodyText = decodeArrayBuffer(
-                  this.response as ArrayBuffer | null
+                  this.response as ArrayBuffer | null,
+                  getEncodingFromContentType(
+                    this.getResponseHeader("content-type")
+                  )
                 )
               } else if (this.responseType === "blob") {
                 const responseBlob = this.response as Blob | null
                 responseBodyText = responseBlob
-                  ? decodeArrayBuffer(await responseBlob.arrayBuffer())
+                  ? decodeArrayBuffer(
+                      await responseBlob.arrayBuffer(),
+                      getEncodingFromContentType(
+                        this.getResponseHeader("content-type")
+                      )
+                    )
                   : null
               }
             } catch {

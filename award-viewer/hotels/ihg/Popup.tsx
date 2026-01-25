@@ -75,7 +75,10 @@ const formatBody = (payload: IhgRequestPayload | null) => {
 }
 
 const formatResponseBody = (payload: IhgRequestPayload | null) => {
-  if (!payload?.responseBodyText) {
+  if (
+    payload?.responseBodyText === null ||
+    payload?.responseBodyText === undefined
+  ) {
     return null
   }
 
@@ -87,7 +90,7 @@ const formatResponseBody = (payload: IhgRequestPayload | null) => {
 }
 
 const formatResponseText = (text: string | null) => {
-  if (!text) {
+  if (text === null) {
     return null
   }
 
