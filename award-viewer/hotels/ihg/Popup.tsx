@@ -30,6 +30,7 @@ type IhgSentRequest = {
     headers: Record<string, string>
     body: unknown
   }
+  bookingType?: string
   response: {
     status: number
     statusText: string
@@ -100,6 +101,46 @@ const formatResponseText = (text: string | null) => {
   } catch {
     return text
   }
+}
+
+const detectBookingType = (body: unknown): string => {
+  if (!body) {
+    return "unknown"
+  }
+
+  const parsed =
+    typeof body === "string"
+      ? (() => {
+          try {
+            return JSON.parse(body) as Record<string, unknown>
+          } catch {
+            return null
+          }
+        })()
+      : (body as Record<string, unknown>)
+
+  if (!parsed || typeof parsed !== "object") {
+    return "unknown"
+  }
+
+  const rates = parsed.rates as { ratePlanCodes?: unknown } | undefined
+  if (Array.isArray(rates?.ratePlanCodes) && rates.ratePlanCodes.length > 0) {
+    return "points"
+  }
+
+  const products = parsed.products as
+    | Array<{ guestCounts?: unknown; quantity?: unknown }>
+    | undefined
+  if (
+    Array.isArray(products) &&
+    products.some(
+      (product) => product.guestCounts !== undefined || product.quantity !== undefined
+    )
+  ) {
+    return "cash"
+  }
+
+  return "unknown"
 }
 
 const saveSentRequest = async (payload: IhgSentRequest | null) => {
@@ -267,6 +308,7 @@ function IhgPopup() {
             headers,
             body
           },
+          bookingType: detectBookingType(body),
           response: {
             status: response.status,
             statusText: response.statusText,
@@ -286,6 +328,7 @@ function IhgPopup() {
             headers,
             body
           },
+          bookingType: detectBookingType(body),
           response: null,
           error: error instanceof Error ? error.message : "Request failed",
           sentAt: new Date().toISOString()
@@ -517,6 +560,7 @@ function IhgPopup() {
                         headers: {},
                         body: minimalBody
                       },
+                      bookingType: detectBookingType(minimalBody),
                       response: null,
                       error: "No detected request available."
                     })
@@ -541,6 +585,7 @@ function IhgPopup() {
                     const responseParsed = formatResponseText(responseBodyText)
                     const nextSentRequest: IhgSentRequest = {
                       request,
+                      bookingType: detectBookingType(request.body),
                       response: {
                         status: response.status,
                         statusText: response.statusText,
@@ -555,6 +600,7 @@ function IhgPopup() {
                   } catch (error) {
                     const nextSentRequest: IhgSentRequest = {
                       request,
+                      bookingType: detectBookingType(request.body),
                       response: null,
                       error:
                         error instanceof Error ? error.message : "Request failed",
@@ -592,7 +638,8 @@ function IhgPopup() {
                   {
                     url: sentRequest?.request.url ?? requestDetails?.url ?? "",
                     method: "POST",
-                    sentAt: sentRequest?.sentAt ?? null
+                    sentAt: sentRequest?.sentAt ?? null,
+                    bookingType: sentRequest?.bookingType ?? null
                   },
                   null,
                   2

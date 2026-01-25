@@ -1,7 +1,6 @@
 import type { PlasmoCSConfig } from "plasmo"
 
 const IHG_STORAGE_KEY = "award-viewer:ihg-last-request"
-const IHG_BOOKING_TYPE_KEY = "award-viewer:ihg-booking-type"
 const MESSAGE_FLAG = "__AWARD_VIEWER_IHG__"
 const REPLAY_FLAG = "__AWARD_VIEWER_IHG_REPLAY__"
 
@@ -109,8 +108,7 @@ const handleMessage = async (event: MessageEvent) => {
       ...existingPayload,
       ...payload,
       receivedAt: new Date().toISOString()
-    },
-    [IHG_BOOKING_TYPE_KEY]: payload.bookingType ?? "unknown"
+    }
   })
 }
 

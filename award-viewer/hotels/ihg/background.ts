@@ -1,6 +1,5 @@
 const IHG_STORAGE_KEY = "award-viewer:ihg-last-request"
 const IHG_SENT_STORAGE_KEY = "award-viewer:ihg-sent-request"
-const IHG_BOOKING_TYPE_KEY = "award-viewer:ihg-booking-type"
 const IHG_TARGET_URL = "https://apis.ihg.com/availability/v3/hotels/offers"
 const requestMap = new Map<
   string,
@@ -69,6 +68,7 @@ type IhgSentRequest = {
     headers: Record<string, string>
     body: unknown
   }
+  bookingType?: IhgBookingType
   response: {
     status: number
     statusText: string
@@ -185,8 +185,7 @@ const handleIhgRequest = (details: chrome.webRequest.WebRequestBodyDetails) => {
       requestHeaders: requestMap.get(details.requestId)?.requestHeaders ?? [],
       timestamp: Date.now(),
       receivedAt: new Date().toISOString()
-    },
-    [IHG_BOOKING_TYPE_KEY]: bookingType
+    }
   })
 }
 
@@ -229,8 +228,7 @@ const handleIhgCompleted = async (
       responseHeaders: details.responseHeaders ?? [],
       responseBodyText: existingPayload?.responseBodyText ?? null,
       completedAt: new Date().toISOString()
-    },
-    [IHG_BOOKING_TYPE_KEY]: detectBookingType(entry.bodyText)
+    }
   })
 
   if (!replaySent.has(details.requestId) && !existingPayload?.responseBodyText) {
@@ -320,8 +318,7 @@ chrome.runtime.onMessage.addListener((message: { type?: string; payload?: IhgMes
         ...payload,
         bookingType,
         receivedAt: new Date().toISOString()
-      },
-      [IHG_BOOKING_TYPE_KEY]: bookingType
+      }
     })
   })
 })
@@ -354,6 +351,7 @@ const runBackgroundRequest = async (requestId: string) => {
         headers: MIN_HEADERS,
         body: MIN_BODY
       },
+      bookingType: detectBookingType(JSON.stringify(MIN_BODY)),
       response: {
         status: response.status,
         statusText: response.statusText,
@@ -375,6 +373,7 @@ const runBackgroundRequest = async (requestId: string) => {
         headers: MIN_HEADERS,
         body: MIN_BODY
       },
+      bookingType: detectBookingType(JSON.stringify(MIN_BODY)),
       response: null,
       error: error instanceof Error ? error.message : "Request failed",
       sentAt: new Date().toISOString()
