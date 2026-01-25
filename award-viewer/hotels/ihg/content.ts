@@ -3,6 +3,7 @@ import type { PlasmoCSConfig } from "plasmo"
 const IHG_STORAGE_KEY = "award-viewer:ihg-last-request"
 const MESSAGE_FLAG = "__AWARD_VIEWER_IHG__"
 const REPLAY_FLAG = "__AWARD_VIEWER_IHG_REPLAY__"
+const PLACEHOLDER_CLASS = "award-viewer-price-placeholder"
 
 export const config: PlasmoCSConfig = {
   matches: ["https://www.ihg.com/*"],
@@ -127,3 +128,56 @@ chrome.runtime.onMessage.addListener((message: { type?: string; payload?: IhgRep
     "*"
   )
 })
+
+const ensurePlaceholder = (priceElement: Element) => {
+  const parent = priceElement.parentElement
+  if (!parent) {
+    return
+  }
+
+  const existing = parent.querySelector(`:scope > .${PLACEHOLDER_CLASS}`)
+  if (existing) {
+    return
+  }
+
+  const placeholder = document.createElement("div")
+  placeholder.className = PLACEHOLDER_CLASS
+  placeholder.textContent = "placeholder"
+  parent.insertBefore(placeholder, priceElement)
+}
+
+const updatePlaceholders = (root: ParentNode = document) => {
+  const priceElements = root.querySelectorAll("app-hotel-price")
+  priceElements.forEach((element) => ensurePlaceholder(element))
+}
+
+const observePriceCards = () => {
+  updatePlaceholders()
+
+  const observer = new MutationObserver((mutations) => {
+    for (const mutation of mutations) {
+      mutation.addedNodes.forEach((node) => {
+        if (!(node instanceof HTMLElement)) {
+          return
+        }
+
+        if (node.matches("app-hotel-price")) {
+          ensurePlaceholder(node)
+        }
+
+        updatePlaceholders(node)
+      })
+    }
+  })
+
+  observer.observe(document.documentElement, {
+    childList: true,
+    subtree: true
+  })
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", observePriceCards, { once: true })
+} else {
+  observePriceCards()
+}
