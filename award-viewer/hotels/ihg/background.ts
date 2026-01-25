@@ -10,9 +10,11 @@ const requestMap = new Map<
     requestHeaders?: chrome.webRequest.HttpHeader[]
   }
 >()
+const responseBodyMap = new Map<string, string | null>()
 
 type IhgStoredPayload = {
   responseBodyText?: string | null
+  requestId?: string
 }
 
 type RawBodyItem = {
@@ -55,6 +57,82 @@ const extractRequestBody = (details: chrome.webRequest.WebRequestBodyDetails) =>
   return { bodyType: "unknown", bodyText: null }
 }
 
+const decodeResponseBody = (body?: ArrayBuffer | null) => {
+  if (!body) {
+    return null
+  }
+
+  try {
+    const decoder = new TextDecoder("utf-8")
+    return decoder.decode(body)
+  } catch {
+    return null
+  }
+}
+
+const storeResponseBody = async (requestId: string, responseBodyText: string | null) => {
+  responseBodyMap.set(requestId, responseBodyText)
+
+  if (!chrome?.storage?.local) {
+    return
+  }
+
+  const existing = await chrome.storage.local.get(IHG_STORAGE_KEY)
+  const existingPayload = existing[IHG_STORAGE_KEY] as IhgStoredPayload | undefined
+
+  if (existingPayload?.requestId && existingPayload.requestId !== requestId) {
+    return
+  }
+
+  chrome.storage.local.set({
+    [IHG_STORAGE_KEY]: {
+      ...existingPayload,
+      responseBodyText: responseBodyText ?? null,
+      responseCapturedAt: new Date().toISOString()
+    }
+  })
+
+  if (!requestMap.has(requestId)) {
+    responseBodyMap.delete(requestId)
+  }
+}
+
+const attachResponseFilter = (requestId: string) => {
+  if (!chrome?.webRequest?.filterResponseData) {
+    return
+  }
+
+  try {
+    const filter = chrome.webRequest.filterResponseData(requestId)
+    const chunks: Uint8Array[] = []
+
+    filter.ondata = (event) => {
+      const chunk = new Uint8Array(event.data)
+      chunks.push(chunk)
+      filter.write(event.data)
+    }
+
+    filter.onstop = () => {
+      filter.close()
+      const totalLength = chunks.reduce((sum, chunk) => sum + chunk.byteLength, 0)
+      const merged = new Uint8Array(totalLength)
+      let offset = 0
+      for (const chunk of chunks) {
+        merged.set(chunk, offset)
+        offset += chunk.byteLength
+      }
+      const responseBodyText = decodeResponseBody(merged.buffer)
+      void storeResponseBody(requestId, responseBodyText)
+    }
+
+    filter.onerror = () => {
+      filter.close()
+    }
+  } catch {
+    // no-op
+  }
+}
+
 const handleIhgRequest = (details: chrome.webRequest.WebRequestBodyDetails) => {
   if (details.method !== "POST") {
     return
@@ -69,6 +147,8 @@ const handleIhgRequest = (details: chrome.webRequest.WebRequestBodyDetails) => {
     bodyText
   })
 
+  attachResponseFilter(details.requestId)
+
   if (!chrome?.storage?.local) {
     return
   }
@@ -81,6 +161,7 @@ const handleIhgRequest = (details: chrome.webRequest.WebRequestBodyDetails) => {
       bodyType,
       bodyText,
       requestHeaders: requestMap.get(details.requestId)?.requestHeaders ?? [],
+      requestId: details.requestId,
       timestamp: Date.now(),
       receivedAt: new Date().toISOString()
     }
@@ -112,6 +193,8 @@ const handleIhgCompleted = async (
 
   const existing = await chrome.storage.local.get(IHG_STORAGE_KEY)
   const existingPayload = existing[IHG_STORAGE_KEY] as IhgStoredPayload | undefined
+  const capturedResponseBody =
+    responseBodyMap.get(details.requestId) ?? existingPayload?.responseBodyText ?? null
 
   chrome.storage.local.set({
     [IHG_STORAGE_KEY]: {
@@ -121,14 +204,16 @@ const handleIhgCompleted = async (
       bodyType: entry.bodyType,
       bodyText: entry.bodyText,
       requestHeaders: entry.requestHeaders ?? [],
+      requestId: details.requestId,
       statusCode: details.statusCode,
       responseHeaders: details.responseHeaders ?? [],
-      responseBodyText: existingPayload?.responseBodyText ?? null,
+      responseBodyText: capturedResponseBody,
       completedAt: new Date().toISOString()
     }
   })
 
   requestMap.delete(details.requestId)
+  responseBodyMap.delete(details.requestId)
 }
 
 export const registerIhgWebRequestListeners = () => {
