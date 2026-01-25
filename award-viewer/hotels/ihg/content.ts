@@ -392,6 +392,51 @@ const getHotelCollection = (data: Record<string, unknown>): unknown[] => {
   return findHotelCollection(data)
 }
 
+const hasPointsRates = (hotel: Record<string, unknown>) => {
+  const pointsPaths = [
+    ["summary", "rateRanges", "lowestPointsOnlyCost", "points"],
+    ["rateRanges", "lowestPointsOnlyCost", "points"],
+    ["summary", "lowestPointsOnlyCost", "points"],
+    ["lowestPointsOnlyCost", "points"]
+  ]
+
+  return pointsPaths.some((path) => {
+    const raw = getValueByPath(hotel, path)
+    return extractNumber(raw) !== undefined
+  })
+}
+
+const extractHotelIdsFromResponse = (responseBodyText: string | null) => {
+  if (!responseBodyText) {
+    return { ids: new Set<string>(), hasPoints: false }
+  }
+
+  let parsed: Record<string, unknown>
+  try {
+    parsed = JSON.parse(responseBodyText) as Record<string, unknown>
+  } catch {
+    return { ids: new Set<string>(), hasPoints: false }
+  }
+
+  const hotels = getHotelCollection(parsed)
+  const ids = new Set<string>()
+  let hasPoints = false
+
+  hotels.forEach((hotel) => {
+    if (!hotel || typeof hotel !== "object") {
+      return
+    }
+
+    const record = hotel as Record<string, unknown>
+    getHotelIdentifiers(record).forEach((id) => ids.add(id))
+    if (!hasPoints && hasPointsRates(record)) {
+      hasPoints = true
+    }
+  })
+
+  return { ids, hasPoints }
+}
+
 const getHotelIdentifiers = (hotel: Record<string, unknown>) => {
   const keys = ["hotelCode", "hotelId", "propertyCode", "hotelMnemonic", "code", "id"]
   const identifiers = new Set<string>()
@@ -527,17 +572,65 @@ const parseRateMap = (responseBodyText: string | null) => {
 
 const getPointsResponseText = (
   lastRequest?: IhgStoredPayload,
-  sentRequest?: IhgSentRequest
+  sentRequest?: IhgSentRequest,
+  currentHotelIds?: Set<string>
 ) => {
-  if (lastRequest?.bookingType === "points" && lastRequest.responseBodyText) {
-    return lastRequest.responseBodyText
+  const candidates = [
+    lastRequest?.responseBodyText ?? null,
+    sentRequest?.response?.bodyText ?? null
+  ]
+
+  const withMeta = candidates.map((responseBodyText) => {
+    const meta = extractHotelIdsFromResponse(responseBodyText)
+    return { responseBodyText, ...meta }
+  })
+
+  if (currentHotelIds && currentHotelIds.size > 0) {
+    const matchingWithPoints = withMeta.find(
+      (candidate) =>
+        candidate.responseBodyText &&
+        candidate.hasPoints &&
+        Array.from(currentHotelIds).some((id) => candidate.ids.has(id))
+    )
+    if (matchingWithPoints) {
+      return {
+        responseBodyText: matchingWithPoints.responseBodyText,
+        error: null
+      }
+    }
+
+    const matching = withMeta.find(
+      (candidate) =>
+        candidate.responseBodyText &&
+        Array.from(currentHotelIds).some((id) => candidate.ids.has(id))
+    )
+    if (matching) {
+      return {
+        responseBodyText: matching.responseBodyText,
+        error: "Points response missing for current search"
+      }
+    }
   }
 
-  if (sentRequest?.response?.bodyText) {
-    return sentRequest.response.bodyText
+  const fallbackWithPoints = withMeta.find(
+    (candidate) => candidate.responseBodyText && candidate.hasPoints
+  )
+  if (fallbackWithPoints) {
+    return {
+      responseBodyText: fallbackWithPoints.responseBodyText,
+      error: currentHotelIds?.size ? "Points response does not match current search" : null
+    }
   }
 
-  return null
+  const fallback = withMeta.find((candidate) => candidate.responseBodyText)
+  if (fallback) {
+    return {
+      responseBodyText: fallback.responseBodyText,
+      error: "Points response missing for current search"
+    }
+  }
+
+  return { responseBodyText: null, error: null }
 }
 
 const refreshRatesFromStorage = async () => {
@@ -553,8 +646,19 @@ const refreshRatesFromStorage = async () => {
   const lastRequest = stored[IHG_STORAGE_KEY] as IhgStoredPayload | undefined
   const sentRequest = stored[IHG_SENT_STORAGE_KEY] as IhgSentRequest | undefined
 
-  const responseBodyText = getPointsResponseText(lastRequest, sentRequest)
-  if (!responseBodyText) {
+  const hotelIdElements = document.querySelectorAll(
+    "app-hotel-card-list-view[id], .hotel-card-list-view-container[id], [data-testid='hotel-card'][id]"
+  )
+  const currentHotelIds = new Set<string>()
+  hotelIdElements.forEach((element) => {
+    const id = normalizeHotelId(element.getAttribute("id"))
+    if (id) {
+      currentHotelIds.add(id)
+    }
+  })
+
+  const selected = getPointsResponseText(lastRequest, sentRequest, currentHotelIds)
+  if (!selected.responseBodyText) {
     ihgRatesByHotel = new Map<string, IhgRateInfo>()
     ihgRateErrorsByHotel = new Map<string, string>()
     ihgLastRateError = "Awaiting points response"
@@ -562,10 +666,10 @@ const refreshRatesFromStorage = async () => {
     return
   }
 
-  const parsed = parseRateMap(responseBodyText)
+  const parsed = parseRateMap(selected.responseBodyText)
   ihgRatesByHotel = parsed.map
   ihgRateErrorsByHotel = parsed.errorsByHotel
-  ihgLastRateError = parsed.error
+  ihgLastRateError = selected.error ?? parsed.error
   updateExistingPlaceholders()
 }
 
