@@ -105,6 +105,18 @@ const toHeaderRecord = (headers: chrome.webRequest.HttpHeader[] | undefined) => 
     if (!header.name || header.value === undefined) {
       continue
     }
+    const normalized = header.name.toLowerCase()
+    if (
+      normalized === "content-length" ||
+      normalized === "host" ||
+      normalized === "origin" ||
+      normalized === "referer" ||
+      normalized === "accept-encoding" ||
+      normalized === "user-agent" ||
+      normalized.startsWith("sec-ch-ua")
+    ) {
+      continue
+    }
     record[header.name] = header.value
   }
   return record
