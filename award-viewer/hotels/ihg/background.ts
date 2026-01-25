@@ -1,5 +1,6 @@
 const IHG_STORAGE_KEY = "award-viewer:ihg-last-request"
 const IHG_SENT_STORAGE_KEY = "award-viewer:ihg-sent-request"
+const IHG_BOOKING_TYPE_KEY = "award-viewer:ihg-booking-type"
 const IHG_TARGET_URL = "https://apis.ihg.com/availability/v3/hotels/offers"
 const requestMap = new Map<
   string,
@@ -52,6 +53,7 @@ type IhgMessagePayload = {
   method?: string
   bodyType?: string
   bodyText?: string | null
+  bookingType?: IhgBookingType
   requestHeaders?: chrome.webRequest.HttpHeader[]
   responseBodyText?: string | null
   responseStatus?: number
@@ -79,6 +81,38 @@ type IhgSentRequest = {
 
 type RawBodyItem = {
   bytes?: ArrayBuffer
+}
+
+type IhgBookingType = "points" | "cash" | "unknown"
+
+const detectBookingType = (bodyText: string | null): IhgBookingType => {
+  if (!bodyText) {
+    return "unknown"
+  }
+
+  try {
+    const parsed = JSON.parse(bodyText) as Record<string, unknown>
+    const rates = parsed.rates as { ratePlanCodes?: unknown } | undefined
+    if (Array.isArray(rates?.ratePlanCodes) && rates.ratePlanCodes.length > 0) {
+      return "points"
+    }
+
+    const products = parsed.products as
+      | Array<{ guestCounts?: unknown; quantity?: unknown }>
+      | undefined
+    if (
+      Array.isArray(products) &&
+      products.some(
+        (product) => product.guestCounts !== undefined || product.quantity !== undefined
+      )
+    ) {
+      return "cash"
+    }
+  } catch {
+    return "unknown"
+  }
+
+  return "unknown"
 }
 
 const decodeRawBody = (raw: RawBodyItem[]) => {
@@ -127,6 +161,7 @@ const handleIhgRequest = (details: chrome.webRequest.WebRequestBodyDetails) => {
   }
 
   const { bodyType, bodyText } = extractRequestBody(details)
+  const bookingType = detectBookingType(bodyText)
 
   requestMap.set(details.requestId, {
     url: details.url,
@@ -146,10 +181,12 @@ const handleIhgRequest = (details: chrome.webRequest.WebRequestBodyDetails) => {
       method: details.method,
       bodyType,
       bodyText,
+      bookingType,
       requestHeaders: requestMap.get(details.requestId)?.requestHeaders ?? [],
       timestamp: Date.now(),
       receivedAt: new Date().toISOString()
-    }
+    },
+    [IHG_BOOKING_TYPE_KEY]: bookingType
   })
 }
 
@@ -186,12 +223,14 @@ const handleIhgCompleted = async (
       method: entry.method,
       bodyType: entry.bodyType,
       bodyText: entry.bodyText,
+      bookingType: detectBookingType(entry.bodyText),
       requestHeaders: entry.requestHeaders ?? [],
       statusCode: details.statusCode,
       responseHeaders: details.responseHeaders ?? [],
       responseBodyText: existingPayload?.responseBodyText ?? null,
       completedAt: new Date().toISOString()
-    }
+    },
+    [IHG_BOOKING_TYPE_KEY]: detectBookingType(entry.bodyText)
   })
 
   if (!replaySent.has(details.requestId) && !existingPayload?.responseBodyText) {
@@ -272,14 +311,17 @@ chrome.runtime.onMessage.addListener((message: { type?: string; payload?: IhgMes
   }
 
   const payload = message.payload ?? {}
+  const bookingType = detectBookingType(payload.bodyText ?? null)
   chrome.storage.local.get(IHG_STORAGE_KEY).then((existing) => {
     const existingPayload = existing[IHG_STORAGE_KEY] as IhgMessagePayload | undefined
     chrome.storage.local.set({
       [IHG_STORAGE_KEY]: {
         ...existingPayload,
         ...payload,
+        bookingType,
         receivedAt: new Date().toISOString()
-      }
+      },
+      [IHG_BOOKING_TYPE_KEY]: bookingType
     })
   })
 })

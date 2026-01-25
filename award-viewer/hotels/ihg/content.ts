@@ -1,6 +1,7 @@
 import type { PlasmoCSConfig } from "plasmo"
 
 const IHG_STORAGE_KEY = "award-viewer:ihg-last-request"
+const IHG_BOOKING_TYPE_KEY = "award-viewer:ihg-booking-type"
 const MESSAGE_FLAG = "__AWARD_VIEWER_IHG__"
 const REPLAY_FLAG = "__AWARD_VIEWER_IHG_REPLAY__"
 
@@ -15,6 +16,7 @@ type IhgMessagePayload = {
   method?: string
   bodyType?: string
   bodyText?: string | null
+  bookingType?: IhgBookingType
   responseBodyText?: string | null
   responseStatus?: number
   responseStatusText?: string
@@ -28,6 +30,38 @@ type IhgReplayPayload = {
   bodyType?: string
   bodyText?: string | null
   requestHeaders?: chrome.webRequest.HttpHeader[]
+}
+
+type IhgBookingType = "points" | "cash" | "unknown"
+
+const detectBookingType = (bodyText: string | null): IhgBookingType => {
+  if (!bodyText) {
+    return "unknown"
+  }
+
+  try {
+    const parsed = JSON.parse(bodyText) as Record<string, unknown>
+    const rates = parsed.rates as { ratePlanCodes?: unknown } | undefined
+    if (Array.isArray(rates?.ratePlanCodes) && rates.ratePlanCodes.length > 0) {
+      return "points"
+    }
+
+    const products = parsed.products as
+      | Array<{ guestCounts?: unknown; quantity?: unknown }>
+      | undefined
+    if (
+      Array.isArray(products) &&
+      products.some(
+        (product) => product.guestCounts !== undefined || product.quantity !== undefined
+      )
+    ) {
+      return "cash"
+    }
+  } catch {
+    return "unknown"
+  }
+
+  return "unknown"
 }
 
 const handleMessage = async (event: MessageEvent) => {
@@ -46,6 +80,7 @@ const handleMessage = async (event: MessageEvent) => {
     method: data.method as string | undefined,
     bodyType: data.bodyType as string | undefined,
     bodyText: (data.bodyText as string | null) ?? null,
+    bookingType: detectBookingType((data.bodyText as string | null) ?? null),
     responseBodyText: (data.responseBodyText as string | null) ?? null,
     responseStatus: data.responseStatus as number | undefined,
     responseStatusText: data.responseStatusText as string | undefined,
@@ -74,7 +109,8 @@ const handleMessage = async (event: MessageEvent) => {
       ...existingPayload,
       ...payload,
       receivedAt: new Date().toISOString()
-    }
+    },
+    [IHG_BOOKING_TYPE_KEY]: payload.bookingType ?? "unknown"
   })
 }
 

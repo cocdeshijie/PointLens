@@ -10,6 +10,7 @@ type IhgRequestPayload = {
   kind?: string
   bodyType?: string
   bodyText?: string | null
+  bookingType?: string
   responseBodyText?: string | null
   responseStatus?: number
   responseStatusText?: string
@@ -389,6 +390,7 @@ function IhgPopup() {
                       method: requestDetails.method,
                       statusCode: requestDetails.statusCode,
                       bodyType: requestDetails.bodyType,
+                      bookingType: requestDetails.bookingType,
                       timestamp: requestDetails.timestamp,
                       receivedAt: requestDetails.receivedAt,
                       completedAt: requestDetails.completedAt,
