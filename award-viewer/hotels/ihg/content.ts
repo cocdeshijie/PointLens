@@ -41,6 +41,7 @@ type IhgStoredPayload = {
 }
 
 type IhgSentRequest = {
+  bookingType?: IhgBookingType
   response?: {
     bodyText: string | null
   } | null
@@ -426,6 +427,21 @@ const parseRateMap = (responseBodyText: string | null) => {
   return nextMap
 }
 
+const getPointsResponseText = (
+  lastRequest?: IhgStoredPayload,
+  sentRequest?: IhgSentRequest
+) => {
+  if (lastRequest?.bookingType === "points" && lastRequest.responseBodyText) {
+    return lastRequest.responseBodyText
+  }
+
+  if (sentRequest?.bookingType === "points" && sentRequest.response?.bodyText) {
+    return sentRequest.response.bodyText
+  }
+
+  return null
+}
+
 const refreshRatesFromStorage = async () => {
   if (!chrome?.storage?.local) {
     return
@@ -439,10 +455,10 @@ const refreshRatesFromStorage = async () => {
   const lastRequest = stored[IHG_STORAGE_KEY] as IhgStoredPayload | undefined
   const sentRequest = stored[IHG_SENT_STORAGE_KEY] as IhgSentRequest | undefined
 
-  const responseBodyText =
-    lastRequest?.bookingType === "points" && lastRequest.responseBodyText
-      ? lastRequest.responseBodyText
-      : sentRequest?.response?.bodyText ?? lastRequest?.responseBodyText ?? null
+  const responseBodyText = getPointsResponseText(lastRequest, sentRequest)
+  if (!responseBodyText) {
+    return
+  }
 
   ihgRatesByHotel = parseRateMap(responseBodyText)
   updateExistingPlaceholders()
