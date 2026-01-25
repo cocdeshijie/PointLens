@@ -53,6 +53,15 @@ const handleMessage = async (event: MessageEvent) => {
     timestamp: data.timestamp as number | undefined
   }
 
+  try {
+    chrome.runtime.sendMessage({
+      type: "ihg-capture",
+      payload
+    })
+  } catch {
+    // ignore send errors
+  }
+
   if (!chrome?.storage?.local) {
     return
   }

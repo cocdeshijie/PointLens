@@ -16,6 +16,19 @@ type IhgStoredPayload = {
   responseBodyText?: string | null
 }
 
+type IhgMessagePayload = {
+  kind?: string
+  url?: string
+  method?: string
+  bodyType?: string
+  bodyText?: string | null
+  responseBodyText?: string | null
+  responseStatus?: number
+  responseStatusText?: string
+  responseType?: string
+  timestamp?: number
+}
+
 type RawBodyItem = {
   bytes?: ArrayBuffer
 }
@@ -182,3 +195,25 @@ export const registerIhgWebRequestListeners = () => {
     ["responseHeaders"]
   )
 }
+
+chrome.runtime.onMessage.addListener((message: { type?: string; payload?: IhgMessagePayload }) => {
+  if (message?.type !== "ihg-capture") {
+    return
+  }
+
+  if (!chrome?.storage?.local) {
+    return
+  }
+
+  const payload = message.payload ?? {}
+  chrome.storage.local.get(IHG_STORAGE_KEY).then((existing) => {
+    const existingPayload = existing[IHG_STORAGE_KEY] as IhgMessagePayload | undefined
+    chrome.storage.local.set({
+      [IHG_STORAGE_KEY]: {
+        ...existingPayload,
+        ...payload,
+        receivedAt: new Date().toISOString()
+      }
+    })
+  })
+})
