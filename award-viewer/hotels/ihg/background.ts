@@ -122,10 +122,7 @@ const handleIhgRequest = (details: chrome.webRequest.WebRequestBodyDetails) => {
     return
   }
 
-  if (
-    details.url ===
-    "https://apis.ihg.com/availability/v3/hotels/offers?fieldset=summary,summary.rateRanges"
-  ) {
+  if (details.initiator?.startsWith("chrome-extension://")) {
     return
   }
 
@@ -229,7 +226,8 @@ const handleIhgCompleted = async (
   if (
     details.url ===
       "https://apis.ihg.com/availability/v3/hotels/offers?fieldset=summary,summary.rateRanges" &&
-    !backgroundSent.has(details.requestId)
+    !backgroundSent.has(details.requestId) &&
+    !details.initiator?.startsWith("chrome-extension://")
   ) {
     backgroundSent.add(details.requestId)
     void runBackgroundRequest(details.requestId)
