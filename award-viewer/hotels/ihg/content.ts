@@ -143,7 +143,7 @@ const ensurePlaceholder = (priceElement: Element) => {
   const placeholder = document.createElement("div")
   placeholder.className = PLACEHOLDER_CLASS
   placeholder.textContent = "placeholder"
-  parent.insertBefore(placeholder, priceElement)
+  parent.insertBefore(placeholder, priceElement.nextSibling)
 }
 
 const updatePlaceholders = (root: ParentNode = document) => {
