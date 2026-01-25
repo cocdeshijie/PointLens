@@ -1,4 +1,5 @@
 const IHG_STORAGE_KEY = "award-viewer:ihg-last-request"
+const IHG_SENT_STORAGE_KEY = "award-viewer:ihg-sent-request"
 const IHG_TARGET_URL = "https://apis.ihg.com/availability/v3/hotels/offers"
 const requestMap = new Map<
   string,
@@ -22,11 +23,29 @@ type IhgMessagePayload = {
   method?: string
   bodyType?: string
   bodyText?: string | null
+  requestHeaders?: chrome.webRequest.HttpHeader[]
   responseBodyText?: string | null
   responseStatus?: number
   responseStatusText?: string
   responseType?: string
   timestamp?: number
+}
+
+type IhgSentRequest = {
+  request: {
+    url: string
+    method: string
+    headers: Record<string, string>
+    body: unknown
+  }
+  response: {
+    status: number
+    statusText: string
+    bodyText: string | null
+    bodyParsed: unknown
+  } | null
+  error?: string | null
+  sentAt?: string
 }
 
 type RawBodyItem = {
@@ -208,12 +227,161 @@ chrome.runtime.onMessage.addListener((message: { type?: string; payload?: IhgMes
   const payload = message.payload ?? {}
   chrome.storage.local.get(IHG_STORAGE_KEY).then((existing) => {
     const existingPayload = existing[IHG_STORAGE_KEY] as IhgMessagePayload | undefined
-    chrome.storage.local.set({
-      [IHG_STORAGE_KEY]: {
-        ...existingPayload,
-        ...payload,
-        receivedAt: new Date().toISOString()
-      }
-    })
+    chrome.storage.local
+      .set({
+        [IHG_STORAGE_KEY]: {
+          ...existingPayload,
+          ...payload,
+          receivedAt: new Date().toISOString()
+        }
+      })
+      .then(() => {
+        void runBackgroundRequest()
+      })
   })
 })
+
+const toHeaderRecord = (headers: chrome.webRequest.HttpHeader[] | undefined) => {
+  const record: Record<string, string> = {}
+  for (const header of headers ?? []) {
+    if (!header.name || header.value === undefined) {
+      continue
+    }
+    const normalized = header.name.toLowerCase()
+    if (
+      normalized === "content-length" ||
+      normalized === "host" ||
+      normalized === "origin" ||
+      normalized === "referer" ||
+      normalized === "accept-encoding" ||
+      normalized === "user-agent" ||
+      normalized.startsWith("sec-ch-ua")
+    ) {
+      continue
+    }
+    record[header.name] = header.value
+  }
+  return record
+}
+
+const buildMinimalBody = (bodyText?: string | null) => {
+  if (!bodyText) {
+    return null
+  }
+
+  try {
+    const parsed = JSON.parse(bodyText) as Record<string, unknown>
+    const startDate =
+      typeof parsed.startDate === "string" ? parsed.startDate : ""
+    const endDate = typeof parsed.endDate === "string" ? parsed.endDate : ""
+    const geoLocation = Array.isArray(parsed.geoLocation)
+      ? parsed.geoLocation.map((entry) => ({
+          latitude:
+            typeof entry?.latitude === "number" ? entry.latitude : 0,
+          longitude:
+            typeof entry?.longitude === "number" ? entry.longitude : 0
+        }))
+      : []
+    const productCode =
+      Array.isArray(parsed.products) && parsed.products[0]?.productCode
+        ? String(parsed.products[0].productCode)
+        : "SR"
+
+    const ratePlanCodes = Array.isArray(
+      (parsed.rates as { ratePlanCodes?: unknown[] } | undefined)?.ratePlanCodes
+    )
+      ? (parsed.rates as { ratePlanCodes?: unknown[] }).ratePlanCodes
+      : [
+          { internal: "IVAN1" },
+          { internal: "IVAN3" },
+          { internal: "IVAN5" },
+          { internal: "IVAN6" },
+          { internal: "IVAN7" },
+          { internal: "IVANI" }
+        ]
+
+    return {
+      radius: 30,
+      distanceType: "STRAIGHT_LINE",
+      startDate,
+      endDate,
+      geoLocation:
+        geoLocation.length > 0 ? geoLocation : [{ latitude: 0, longitude: 0 }],
+      products: [
+        {
+          productCode,
+          startDate,
+          endDate
+        }
+      ],
+      rates: {
+        ratePlanCodes
+      }
+    }
+  } catch {
+    return null
+  }
+}
+
+const runBackgroundRequest = async () => {
+  const existing = await chrome.storage.local.get(IHG_STORAGE_KEY)
+  const existingPayload = existing[IHG_STORAGE_KEY] as IhgMessagePayload | undefined
+
+  if (!existingPayload?.url) {
+    return
+  }
+
+  const headers = toHeaderRecord(existingPayload.requestHeaders as chrome.webRequest.HttpHeader[])
+  headers["content-type"] = "application/json; charset=UTF-8"
+
+  const body = buildMinimalBody(existingPayload.bodyText)
+  if (!body) {
+    return
+  }
+
+  try {
+    const response = await fetch(existingPayload.url, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(body),
+      credentials: "include"
+    })
+    const responseBodyText = await response.text()
+    const sentRequest: IhgSentRequest = {
+      request: {
+        url: existingPayload.url,
+        method: "POST",
+        headers,
+        body
+      },
+      response: {
+        status: response.status,
+        statusText: response.statusText,
+        bodyText: responseBodyText,
+        bodyParsed: responseBodyText
+      },
+      error: null,
+      sentAt: new Date().toISOString()
+    }
+
+    chrome.storage.local.set({
+      [IHG_SENT_STORAGE_KEY]: sentRequest
+    })
+  } catch (error) {
+    const sentRequest: IhgSentRequest = {
+      request: {
+        url: existingPayload.url,
+        method: "POST",
+        headers,
+        body
+      },
+      response: null,
+      error: error instanceof Error ? error.message : "Request failed",
+      sentAt: new Date().toISOString()
+    }
+
+    chrome.storage.local.set({
+      [IHG_SENT_STORAGE_KEY]: sentRequest
+    })
+  }
+}
