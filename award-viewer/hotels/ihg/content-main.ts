@@ -2,6 +2,7 @@ import type { PlasmoCSConfig } from "plasmo"
 
 const TARGET_URL = "https://apis.ihg.com/availability/v3/hotels/offers"
 const MESSAGE_FLAG = "__AWARD_VIEWER_IHG__"
+const REPLAY_FLAG = "__AWARD_VIEWER_IHG_REPLAY__"
 
 export const config: PlasmoCSConfig = {
   matches: ["https://www.ihg.com/*"],
@@ -44,6 +45,50 @@ const normalizeBody = (body: unknown) => {
   return { bodyType: typeof body, bodyText: null }
 }
 
+const decodeArrayBuffer = (buffer?: ArrayBuffer | null, encoding = "utf-8") => {
+  if (!buffer) {
+    return null
+  }
+
+  try {
+    const decoder = new TextDecoder(encoding)
+    return decoder.decode(buffer)
+  } catch {
+    return null
+  }
+}
+
+const getEncodingFromContentType = (contentType?: string | null) => {
+  if (!contentType) {
+    return "utf-8"
+  }
+  const match = /charset=([^;]+)/i.exec(contentType)
+  return match?.[1]?.trim().toLowerCase() ?? "utf-8"
+}
+
+const getResponseEncoding = (response: Response) =>
+  getEncodingFromContentType(response.headers.get("content-type"))
+
+const responsePayloadMap = new WeakMap<Response, Record<string, unknown>>()
+const postedResponses = new WeakSet<Response>()
+let responseHooksInstalled = false
+
+const readResponseBody = async (response: Response) => {
+  const encoding = getResponseEncoding(response)
+  try {
+    return await response.clone().text()
+  } catch {
+    // fall back to arrayBuffer decoding when text fails
+  }
+
+  try {
+    const buffer = await response.clone().arrayBuffer()
+    return decodeArrayBuffer(buffer, encoding)
+  } catch {
+    return null
+  }
+}
+
 const postCapture = (payload: Record<string, unknown>) => {
   window.postMessage(
     {
@@ -52,6 +97,132 @@ const postCapture = (payload: Record<string, unknown>) => {
     },
     "*"
   )
+}
+
+const toHeaderRecord = (headers: chrome.webRequest.HttpHeader[] | undefined) => {
+  const record: Record<string, string> = {}
+  for (const header of headers ?? []) {
+    if (!header.name || header.value === undefined) {
+      continue
+    }
+    const normalized = header.name.toLowerCase()
+    if (
+      normalized === "content-length" ||
+      normalized === "host" ||
+      normalized === "origin" ||
+      normalized === "referer" ||
+      normalized === "accept-encoding" ||
+      normalized === "user-agent" ||
+      normalized.startsWith("sec-ch-ua")
+    ) {
+      continue
+    }
+    record[header.name] = header.value
+  }
+  return record
+}
+
+const buildReplayBody = (bodyType?: string, bodyText?: string | null) => {
+  if (!bodyText) {
+    return null
+  }
+
+  if (bodyType === "formData") {
+    try {
+      const parsed = JSON.parse(bodyText) as Record<string, string[]>
+      const formData = new FormData()
+      for (const [key, values] of Object.entries(parsed)) {
+        for (const value of values) {
+          formData.append(key, value)
+        }
+      }
+      return formData
+    } catch {
+      return bodyText
+    }
+  }
+
+  return bodyText
+}
+
+const postResponseOnce = (response: Response, responseBodyText: string | null) => {
+  if (postedResponses.has(response)) {
+    return
+  }
+
+  const payload = responsePayloadMap.get(response)
+  if (!payload) {
+    return
+  }
+
+  postedResponses.add(response)
+  postCapture({
+    ...payload,
+    responseBodyText,
+    responseStatus: response.status,
+    responseStatusText: response.statusText,
+    responseType: response.type
+  })
+}
+
+const ensureResponseHooks = () => {
+  if (responseHooksInstalled) {
+    return
+  }
+  responseHooksInstalled = true
+
+  const originalClone = Response.prototype.clone
+  const originalText = Response.prototype.text
+  const originalJson = Response.prototype.json
+  const originalArrayBuffer = Response.prototype.arrayBuffer
+  const originalBlob = Response.prototype.blob
+
+  Response.prototype.clone = function (...args) {
+    const cloned = originalClone.apply(this, args as [])
+    const payload = responsePayloadMap.get(this)
+    if (payload) {
+      responsePayloadMap.set(cloned, payload)
+    }
+    return cloned
+  }
+
+  Response.prototype.text = async function (...args) {
+    const result = await originalText.apply(this, args as [])
+    postResponseOnce(this, typeof result === "string" ? result : null)
+    return result
+  }
+
+  Response.prototype.json = async function (...args) {
+    const result = await originalJson.apply(this, args as [])
+    postResponseOnce(
+      this,
+      result === undefined ? null : JSON.stringify(result)
+    )
+    return result
+  }
+
+  Response.prototype.arrayBuffer = async function (...args) {
+    const result = await originalArrayBuffer.apply(this, args as [])
+    const text =
+      result instanceof ArrayBuffer
+        ? decodeArrayBuffer(result, getResponseEncoding(this))
+        : null
+    postResponseOnce(this, text)
+    return result
+  }
+
+  Response.prototype.blob = async function (...args) {
+    const result = await originalBlob.apply(this, args as [])
+    const text =
+      result instanceof Blob
+        ? decodeArrayBuffer(
+            await result.arrayBuffer(),
+            getResponseEncoding(this)
+          )
+        : null
+    postResponseOnce(this, text)
+    return result
+  }
 }
 
 const hookFetch = () => {
@@ -86,21 +257,20 @@ const hookFetch = () => {
       // no-op
     }
     const response = await originalFetch(input, init)
-    if (capturePayload) {
-      let responseBodyText: string | null = null
-      try {
-        responseBodyText = await response.clone().text()
-      } catch {
-        responseBodyText = null
-      }
-      postCapture({
-        ...capturePayload,
-        responseBodyText,
-        responseStatus: response.status,
-        responseStatusText: response.statusText,
-        responseType: response.type
-      })
+    if (!capturePayload) {
+      return response
     }
+
+    ensureResponseHooks()
+    responsePayloadMap.set(response, capturePayload)
+
+    try {
+      const responseBodyText = await readResponseBody(response)
+      postResponseOnce(response, responseBodyText)
+    } catch {
+      postResponseOnce(response, null)
+    }
+
     return response
   }
 }
@@ -135,7 +305,7 @@ const hookXhr = () => {
         }
         this.addEventListener(
           "loadend",
-          () => {
+          async () => {
             let responseBodyText: string | null = null
             try {
               if (this.responseType === "" || this.responseType === "text") {
@@ -148,6 +318,23 @@ const hookXhr = () => {
               } else if (this.responseType === "document") {
                 responseBodyText =
                   this.responseXML?.documentElement?.outerHTML ?? null
+              } else if (this.responseType === "arraybuffer") {
+                responseBodyText = decodeArrayBuffer(
+                  this.response as ArrayBuffer | null,
+                  getEncodingFromContentType(
+                    this.getResponseHeader("content-type")
+                  )
+                )
+              } else if (this.responseType === "blob") {
+                const responseBlob = this.response as Blob | null
+                responseBodyText = responseBlob
+                  ? decodeArrayBuffer(
+                      await responseBlob.arrayBuffer(),
+                      getEncodingFromContentType(
+                        this.getResponseHeader("content-type")
+                      )
+                    )
+                  : null
               }
             } catch {
               responseBodyText = null
@@ -171,9 +358,72 @@ const hookXhr = () => {
   }
 }
 
+const hookReplay = () => {
+  window.addEventListener("message", async (event: MessageEvent) => {
+    if (event.source !== window) {
+      return
+    }
+
+    const data = event.data as Record<string, unknown> | undefined
+    if (!data || data[REPLAY_FLAG] !== true) {
+      return
+    }
+
+    const url = typeof data.url === "string" ? data.url : null
+    if (!url) {
+      return
+    }
+
+    const method = typeof data.method === "string" ? data.method : "POST"
+    const bodyType = typeof data.bodyType === "string" ? data.bodyType : undefined
+    const bodyText = typeof data.bodyText === "string" ? data.bodyText : null
+    const requestHeaders = Array.isArray(data.requestHeaders)
+      ? (data.requestHeaders as chrome.webRequest.HttpHeader[])
+      : []
+
+    const headers = toHeaderRecord(requestHeaders)
+    if (!headers["content-type"] && bodyType !== "formData") {
+      headers["content-type"] = "application/json; charset=UTF-8"
+    }
+
+    try {
+      const response = await fetch(url, {
+        method,
+        headers,
+        body: buildReplayBody(bodyType, bodyText),
+        credentials: "include"
+      })
+      const responseBodyText = await readResponseBody(response)
+      postCapture({
+        kind: "replay",
+        url,
+        method,
+        bodyType,
+        bodyText,
+        responseBodyText,
+        responseStatus: response.status,
+        responseStatusText: response.statusText,
+        responseType: response.type,
+        timestamp: Date.now()
+      })
+    } catch {
+      postCapture({
+        kind: "replay",
+        url,
+        method,
+        bodyType,
+        bodyText,
+        responseBodyText: null,
+        timestamp: Date.now()
+      })
+    }
+  })
+}
+
 const init = () => {
   hookFetch()
   hookXhr()
+  hookReplay()
 }
 
 init()

@@ -2,6 +2,7 @@ import type { PlasmoCSConfig } from "plasmo"
 
 const IHG_STORAGE_KEY = "award-viewer:ihg-last-request"
 const MESSAGE_FLAG = "__AWARD_VIEWER_IHG__"
+const REPLAY_FLAG = "__AWARD_VIEWER_IHG_REPLAY__"
 
 export const config: PlasmoCSConfig = {
   matches: ["https://www.ihg.com/*"],
@@ -19,6 +20,14 @@ type IhgMessagePayload = {
   responseStatusText?: string
   responseType?: string
   timestamp?: number
+}
+
+type IhgReplayPayload = {
+  url?: string
+  method?: string
+  bodyType?: string
+  bodyText?: string | null
+  requestHeaders?: chrome.webRequest.HttpHeader[]
 }
 
 const handleMessage = async (event: MessageEvent) => {
@@ -44,6 +53,15 @@ const handleMessage = async (event: MessageEvent) => {
     timestamp: data.timestamp as number | undefined
   }
 
+  try {
+    chrome.runtime.sendMessage({
+      type: "ihg-capture",
+      payload
+    })
+  } catch {
+    // ignore send errors
+  }
+
   if (!chrome?.storage?.local) {
     return
   }
@@ -61,3 +79,17 @@ const handleMessage = async (event: MessageEvent) => {
 }
 
 window.addEventListener("message", handleMessage)
+
+chrome.runtime.onMessage.addListener((message: { type?: string; payload?: IhgReplayPayload }) => {
+  if (message?.type !== "ihg-replay") {
+    return
+  }
+
+  window.postMessage(
+    {
+      [REPLAY_FLAG]: true,
+      ...message.payload
+    },
+    "*"
+  )
+})

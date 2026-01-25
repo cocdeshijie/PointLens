@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react"
 
 const IHG_STORAGE_KEY = "award-viewer:ihg-last-request"
+const IHG_SENT_STORAGE_KEY = "award-viewer:ihg-sent-request"
 const IS_DEV =  process.env.NODE_ENV === "development"
 
 type IhgRequestPayload = {
@@ -74,7 +75,10 @@ const formatBody = (payload: IhgRequestPayload | null) => {
 }
 
 const formatResponseBody = (payload: IhgRequestPayload | null) => {
-  if (!payload?.responseBodyText) {
+  if (
+    payload?.responseBodyText === null ||
+    payload?.responseBodyText === undefined
+  ) {
     return null
   }
 
@@ -86,7 +90,7 @@ const formatResponseBody = (payload: IhgRequestPayload | null) => {
 }
 
 const formatResponseText = (text: string | null) => {
-  if (!text) {
+  if (text === null) {
     return null
   }
 
@@ -95,6 +99,19 @@ const formatResponseText = (text: string | null) => {
   } catch {
     return text
   }
+}
+
+const saveSentRequest = async (payload: IhgSentRequest | null) => {
+  if (!payload || !chrome?.storage?.local) {
+    return
+  }
+
+  await chrome.storage.local.set({
+    [IHG_SENT_STORAGE_KEY]: {
+      ...payload,
+      savedAt: new Date().toISOString()
+    }
+  })
 }
 
 const toHeaderRecord = (headers: chrome.webRequest.HttpHeader[]) => {
@@ -242,7 +259,7 @@ function IhgPopup() {
         })
         const responseBodyText = await response.text()
         const responseParsed = formatResponseText(responseBodyText)
-        setSentRequest({
+        const nextSentRequest: IhgSentRequest = {
           request: {
             url: requestDetails.url ?? "",
             method: "POST",
@@ -257,9 +274,11 @@ function IhgPopup() {
           },
           error: null,
           sentAt: new Date().toISOString()
-        })
+        }
+        setSentRequest(nextSentRequest)
+        void saveSentRequest(nextSentRequest)
       } catch (error) {
-        setSentRequest({
+        const nextSentRequest: IhgSentRequest = {
           request: {
             url: requestDetails.url ?? "",
             method: "POST",
@@ -269,7 +288,9 @@ function IhgPopup() {
           response: null,
           error: error instanceof Error ? error.message : "Request failed",
           sentAt: new Date().toISOString()
-        })
+        }
+        setSentRequest(nextSentRequest)
+        void saveSentRequest(nextSentRequest)
       } finally {
         setIsSending(false)
       }
@@ -516,7 +537,7 @@ function IhgPopup() {
                     })
                     const responseBodyText = await response.text()
                     const responseParsed = formatResponseText(responseBodyText)
-                    setSentRequest({
+                    const nextSentRequest: IhgSentRequest = {
                       request,
                       response: {
                         status: response.status,
@@ -526,15 +547,19 @@ function IhgPopup() {
                       },
                       error: null,
                       sentAt: new Date().toISOString()
-                    })
+                    }
+                    setSentRequest(nextSentRequest)
+                    void saveSentRequest(nextSentRequest)
                   } catch (error) {
-                    setSentRequest({
+                    const nextSentRequest: IhgSentRequest = {
                       request,
                       response: null,
                       error:
                         error instanceof Error ? error.message : "Request failed",
                       sentAt: new Date().toISOString()
-                    })
+                    }
+                    setSentRequest(nextSentRequest)
+                    void saveSentRequest(nextSentRequest)
                   } finally {
                     setIsSending(false)
                   }
