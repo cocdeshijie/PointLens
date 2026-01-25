@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useMemo, useState } from "react"
 
 const IHG_STORAGE_KEY = "award-viewer:ihg-last-request"
 const IHG_SENT_STORAGE_KEY = "award-viewer:ihg-sent-request"
@@ -10,6 +10,7 @@ type IhgRequestPayload = {
   kind?: string
   bodyType?: string
   bodyText?: string | null
+  bookingType?: string
   responseBodyText?: string | null
   responseStatus?: number
   responseStatusText?: string
@@ -29,6 +30,7 @@ type IhgSentRequest = {
     headers: Record<string, string>
     body: unknown
   }
+  bookingType?: string
   response: {
     status: number
     statusText: string
@@ -99,6 +101,46 @@ const formatResponseText = (text: string | null) => {
   } catch {
     return text
   }
+}
+
+const detectBookingType = (body: unknown): string => {
+  if (!body) {
+    return "unknown"
+  }
+
+  const parsed =
+    typeof body === "string"
+      ? (() => {
+          try {
+            return JSON.parse(body) as Record<string, unknown>
+          } catch {
+            return null
+          }
+        })()
+      : (body as Record<string, unknown>)
+
+  if (!parsed || typeof parsed !== "object") {
+    return "unknown"
+  }
+
+  const rates = parsed.rates as { ratePlanCodes?: unknown } | undefined
+  if (Array.isArray(rates?.ratePlanCodes) && rates.ratePlanCodes.length > 0) {
+    return "points"
+  }
+
+  const products = parsed.products as
+    | Array<{ guestCounts?: unknown; quantity?: unknown }>
+    | undefined
+  if (
+    Array.isArray(products) &&
+    products.some(
+      (product) => product.guestCounts !== undefined || product.quantity !== undefined
+    )
+  ) {
+    return "cash"
+  }
+
+  return "unknown"
 }
 
 const saveSentRequest = async (payload: IhgSentRequest | null) => {
@@ -229,75 +271,12 @@ function IhgPopup() {
   const formattedResponseBody = formatResponseBody(requestDetails)
   const requestHeaders = requestDetails?.requestHeaders ?? []
   const responseHeaders = requestDetails?.responseHeaders ?? []
+  const lastBookingType =
+    requestDetails?.bookingType ?? detectBookingType(requestDetails?.bodyText ?? null)
   const minimalBody = useMemo(
     () => buildMinimalBody(requestDetails),
     [requestDetails]
   )
-
-  useEffect(() => {
-    if (!requestDetails?.url) {
-      return
-    }
-
-    if (isSending || sentRequest) {
-      return
-    }
-
-    setActiveTab("sent")
-    setIsSending(true)
-
-    const headers = toHeaderRecord(requestHeaders)
-    headers["content-type"] = "application/json; charset=UTF-8"
-    const body = minimalBody
-
-    const sendRequest = async () => {
-      try {
-        const response = await fetch(requestDetails.url ?? "", {
-          method: "POST",
-          headers,
-          body: JSON.stringify(body)
-        })
-        const responseBodyText = await response.text()
-        const responseParsed = formatResponseText(responseBodyText)
-        const nextSentRequest: IhgSentRequest = {
-          request: {
-            url: requestDetails.url ?? "",
-            method: "POST",
-            headers,
-            body
-          },
-          response: {
-            status: response.status,
-            statusText: response.statusText,
-            bodyText: responseBodyText,
-            bodyParsed: responseParsed
-          },
-          error: null,
-          sentAt: new Date().toISOString()
-        }
-        setSentRequest(nextSentRequest)
-        void saveSentRequest(nextSentRequest)
-      } catch (error) {
-        const nextSentRequest: IhgSentRequest = {
-          request: {
-            url: requestDetails.url ?? "",
-            method: "POST",
-            headers,
-            body
-          },
-          response: null,
-          error: error instanceof Error ? error.message : "Request failed",
-          sentAt: new Date().toISOString()
-        }
-        setSentRequest(nextSentRequest)
-        void saveSentRequest(nextSentRequest)
-      } finally {
-        setIsSending(false)
-      }
-    }
-
-    void sendRequest()
-  }, [minimalBody, requestDetails, requestHeaders, isSending, sentRequest])
 
   return (
     <div
@@ -389,6 +368,7 @@ function IhgPopup() {
                       method: requestDetails.method,
                       statusCode: requestDetails.statusCode,
                       bodyType: requestDetails.bodyType,
+                      bookingType: requestDetails.bookingType,
                       timestamp: requestDetails.timestamp,
                       receivedAt: requestDetails.receivedAt,
                       completedAt: requestDetails.completedAt,
@@ -515,8 +495,24 @@ function IhgPopup() {
                         headers: {},
                         body: minimalBody
                       },
+                      bookingType: detectBookingType(minimalBody),
                       response: null,
                       error: "No detected request available."
+                    })
+                    return
+                  }
+
+                  if (lastBookingType === "points") {
+                    setSentRequest({
+                      request: {
+                        url: requestDetails.url,
+                        method: "POST",
+                        headers: {},
+                        body: minimalBody
+                      },
+                      bookingType: lastBookingType,
+                      response: null,
+                      error: "Points booking detected; replay not required."
                     })
                     return
                   }
@@ -539,6 +535,7 @@ function IhgPopup() {
                     const responseParsed = formatResponseText(responseBodyText)
                     const nextSentRequest: IhgSentRequest = {
                       request,
+                      bookingType: detectBookingType(request.body),
                       response: {
                         status: response.status,
                         statusText: response.statusText,
@@ -553,6 +550,7 @@ function IhgPopup() {
                   } catch (error) {
                     const nextSentRequest: IhgSentRequest = {
                       request,
+                      bookingType: detectBookingType(request.body),
                       response: null,
                       error:
                         error instanceof Error ? error.message : "Request failed",
@@ -590,7 +588,8 @@ function IhgPopup() {
                   {
                     url: sentRequest?.request.url ?? requestDetails?.url ?? "",
                     method: "POST",
-                    sentAt: sentRequest?.sentAt ?? null
+                    sentAt: sentRequest?.sentAt ?? null,
+                    bookingType: sentRequest?.bookingType ?? null
                   },
                   null,
                   2

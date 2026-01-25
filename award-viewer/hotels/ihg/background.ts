@@ -52,6 +52,7 @@ type IhgMessagePayload = {
   method?: string
   bodyType?: string
   bodyText?: string | null
+  bookingType?: IhgBookingType
   requestHeaders?: chrome.webRequest.HttpHeader[]
   responseBodyText?: string | null
   responseStatus?: number
@@ -67,6 +68,7 @@ type IhgSentRequest = {
     headers: Record<string, string>
     body: unknown
   }
+  bookingType?: IhgBookingType
   response: {
     status: number
     statusText: string
@@ -79,6 +81,38 @@ type IhgSentRequest = {
 
 type RawBodyItem = {
   bytes?: ArrayBuffer
+}
+
+type IhgBookingType = "points" | "cash" | "unknown"
+
+const detectBookingType = (bodyText: string | null): IhgBookingType => {
+  if (!bodyText) {
+    return "unknown"
+  }
+
+  try {
+    const parsed = JSON.parse(bodyText) as Record<string, unknown>
+    const rates = parsed.rates as { ratePlanCodes?: unknown } | undefined
+    if (Array.isArray(rates?.ratePlanCodes) && rates.ratePlanCodes.length > 0) {
+      return "points"
+    }
+
+    const products = parsed.products as
+      | Array<{ guestCounts?: unknown; quantity?: unknown }>
+      | undefined
+    if (
+      Array.isArray(products) &&
+      products.some(
+        (product) => product.guestCounts !== undefined || product.quantity !== undefined
+      )
+    ) {
+      return "cash"
+    }
+  } catch {
+    return "unknown"
+  }
+
+  return "unknown"
 }
 
 const decodeRawBody = (raw: RawBodyItem[]) => {
@@ -127,6 +161,7 @@ const handleIhgRequest = (details: chrome.webRequest.WebRequestBodyDetails) => {
   }
 
   const { bodyType, bodyText } = extractRequestBody(details)
+  const bookingType = detectBookingType(bodyText)
 
   requestMap.set(details.requestId, {
     url: details.url,
@@ -146,6 +181,7 @@ const handleIhgRequest = (details: chrome.webRequest.WebRequestBodyDetails) => {
       method: details.method,
       bodyType,
       bodyText,
+      bookingType,
       requestHeaders: requestMap.get(details.requestId)?.requestHeaders ?? [],
       timestamp: Date.now(),
       receivedAt: new Date().toISOString()
@@ -186,6 +222,7 @@ const handleIhgCompleted = async (
       method: entry.method,
       bodyType: entry.bodyType,
       bodyText: entry.bodyText,
+      bookingType: detectBookingType(entry.bodyText),
       requestHeaders: entry.requestHeaders ?? [],
       statusCode: details.statusCode,
       responseHeaders: details.responseHeaders ?? [],
@@ -229,8 +266,11 @@ const handleIhgCompleted = async (
     !backgroundSent.has(details.requestId) &&
     !details.initiator?.startsWith("chrome-extension://")
   ) {
-    backgroundSent.add(details.requestId)
-    void runBackgroundRequest(details.requestId)
+    const bookingType = detectBookingType(entry.bodyText)
+    if (bookingType !== "points") {
+      backgroundSent.add(details.requestId)
+      void runBackgroundRequest(details.requestId)
+    }
   }
 
   requestMap.delete(details.requestId)
@@ -272,12 +312,14 @@ chrome.runtime.onMessage.addListener((message: { type?: string; payload?: IhgMes
   }
 
   const payload = message.payload ?? {}
+  const bookingType = detectBookingType(payload.bodyText ?? null)
   chrome.storage.local.get(IHG_STORAGE_KEY).then((existing) => {
     const existingPayload = existing[IHG_STORAGE_KEY] as IhgMessagePayload | undefined
     chrome.storage.local.set({
       [IHG_STORAGE_KEY]: {
         ...existingPayload,
         ...payload,
+        bookingType,
         receivedAt: new Date().toISOString()
       }
     })
@@ -312,6 +354,7 @@ const runBackgroundRequest = async (requestId: string) => {
         headers: MIN_HEADERS,
         body: MIN_BODY
       },
+      bookingType: detectBookingType(JSON.stringify(MIN_BODY)),
       response: {
         status: response.status,
         statusText: response.statusText,
@@ -333,6 +376,7 @@ const runBackgroundRequest = async (requestId: string) => {
         headers: MIN_HEADERS,
         body: MIN_BODY
       },
+      bookingType: detectBookingType(JSON.stringify(MIN_BODY)),
       response: null,
       error: error instanceof Error ? error.message : "Request failed",
       sentAt: new Date().toISOString()
