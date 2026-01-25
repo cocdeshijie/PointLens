@@ -122,6 +122,13 @@ const handleIhgRequest = (details: chrome.webRequest.WebRequestBodyDetails) => {
     return
   }
 
+  if (
+    details.url ===
+    "https://apis.ihg.com/availability/v3/hotels/offers?fieldset=summary,summary.rateRanges"
+  ) {
+    return
+  }
+
   const { bodyType, bodyText } = extractRequestBody(details)
 
   requestMap.set(details.requestId, {
@@ -219,9 +226,13 @@ const handleIhgCompleted = async (
     }
   }
 
-  if (!backgroundSent.has(details.requestId)) {
+  if (
+    details.url ===
+      "https://apis.ihg.com/availability/v3/hotels/offers?fieldset=summary,summary.rateRanges" &&
+    !backgroundSent.has(details.requestId)
+  ) {
     backgroundSent.add(details.requestId)
-    void runBackgroundRequest()
+    void runBackgroundRequest(details.requestId)
   }
 
   requestMap.delete(details.requestId)
@@ -275,7 +286,16 @@ chrome.runtime.onMessage.addListener((message: { type?: string; payload?: IhgMes
   })
 })
 
-const runBackgroundRequest = async () => {
+const runBackgroundRequest = async (requestId: string) => {
+  const existing = await chrome.storage.local.get(IHG_STORAGE_KEY)
+  const existingPayload = existing[IHG_STORAGE_KEY] as IhgMessagePayload | undefined
+  if (
+    existingPayload?.url !==
+    "https://apis.ihg.com/availability/v3/hotels/offers?fieldset=summary,summary.rateRanges"
+  ) {
+    return
+  }
+
   try {
     const response = await fetch(
       "https://apis.ihg.com/availability/v3/hotels/offers?fieldset=summary,summary.rateRanges",
@@ -324,4 +344,6 @@ const runBackgroundRequest = async () => {
       [IHG_SENT_STORAGE_KEY]: sentRequest
     })
   }
+
+  backgroundSent.delete(requestId)
 }
