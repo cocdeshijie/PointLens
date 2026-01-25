@@ -267,6 +267,56 @@ const getValueByPath = (value: unknown, path: string[]) => {
   return current
 }
 
+const isHotelCandidate = (value: unknown) => {
+  if (!value || typeof value !== "object") {
+    return false
+  }
+
+  const record = value as Record<string, unknown>
+  return (
+    "hotelCode" in record ||
+    "propertyCode" in record ||
+    "summary" in record ||
+    "rateRanges" in record ||
+    "lowestPointsOnlyCost" in record ||
+    "lowestCashOnlyCost" in record
+  )
+}
+
+const findHotelCollection = (data: Record<string, unknown>) => {
+  const queue: unknown[] = [data]
+  const visited = new WeakSet<object>()
+
+  while (queue.length > 0) {
+    const current = queue.shift()
+    if (!current || typeof current !== "object") {
+      continue
+    }
+
+    if (visited.has(current)) {
+      continue
+    }
+    visited.add(current)
+
+    if (Array.isArray(current)) {
+      if (current.some((item) => isHotelCandidate(item))) {
+        return current
+      }
+      current.forEach((item) => queue.push(item))
+      continue
+    }
+
+    const record = current as Record<string, unknown>
+    Object.values(record).forEach((value) => {
+      if (value && typeof value === "object") {
+        queue.push(value)
+      }
+    })
+  }
+
+  return []
+}
+
 const getHotelCollection = (data: Record<string, unknown>): unknown[] => {
   const candidates = [
     data.hotels,
@@ -283,7 +333,7 @@ const getHotelCollection = (data: Record<string, unknown>): unknown[] => {
     }
   }
 
-  return []
+  return findHotelCollection(data)
 }
 
 const getHotelIdentifier = (hotel: Record<string, unknown>) => {
