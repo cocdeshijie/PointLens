@@ -68,6 +68,10 @@ const getEncodingFromContentType = (contentType?: string | null) => {
 const getResponseEncoding = (response: Response) =>
   getEncodingFromContentType(response.headers.get("content-type"))
 
+const responsePayloadMap = new WeakMap<Response, Record<string, unknown>>()
+const postedResponses = new WeakSet<Response>()
+let responseHooksInstalled = false
+
 const readResponseBody = async (response: Response) => {
   const encoding = getResponseEncoding(response)
   try {
@@ -92,6 +96,86 @@ const postCapture = (payload: Record<string, unknown>) => {
     },
     "*"
   )
+}
+
+const postResponseOnce = (response: Response, responseBodyText: string | null) => {
+  if (postedResponses.has(response)) {
+    return
+  }
+
+  const payload = responsePayloadMap.get(response)
+  if (!payload) {
+    return
+  }
+
+  postedResponses.add(response)
+  postCapture({
+    ...payload,
+    responseBodyText,
+    responseStatus: response.status,
+    responseStatusText: response.statusText,
+    responseType: response.type
+  })
+}
+
+const ensureResponseHooks = () => {
+  if (responseHooksInstalled) {
+    return
+  }
+  responseHooksInstalled = true
+
+  const originalClone = Response.prototype.clone
+  const originalText = Response.prototype.text
+  const originalJson = Response.prototype.json
+  const originalArrayBuffer = Response.prototype.arrayBuffer
+  const originalBlob = Response.prototype.blob
+
+  Response.prototype.clone = function (...args) {
+    const cloned = originalClone.apply(this, args as [])
+    const payload = responsePayloadMap.get(this)
+    if (payload) {
+      responsePayloadMap.set(cloned, payload)
+    }
+    return cloned
+  }
+
+  Response.prototype.text = async function (...args) {
+    const result = await originalText.apply(this, args as [])
+    postResponseOnce(this, typeof result === "string" ? result : null)
+    return result
+  }
+
+  Response.prototype.json = async function (...args) {
+    const result = await originalJson.apply(this, args as [])
+    postResponseOnce(
+      this,
+      result === undefined ? null : JSON.stringify(result)
+    )
+    return result
+  }
+
+  Response.prototype.arrayBuffer = async function (...args) {
+    const result = await originalArrayBuffer.apply(this, args as [])
+    const text =
+      result instanceof ArrayBuffer
+        ? decodeArrayBuffer(result, getResponseEncoding(this))
+        : null
+    postResponseOnce(this, text)
+    return result
+  }
+
+  Response.prototype.blob = async function (...args) {
+    const result = await originalBlob.apply(this, args as [])
+    const text =
+      result instanceof Blob
+        ? decodeArrayBuffer(
+            await result.arrayBuffer(),
+            getResponseEncoding(this)
+          )
+        : null
+    postResponseOnce(this, text)
+    return result
+  }
 }
 
 const hookFetch = () => {
@@ -130,62 +214,14 @@ const hookFetch = () => {
       return response
     }
 
-    let didPost = false
-    const postOnce = (responseBodyText: string | null) => {
-      if (didPost) {
-        return
-      }
-      didPost = true
-      postCapture({
-        ...capturePayload,
-        responseBodyText,
-        responseStatus: response.status,
-        responseStatusText: response.statusText,
-        responseType: response.type
-      })
-    }
-
-    const wrapResponseMethod = <T extends (...args: never[]) => Promise<unknown>>(
-      methodName: "text" | "json" | "arrayBuffer" | "blob",
-      formatter: (value: unknown) => Promise<string | null>
-    ) => {
-      const original = response[methodName].bind(response) as T
-      response[methodName] = (async (...args: never[]) => {
-        const result = await original(...args)
-        try {
-          const formatted = await formatter(result)
-          postOnce(formatted)
-        } catch {
-          postOnce(null)
-        }
-        return result
-      }) as T
-    }
-
-    wrapResponseMethod("text", async (value) =>
-      typeof value === "string" ? value : null
-    )
-    wrapResponseMethod("json", async (value) =>
-      value === undefined ? null : JSON.stringify(value)
-    )
-    wrapResponseMethod("arrayBuffer", async (value) =>
-      value instanceof ArrayBuffer
-        ? decodeArrayBuffer(value, getResponseEncoding(response))
-        : null
-    )
-    wrapResponseMethod("blob", async (value) => {
-      if (!(value instanceof Blob)) {
-        return null
-      }
-      const buffer = await value.arrayBuffer()
-      return decodeArrayBuffer(buffer, getResponseEncoding(response))
-    })
+    ensureResponseHooks()
+    responsePayloadMap.set(response, capturePayload)
 
     try {
       const responseBodyText = await readResponseBody(response)
-      postOnce(responseBodyText)
+      postResponseOnce(response, responseBodyText)
     } catch {
-      postOnce(null)
+      postResponseOnce(response, null)
     }
 
     return response
