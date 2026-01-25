@@ -606,7 +606,7 @@ const getPointsResponseText = (
     )
     if (matching) {
       return {
-        responseBodyText: matching.responseBodyText,
+        responseBodyText: null,
         error: "Points response missing for current search"
       }
     }
@@ -661,7 +661,7 @@ const refreshRatesFromStorage = async () => {
   if (!selected.responseBodyText) {
     ihgRatesByHotel = new Map<string, IhgRateInfo>()
     ihgRateErrorsByHotel = new Map<string, string>()
-    ihgLastRateError = "Awaiting points response"
+    ihgLastRateError = selected.error ?? "Awaiting points response"
     updateExistingPlaceholders()
     return
   }
