@@ -343,14 +343,34 @@ const buildPointsBody = (payload?: IhgMessagePayload) => {
         ? parsed.geoLocation
         : MIN_BODY.geoLocation
 
-    const productCode =
+    const product =
       Array.isArray(parsed.products) && parsed.products.length > 0
-        ? (parsed.products[0] as { productCode?: string }).productCode ?? "SR"
+        ? (parsed.products[0] as Record<string, unknown>)
+        : null
+    const productCode =
+      product && typeof product.productCode === "string"
+        ? product.productCode
         : "SR"
+    const quantity =
+      product && typeof product.quantity === "number" ? product.quantity : 1
+    const guestCounts =
+      product && Array.isArray(product.guestCounts) ? product.guestCounts : undefined
 
     return {
       radius:
         typeof parsed.radius === "number" ? parsed.radius : MIN_BODY.radius,
+      maxRadius:
+        typeof parsed.maxRadius === "number" ? parsed.maxRadius : undefined,
+      minHotels:
+        typeof parsed.minHotels === "number" ? parsed.minHotels : undefined,
+      incrementRadiusBy:
+        typeof parsed.incrementRadiusBy === "number"
+          ? parsed.incrementRadiusBy
+          : undefined,
+      distanceUnit:
+        typeof parsed.distanceUnit === "string"
+          ? parsed.distanceUnit
+          : "MI",
       distanceType:
         typeof parsed.distanceType === "string"
           ? parsed.distanceType
@@ -362,7 +382,9 @@ const buildPointsBody = (payload?: IhgMessagePayload) => {
         {
           productCode,
           startDate,
-          endDate
+          endDate,
+          quantity,
+          ...(guestCounts ? { guestCounts } : {})
         }
       ],
       rates: MIN_BODY.rates
