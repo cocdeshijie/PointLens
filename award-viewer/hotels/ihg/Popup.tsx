@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useMemo, useState } from "react"
 
 const IHG_STORAGE_KEY = "award-viewer:ihg-last-request"
 const IHG_SENT_STORAGE_KEY = "award-viewer:ihg-sent-request"
@@ -271,77 +271,12 @@ function IhgPopup() {
   const formattedResponseBody = formatResponseBody(requestDetails)
   const requestHeaders = requestDetails?.requestHeaders ?? []
   const responseHeaders = requestDetails?.responseHeaders ?? []
+  const lastBookingType =
+    requestDetails?.bookingType ?? detectBookingType(requestDetails?.bodyText ?? null)
   const minimalBody = useMemo(
     () => buildMinimalBody(requestDetails),
     [requestDetails]
   )
-
-  useEffect(() => {
-    if (!requestDetails?.url) {
-      return
-    }
-
-    if (isSending || sentRequest) {
-      return
-    }
-
-    setActiveTab("sent")
-    setIsSending(true)
-
-    const headers = toHeaderRecord(requestHeaders)
-    headers["content-type"] = "application/json; charset=UTF-8"
-    const body = minimalBody
-
-    const sendRequest = async () => {
-      try {
-        const response = await fetch(requestDetails.url ?? "", {
-          method: "POST",
-          headers,
-          body: JSON.stringify(body)
-        })
-        const responseBodyText = await response.text()
-        const responseParsed = formatResponseText(responseBodyText)
-        const nextSentRequest: IhgSentRequest = {
-          request: {
-            url: requestDetails.url ?? "",
-            method: "POST",
-            headers,
-            body
-          },
-          bookingType: detectBookingType(body),
-          response: {
-            status: response.status,
-            statusText: response.statusText,
-            bodyText: responseBodyText,
-            bodyParsed: responseParsed
-          },
-          error: null,
-          sentAt: new Date().toISOString()
-        }
-        setSentRequest(nextSentRequest)
-        void saveSentRequest(nextSentRequest)
-      } catch (error) {
-        const nextSentRequest: IhgSentRequest = {
-          request: {
-            url: requestDetails.url ?? "",
-            method: "POST",
-            headers,
-            body
-          },
-          bookingType: detectBookingType(body),
-          response: null,
-          error: error instanceof Error ? error.message : "Request failed",
-          sentAt: new Date().toISOString()
-        }
-        setSentRequest(nextSentRequest)
-        void saveSentRequest(nextSentRequest)
-      } finally {
-        setIsSending(false)
-      }
-    }
-
-    void sendRequest()
-  }, [minimalBody, requestDetails, requestHeaders, isSending, sentRequest])
 
   return (
     <div
@@ -550,7 +485,9 @@ function IhgPopup() {
               </p>
               <button
                 type="button"
-                disabled={isSending || !requestDetails?.url}
+                disabled={
+                  isSending || !requestDetails?.url || lastBookingType === "points"
+                }
                 onClick={async () => {
                   if (!requestDetails?.url) {
                     setSentRequest({
@@ -563,6 +500,21 @@ function IhgPopup() {
                       bookingType: detectBookingType(minimalBody),
                       response: null,
                       error: "No detected request available."
+                    })
+                    return
+                  }
+
+                  if (lastBookingType === "points") {
+                    setSentRequest({
+                      request: {
+                        url: requestDetails.url,
+                        method: "POST",
+                        headers: {},
+                        body: minimalBody
+                      },
+                      bookingType: lastBookingType,
+                      response: null,
+                      error: "Points booking detected; replay not required."
                     })
                     return
                   }
