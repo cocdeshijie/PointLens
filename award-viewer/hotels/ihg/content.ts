@@ -44,6 +44,7 @@ type IhgSentRequest = {
   bookingType?: IhgBookingType
   response?: {
     bodyText: string | null
+    bodyParsed?: unknown
   } | null
 }
 
@@ -575,9 +576,13 @@ const getPointsResponseText = (
   sentRequest?: IhgSentRequest,
   currentHotelIds?: Set<string>
 ) => {
+  const sentParsedText =
+    typeof sentRequest?.response?.bodyParsed === "string"
+      ? sentRequest.response.bodyParsed
+      : null
   const candidates = [
     lastRequest?.responseBodyText ?? null,
-    sentRequest?.response?.bodyText ?? null
+    sentParsedText ?? sentRequest?.response?.bodyText ?? null
   ]
 
   const withMeta = candidates.map((responseBodyText) => {
