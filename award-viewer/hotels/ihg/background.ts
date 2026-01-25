@@ -372,6 +372,34 @@ const buildPointsBody = (payload?: IhgMessagePayload) => {
   }
 }
 
+const toHeaderRecord = (headers?: chrome.webRequest.HttpHeader[]) => {
+  if (!headers) {
+    return {}
+  }
+
+  const record: Record<string, string> = {}
+  for (const header of headers) {
+    if (!header.name || header.value === undefined) {
+      continue
+    }
+
+    const normalized = header.name.toLowerCase()
+    if (
+      normalized === "content-length" ||
+      normalized === "host" ||
+      normalized === "origin" ||
+      normalized === "referer" ||
+      normalized === "accept-encoding"
+    ) {
+      continue
+    }
+
+    record[header.name] = header.value
+  }
+
+  return record
+}
+
 const runBackgroundRequest = async (requestId: string) => {
   const existing = await chrome.storage.local.get(IHG_STORAGE_KEY)
   const existingPayload = existing[IHG_STORAGE_KEY] as IhgMessagePayload | undefined
@@ -384,11 +412,17 @@ const runBackgroundRequest = async (requestId: string) => {
 
   try {
     const pointsBody = buildPointsBody(existingPayload)
+    const derivedHeaders = toHeaderRecord(existingPayload?.requestHeaders)
+    const requestHeaders = {
+      ...MIN_HEADERS,
+      ...derivedHeaders,
+      "content-type": "application/json; charset=UTF-8"
+    }
     const response = await fetch(
       "https://apis.ihg.com/availability/v3/hotels/offers?fieldset=summary,summary.rateRanges",
       {
         method: "POST",
-        headers: MIN_HEADERS,
+        headers: requestHeaders,
         body: JSON.stringify(pointsBody),
         credentials: "include"
       }
@@ -398,7 +432,7 @@ const runBackgroundRequest = async (requestId: string) => {
       request: {
         url: "https://apis.ihg.com/availability/v3/hotels/offers?fieldset=summary,summary.rateRanges",
         method: "POST",
-        headers: MIN_HEADERS,
+        headers: requestHeaders,
         body: pointsBody
       },
       bookingType: detectBookingType(JSON.stringify(pointsBody)),
@@ -417,11 +451,17 @@ const runBackgroundRequest = async (requestId: string) => {
     })
   } catch (error) {
     const pointsBody = buildPointsBody(existingPayload)
+    const derivedHeaders = toHeaderRecord(existingPayload?.requestHeaders)
+    const requestHeaders = {
+      ...MIN_HEADERS,
+      ...derivedHeaders,
+      "content-type": "application/json; charset=UTF-8"
+    }
     const sentRequest: IhgSentRequest = {
       request: {
         url: "https://apis.ihg.com/availability/v3/hotels/offers?fieldset=summary,summary.rateRanges",
         method: "POST",
-        headers: MIN_HEADERS,
+        headers: requestHeaders,
         body: pointsBody
       },
       bookingType: detectBookingType(JSON.stringify(pointsBody)),
