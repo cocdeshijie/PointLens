@@ -57,6 +57,17 @@ let ihgRatesByHotel = new Map<string, IhgRateInfo>()
 let ihgRateErrorsByHotel = new Map<string, string>()
 let ihgLastRateError: string | null = null
 
+const normalizeHotelId = (id: string | null | undefined) => {
+  if (!id) {
+    return null
+  }
+  const trimmed = id.trim()
+  if (!trimmed) {
+    return null
+  }
+  return trimmed.toUpperCase()
+}
+
 const detectBookingType = (bodyText: string | null): IhgBookingType => {
   if (!bodyText) {
     return "unknown"
@@ -160,7 +171,10 @@ const getHotelIdFromElement = (element: Element): string | null => {
   ]
   for (const candidate of candidates) {
     if (candidate) {
-      return candidate
+      const normalized = normalizeHotelId(candidate)
+      if (normalized) {
+        return normalized
+      }
     }
   }
 
@@ -173,14 +187,20 @@ const getHotelIdFromElement = (element: Element): string | null => {
       ancestor.getAttribute("data-hotel-id") ||
       ancestor.getAttribute("data-hotel-code")
     if (ancestorId) {
-      return ancestorId
+      const normalized = normalizeHotelId(ancestorId)
+      if (normalized) {
+        return normalized
+      }
     }
   }
 
   const fallback = element.closest("[id]")
   const fallbackId = fallback?.getAttribute("id")
   if (fallbackId && /^[a-z0-9]{3,8}$/i.test(fallbackId)) {
-    return fallbackId
+    const normalized = normalizeHotelId(fallbackId)
+    if (normalized) {
+      return normalized
+    }
   }
 
   return null
@@ -199,9 +219,10 @@ const updatePlaceholderText = (placeholder: HTMLElement) => {
   if (!hotelId) {
     const sibling = placeholder.previousElementSibling
     if (sibling?.matches("app-hotel-price")) {
-      hotelId = getHotelIdFromElement(sibling)
-      if (hotelId) {
-        placeholder.dataset.hotelId = hotelId
+      const siblingId = getHotelIdFromElement(sibling)
+      if (siblingId) {
+        hotelId = siblingId
+        placeholder.dataset.hotelId = siblingId
       }
     }
   }
@@ -209,6 +230,12 @@ const updatePlaceholderText = (placeholder: HTMLElement) => {
   if (!hotelId) {
     placeholder.textContent = "CPP unavailable: missing hotel id"
     return
+  }
+
+  const normalizedHotelId = normalizeHotelId(hotelId) ?? hotelId
+  if (normalizedHotelId !== hotelId) {
+    hotelId = normalizedHotelId
+    placeholder.dataset.hotelId = normalizedHotelId
   }
 
   const info = ihgRatesByHotel.get(hotelId)
@@ -220,6 +247,11 @@ const updatePlaceholderText = (placeholder: HTMLElement) => {
   const hotelError = ihgRateErrorsByHotel.get(hotelId)
   if (hotelError) {
     placeholder.textContent = `CPP unavailable: ${hotelError}`
+    return
+  }
+
+  if (ihgRatesByHotel.size > 0 && !ihgRatesByHotel.has(hotelId)) {
+    placeholder.textContent = "CPP unavailable: hotel not in points response"
     return
   }
 
@@ -360,10 +392,16 @@ const getHotelIdentifier = (hotel: Record<string, unknown>) => {
   for (const key of keys) {
     const value = hotel[key]
     if (typeof value === "string" && value.trim().length > 0) {
-      return value
+      const normalized = normalizeHotelId(value)
+      if (normalized) {
+        return normalized
+      }
     }
     if (typeof value === "number") {
-      return String(value)
+      const normalized = normalizeHotelId(String(value))
+      if (normalized) {
+        return normalized
+      }
     }
   }
 
