@@ -392,25 +392,27 @@ const getHotelCollection = (data: Record<string, unknown>): unknown[] => {
   return findHotelCollection(data)
 }
 
-const getHotelIdentifier = (hotel: Record<string, unknown>) => {
+const getHotelIdentifiers = (hotel: Record<string, unknown>) => {
   const keys = ["hotelCode", "hotelId", "propertyCode", "hotelMnemonic", "code", "id"]
+  const identifiers = new Set<string>()
+
   for (const key of keys) {
     const value = hotel[key]
     if (typeof value === "string" && value.trim().length > 0) {
       const normalized = normalizeHotelId(value)
       if (normalized) {
-        return normalized
+        identifiers.add(normalized)
       }
     }
     if (typeof value === "number") {
       const normalized = normalizeHotelId(String(value))
       if (normalized) {
-        return normalized
+        identifiers.add(normalized)
       }
     }
   }
 
-  return null
+  return Array.from(identifiers)
 }
 
 const getRateValue = (
@@ -483,30 +485,36 @@ const parseRateMap = (responseBodyText: string | null) => {
     }
 
     const record = hotel as Record<string, unknown>
-    const hotelId = getHotelIdentifier(record)
-    if (!hotelId) {
+    const hotelIds = getHotelIdentifiers(record)
+    if (hotelIds.length === 0) {
       return
     }
 
     const cashAmount = getRateValue(record, cashPaths)
     const points = getRateValue(record, pointsPaths)
-    if (cashAmount === undefined && points === undefined) {
-      errorsByHotel.set(hotelId, "Missing cash and points rates")
-    } else if (cashAmount === undefined) {
-      errorsByHotel.set(hotelId, "Missing cash rate")
-    } else if (points === undefined || points <= 0) {
-      errorsByHotel.set(hotelId, "Missing points rate")
-    }
+    const errorMessage =
+      cashAmount === undefined && points === undefined
+        ? "Missing cash and points rates"
+        : cashAmount === undefined
+          ? "Missing cash rate"
+          : points === undefined || points <= 0
+            ? "Missing points rate"
+            : null
 
     const cpp =
       cashAmount !== undefined && points !== undefined && points > 0
         ? (cashAmount / points) * 100
         : undefined
 
-    nextMap.set(hotelId, {
-      cashAmount,
-      points,
-      cpp
+    hotelIds.forEach((hotelId) => {
+      if (errorMessage) {
+        errorsByHotel.set(hotelId, errorMessage)
+      }
+      nextMap.set(hotelId, {
+        cashAmount,
+        points,
+        cpp
+      })
     })
   })
 
