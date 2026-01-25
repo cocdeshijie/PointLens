@@ -37,11 +37,15 @@ type IhgBookingType = "points" | "cash" | "unknown"
 
 type IhgStoredPayload = {
   bookingType?: IhgBookingType
+  bodyText?: string | null
   responseBodyText?: string | null
 }
 
 type IhgSentRequest = {
   bookingType?: IhgBookingType
+  request?: {
+    body?: unknown
+  } | null
   response?: {
     bodyText: string | null
     bodyParsed?: unknown
@@ -397,6 +401,49 @@ const getHotelCollection = (data: Record<string, unknown>): unknown[] => {
   return findHotelCollection(data)
 }
 
+const extractSearchSignature = (body: unknown) => {
+  if (!body) {
+    return null
+  }
+
+  let parsed: Record<string, unknown> | null = null
+  if (typeof body === "string") {
+    try {
+      parsed = JSON.parse(body) as Record<string, unknown>
+    } catch {
+      return null
+    }
+  } else if (typeof body === "object") {
+    parsed = body as Record<string, unknown>
+  }
+
+  if (!parsed) {
+    return null
+  }
+
+  const startDate =
+    typeof parsed.startDate === "string" ? parsed.startDate : undefined
+  const endDate = typeof parsed.endDate === "string" ? parsed.endDate : undefined
+  const geo =
+    Array.isArray(parsed.geoLocation) && parsed.geoLocation.length > 0
+      ? parsed.geoLocation[0]
+      : null
+  const lat =
+    geo && typeof geo === "object" && "latitude" in geo
+      ? String((geo as { latitude?: number }).latitude ?? "")
+      : ""
+  const lng =
+    geo && typeof geo === "object" && "longitude" in geo
+      ? String((geo as { longitude?: number }).longitude ?? "")
+      : ""
+
+  if (!startDate || !endDate || !lat || !lng) {
+    return null
+  }
+
+  return `${startDate}|${endDate}|${lat}|${lng}`
+}
+
 const hasPointsRates = (hotel: Record<string, unknown>) => {
   const pointsPaths = [
     ["summary", "rateRanges", "lowestPointsOnlyCost", "points"],
@@ -584,11 +631,20 @@ const getPointsResponseText = (
     typeof sentRequest?.response?.bodyParsed === "string"
       ? sentRequest.response.bodyParsed
       : null
+  const lastSignature = extractSearchSignature(lastRequest?.bodyText ?? null)
+  const sentSignature = extractSearchSignature(
+    sentRequest?.request?.body ?? sentParsedText ?? sentRequest?.response?.bodyText
+  )
   const candidates = [
-    { responseBodyText: lastRequest?.responseBodyText ?? null, source: "last" },
+    {
+      responseBodyText: lastRequest?.responseBodyText ?? null,
+      source: "last",
+      signature: lastSignature
+    },
     {
       responseBodyText: sentParsedText ?? sentRequest?.response?.bodyText ?? null,
-      source: "sent"
+      source: "sent",
+      signature: sentSignature
     }
   ]
 
@@ -626,9 +682,30 @@ const getPointsResponseText = (
     }
   }
 
-  const fallbackWithPoints = withMeta.find(
-    (candidate) => candidate.responseBodyText && candidate.hasPoints
-  )
+  const sentCandidate = withMeta.find((candidate) => candidate.source === "sent")
+  if (
+    sentCandidate?.responseBodyText &&
+    sentCandidate.hasPoints &&
+    sentCandidate.signature &&
+    lastSignature &&
+    sentCandidate.signature !== lastSignature
+  ) {
+    return {
+      responseBodyText: null,
+      error: "Points response does not match last search",
+      source: sentCandidate.source
+    }
+  }
+
+  const fallbackWithPoints = withMeta.find((candidate) => {
+    if (!candidate.responseBodyText || !candidate.hasPoints) {
+      return false
+    }
+    if (candidate.source === "sent" && lastSignature && candidate.signature) {
+      return candidate.signature === lastSignature
+    }
+    return true
+  })
   if (fallbackWithPoints) {
     return {
       responseBodyText: fallbackWithPoints.responseBodyText,
