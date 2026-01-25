@@ -337,7 +337,7 @@ const getHotelCollection = (data: Record<string, unknown>): unknown[] => {
 }
 
 const getHotelIdentifier = (hotel: Record<string, unknown>) => {
-  const keys = ["hotelCode", "hotelId", "propertyCode", "code", "id"]
+  const keys = ["hotelCode", "hotelId", "propertyCode", "hotelMnemonic", "code", "id"]
   for (const key of keys) {
     const value = hotel[key]
     if (typeof value === "string" && value.trim().length > 0) {
