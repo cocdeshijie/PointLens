@@ -2,6 +2,7 @@ import type { PlasmoCSConfig } from "plasmo"
 
 const TARGET_URL = "https://apis.ihg.com/availability/v3/hotels/offers"
 const MESSAGE_FLAG = "__AWARD_VIEWER_IHG__"
+const REPLAY_FLAG = "__AWARD_VIEWER_IHG_REPLAY__"
 
 export const config: PlasmoCSConfig = {
   matches: ["https://www.ihg.com/*"],
@@ -96,6 +97,40 @@ const postCapture = (payload: Record<string, unknown>) => {
     },
     "*"
   )
+}
+
+const toHeaderRecord = (headers: chrome.webRequest.HttpHeader[] | undefined) => {
+  const record: Record<string, string> = {}
+  for (const header of headers ?? []) {
+    if (!header.name || header.value === undefined) {
+      continue
+    }
+    record[header.name] = header.value
+  }
+  return record
+}
+
+const buildReplayBody = (bodyType?: string, bodyText?: string | null) => {
+  if (!bodyText) {
+    return null
+  }
+
+  if (bodyType === "formData") {
+    try {
+      const parsed = JSON.parse(bodyText) as Record<string, string[]>
+      const formData = new FormData()
+      for (const [key, values] of Object.entries(parsed)) {
+        for (const value of values) {
+          formData.append(key, value)
+        }
+      }
+      return formData
+    } catch {
+      return bodyText
+    }
+  }
+
+  return bodyText
 }
 
 const postResponseOnce = (response: Response, responseBodyText: string | null) => {
@@ -311,9 +346,72 @@ const hookXhr = () => {
   }
 }
 
+const hookReplay = () => {
+  window.addEventListener("message", async (event: MessageEvent) => {
+    if (event.source !== window) {
+      return
+    }
+
+    const data = event.data as Record<string, unknown> | undefined
+    if (!data || data[REPLAY_FLAG] !== true) {
+      return
+    }
+
+    const url = typeof data.url === "string" ? data.url : null
+    if (!url) {
+      return
+    }
+
+    const method = typeof data.method === "string" ? data.method : "POST"
+    const bodyType = typeof data.bodyType === "string" ? data.bodyType : undefined
+    const bodyText = typeof data.bodyText === "string" ? data.bodyText : null
+    const requestHeaders = Array.isArray(data.requestHeaders)
+      ? (data.requestHeaders as chrome.webRequest.HttpHeader[])
+      : []
+
+    const headers = toHeaderRecord(requestHeaders)
+    if (!headers["content-type"] && bodyType !== "formData") {
+      headers["content-type"] = "application/json; charset=UTF-8"
+    }
+
+    try {
+      const response = await fetch(url, {
+        method,
+        headers,
+        body: buildReplayBody(bodyType, bodyText),
+        credentials: "include"
+      })
+      const responseBodyText = await readResponseBody(response)
+      postCapture({
+        kind: "replay",
+        url,
+        method,
+        bodyType,
+        bodyText,
+        responseBodyText,
+        responseStatus: response.status,
+        responseStatusText: response.statusText,
+        responseType: response.type,
+        timestamp: Date.now()
+      })
+    } catch {
+      postCapture({
+        kind: "replay",
+        url,
+        method,
+        bodyType,
+        bodyText,
+        responseBodyText: null,
+        timestamp: Date.now()
+      })
+    }
+  })
+}
+
 const init = () => {
   hookFetch()
   hookXhr()
+  hookReplay()
 }
 
 init()

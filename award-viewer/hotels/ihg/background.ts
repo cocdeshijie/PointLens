@@ -10,6 +10,7 @@ const requestMap = new Map<
     requestHeaders?: chrome.webRequest.HttpHeader[]
   }
 >()
+const replaySent = new Set<string>()
 
 type IhgStoredPayload = {
   responseBodyText?: string | null
@@ -127,6 +128,24 @@ const handleIhgCompleted = async (
       completedAt: new Date().toISOString()
     }
   })
+
+  if (
+    details.tabId >= 0 &&
+    !replaySent.has(details.requestId) &&
+    !existingPayload?.responseBodyText
+  ) {
+    replaySent.add(details.requestId)
+    chrome.tabs.sendMessage(details.tabId, {
+      type: "ihg-replay",
+      payload: {
+        url: entry.url,
+        method: entry.method,
+        bodyType: entry.bodyType,
+        bodyText: entry.bodyText,
+        requestHeaders: entry.requestHeaders ?? []
+      }
+    })
+  }
 
   requestMap.delete(details.requestId)
 }
