@@ -251,13 +251,24 @@ const formatCurrencyValue = (amount?: number, currency?: string) => {
     return "—"
   }
   if (currency) {
+    const maybeUsd =
+      currency !== USD_CURRENCY ? currencyRates.get(currency) : undefined
+    const usdSuffix =
+      currency !== USD_CURRENCY && maybeUsd !== undefined
+        ? ` (${new Intl.NumberFormat("en-US", {
+            style: "currency",
+            currency: USD_CURRENCY
+          }).format(amount * maybeUsd)})`
+        : ""
     try {
-      return new Intl.NumberFormat("en-US", {
+      return (
+        new Intl.NumberFormat("en-US", {
         style: "currency",
         currency
-      }).format(amount)
+        }).format(amount) + usdSuffix
+      )
     } catch {
-      return `${amount.toFixed(2)} ${currency}`
+      return `${amount.toFixed(2)} ${currency}${usdSuffix}`
     }
   }
   return amount.toFixed(2)
@@ -267,39 +278,19 @@ const setTooltipText = (tooltip: HTMLElement, text: string) => {
   tooltip.replaceChildren(document.createTextNode(text))
 }
 
-const buildTooltipRow = (label: string, value: string) => {
+const buildTooltipRow = (label: string, lowValue: string, highValue: string) => {
   const row = document.createElement("div")
   row.className = "award-viewer-tooltip-row"
   const labelEl = document.createElement("span")
   labelEl.textContent = label
-  const valueEl = document.createElement("span")
-  valueEl.textContent = value
+  const lowEl = document.createElement("span")
+  lowEl.textContent = lowValue
+  const highEl = document.createElement("span")
+  highEl.textContent = highValue
   row.appendChild(labelEl)
-  row.appendChild(valueEl)
+  row.appendChild(lowEl)
+  row.appendChild(highEl)
   return row
-}
-
-const buildTooltipColumn = (
-  title: string,
-  cost: IhgCashCost | undefined,
-  currency?: string
-) => {
-  const col = document.createElement("div")
-  col.className = "award-viewer-tooltip-col"
-  const heading = document.createElement("div")
-  heading.className = "award-viewer-tooltip-title"
-  heading.textContent = title
-  col.appendChild(heading)
-  col.appendChild(
-    buildTooltipRow("Base", formatCurrencyValue(cost?.baseAmount, currency))
-  )
-  col.appendChild(
-    buildTooltipRow("Fees", formatCurrencyValue(cost?.excludedFeeSubTotal, currency))
-  )
-  col.appendChild(
-    buildTooltipRow("Total", formatCurrencyValue(cost?.amountAfterTax, currency))
-  )
-  return col
 }
 
 const setTooltipDetails = (tooltip: HTMLElement, info: IhgRateInfo) => {
@@ -308,30 +299,45 @@ const setTooltipDetails = (tooltip: HTMLElement, info: IhgRateInfo) => {
 
   const grid = document.createElement("div")
   grid.className = "award-viewer-tooltip-grid"
-  grid.appendChild(buildTooltipColumn("Lowest", info.lowestCash, info.currency))
-  grid.appendChild(buildTooltipColumn("Highest", info.highestCash, info.currency))
+  const header = document.createElement("div")
+  header.className = "award-viewer-tooltip-row award-viewer-tooltip-header"
+  header.appendChild(document.createElement("span"))
+  const lowLabel = document.createElement("span")
+  lowLabel.textContent = "Lowest"
+  const highLabel = document.createElement("span")
+  highLabel.textContent = "Highest"
+  header.appendChild(lowLabel)
+  header.appendChild(highLabel)
+  grid.appendChild(header)
+  grid.appendChild(
+    buildTooltipRow(
+      "Base",
+      formatCurrencyValue(info.lowestCash?.baseAmount, info.currency),
+      formatCurrencyValue(info.highestCash?.baseAmount, info.currency)
+    )
+  )
+  grid.appendChild(
+    buildTooltipRow(
+      "Fees",
+      formatCurrencyValue(info.lowestCash?.excludedFeeSubTotal, info.currency),
+      formatCurrencyValue(info.highestCash?.excludedFeeSubTotal, info.currency)
+    )
+  )
+  grid.appendChild(
+    buildTooltipRow(
+      "Total",
+      formatCurrencyValue(info.lowestCash?.amountAfterTax, info.currency),
+      formatCurrencyValue(info.highestCash?.amountAfterTax, info.currency)
+    )
+  )
+  grid.appendChild(
+    buildTooltipRow(
+      "Points",
+      formatPoints(info.lowestPoints ?? info.points),
+      formatPoints(info.highestPoints ?? info.points)
+    )
+  )
   content.appendChild(grid)
-
-  const pointsSection = document.createElement("div")
-  pointsSection.className = "award-viewer-tooltip-points"
-  const pointsTitle = document.createElement("div")
-  pointsTitle.className = "award-viewer-tooltip-title"
-  pointsTitle.textContent = "Points"
-  pointsSection.appendChild(pointsTitle)
-
-  const pointsGrid = document.createElement("div")
-  pointsGrid.className = "award-viewer-tooltip-points-grid"
-  const lowestPoints = document.createElement("div")
-  lowestPoints.className = "award-viewer-tooltip-points-value"
-  lowestPoints.textContent = formatPoints(info.lowestPoints ?? info.points)
-  const highestPoints = document.createElement("div")
-  highestPoints.className = "award-viewer-tooltip-points-value"
-  highestPoints.textContent = formatPoints(info.highestPoints ?? info.points)
-  pointsGrid.appendChild(lowestPoints)
-  pointsGrid.appendChild(highestPoints)
-  pointsSection.appendChild(pointsGrid)
-
-  content.appendChild(pointsSection)
   tooltip.replaceChildren(content)
 }
 
@@ -1190,46 +1196,33 @@ const observePriceCards = () => {
         gap: 8px;
       }
       .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-grid {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 8px;
-      }
-      .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-col {
         display: flex;
         flex-direction: column;
         gap: 4px;
       }
-      .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-title {
+      .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr);
+        gap: 8px;
+        align-items: center;
+      }
+      .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-row span:first-child {
+        color: #475569;
+      }
+      .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-row span:not(:first-child) {
+        font-weight: 600;
+        color: #0f172a;
+        text-align: left;
+      }
+      .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-header span {
         font-size: 10px;
         font-weight: 600;
         text-transform: uppercase;
         letter-spacing: 0.04em;
         color: #475569;
       }
-      .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-row {
-        display: flex;
-        justify-content: space-between;
-        gap: 6px;
-      }
-      .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-row span:last-child {
-        font-weight: 600;
-        color: #0f172a;
-      }
-      .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-points {
-        border-top: 1px solid #e2e8f0;
-        padding-top: 6px;
-        display: flex;
-        flex-direction: column;
-        gap: 4px;
-      }
-      .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-points-grid {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 8px;
-      }
-      .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-points-value {
-        font-weight: 600;
-        color: #0f172a;
+      .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-header span:first-child {
+        color: transparent;
       }
       .${PLACEHOLDER_VALUE_CLASS} {
         display: inline-flex;
