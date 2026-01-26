@@ -871,8 +871,6 @@ const parseRateMap = (responseBodyText: string | null) => {
   const hotels = getHotelCollection(parsed)
   const nextMap = new Map<string, IhgRateInfo>()
   const errorsByHotel = new Map<string, string>()
-  const currenciesNeeded = new Set<string>()
-
   if (!Array.isArray(hotels) || hotels.length === 0) {
     return {
       map: nextMap,
@@ -960,15 +958,10 @@ const parseRateMap = (responseBodyText: string | null) => {
         if (usdHighestCash !== undefined) {
           usdHighestCash = usdHighestCash * conversionRate
         }
-      } else if (
-        usdCashAmount !== undefined ||
-        usdLowestCash !== undefined ||
-        usdHighestCash !== undefined
-      ) {
+      } else {
         usdCashAmount = undefined
         usdLowestCash = undefined
         usdHighestCash = undefined
-        currenciesNeeded.add(propertyCurrency)
       }
     }
     const errorMessage =
@@ -1015,9 +1008,39 @@ const parseRateMap = (responseBodyText: string | null) => {
   return {
     map: nextMap,
     errorsByHotel,
-    error: nextMap.size === 0 ? "No matching hotels in points response" : null,
-    currenciesNeeded
+    error: nextMap.size === 0 ? "No matching hotels in points response" : null
   }
+}
+
+const collectCurrencies = (responseBodyText: string | null) => {
+  if (!responseBodyText) {
+    return new Set<string>()
+  }
+
+  let parsed: Record<string, unknown>
+  try {
+    parsed = JSON.parse(responseBodyText) as Record<string, unknown>
+  } catch {
+    return new Set<string>()
+  }
+
+  const hotels = getHotelCollection(parsed)
+  const currencies = new Set<string>()
+  hotels.forEach((hotel) => {
+    if (!hotel || typeof hotel !== "object") {
+      return
+    }
+    const record = hotel as Record<string, unknown>
+    const propertyCurrency =
+      typeof record.propertyCurrency === "string"
+        ? record.propertyCurrency
+        : undefined
+    if (propertyCurrency && propertyCurrency !== USD_CURRENCY) {
+      currencies.add(propertyCurrency)
+    }
+  })
+
+  return currencies
 }
 
 const fetchConversionRate = async (currencyCode: string) => {
@@ -1210,19 +1233,18 @@ const refreshRatesFromStorage = async () => {
     return
   }
 
-  const parsed = parseRateMap(selected.responseBodyText)
-  if (parsed.currenciesNeeded.size > 0) {
+  const currenciesNeeded = collectCurrencies(selected.responseBodyText)
+  if (currenciesNeeded.size > 0) {
     await Promise.all(
-      Array.from(parsed.currenciesNeeded).map((currencyCode) =>
+      Array.from(currenciesNeeded).map((currencyCode) =>
         fetchConversionRate(currencyCode)
       )
     )
   }
-  const finalParsed =
-    parsed.currenciesNeeded.size > 0 ? parseRateMap(selected.responseBodyText) : parsed
-  ihgRatesByHotel = finalParsed.map
-  ihgRateErrorsByHotel = finalParsed.errorsByHotel
-  ihgLastRateError = selected.error ?? finalParsed.error
+  const parsed = parseRateMap(selected.responseBodyText)
+  ihgRatesByHotel = parsed.map
+  ihgRateErrorsByHotel = parsed.errorsByHotel
+  ihgLastRateError = selected.error ?? parsed.error
   ihgLastRateSource = selected.source
   updateExistingPlaceholders()
 }
