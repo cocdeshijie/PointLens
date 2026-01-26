@@ -330,6 +330,15 @@ const buildTooltipRow = (label: string, lowValue: string, highValue: string) => 
   return row
 }
 
+const buildTooltipDividerRow = () => {
+  const row = document.createElement("div")
+  row.className = "award-viewer-tooltip-row award-viewer-tooltip-divider-row"
+  row.appendChild(document.createElement("span"))
+  row.appendChild(document.createElement("span"))
+  row.appendChild(document.createElement("span"))
+  return row
+}
+
 const setTooltipDetails = (tooltip: HTMLElement, info: IhgRateInfo) => {
   const content = document.createElement("div")
   content.className = "award-viewer-tooltip-content"
@@ -346,9 +355,7 @@ const setTooltipDetails = (tooltip: HTMLElement, info: IhgRateInfo) => {
   header.appendChild(lowLabel)
   header.appendChild(highLabel)
   grid.appendChild(header)
-  const headerDivider = document.createElement("div")
-  headerDivider.className = "award-viewer-tooltip-divider"
-  grid.appendChild(headerDivider)
+  grid.appendChild(buildTooltipDividerRow())
   grid.appendChild(
     buildTooltipRow(
       "Base",
@@ -370,9 +377,7 @@ const setTooltipDetails = (tooltip: HTMLElement, info: IhgRateInfo) => {
       formatCurrencyValue(info.highestCash?.amountAfterTax, info.currency)
     )
   )
-  const divider = document.createElement("div")
-  divider.className = "award-viewer-tooltip-divider"
-  grid.appendChild(divider)
+  grid.appendChild(buildTooltipDividerRow())
   grid.appendChild(
     buildTooltipRow(
       "Points",
@@ -1250,7 +1255,7 @@ const observePriceCards = () => {
       }
       .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-row {
         display: grid;
-        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr);
+        grid-template-columns: max-content minmax(0, 1fr) minmax(0, 1fr);
         gap: 8px;
         align-items: center;
       }
@@ -1270,10 +1275,12 @@ const observePriceCards = () => {
       .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-row span {
         white-space: nowrap;
       }
-      .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-divider {
+      .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-divider-row span {
+        border-top: 1px solid #e2e8f0;
         height: 1px;
-        background: #e2e8f0;
-        margin: 0;
+      }
+      .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-divider-row span:last-child {
+        border-left: 1px solid #e2e8f0;
       }
       .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-header span {
         font-size: 10px;
