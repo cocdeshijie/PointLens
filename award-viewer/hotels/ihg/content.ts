@@ -315,28 +315,31 @@ const setTooltipText = (tooltip: HTMLElement, text: string) => {
   tooltip.replaceChildren(document.createTextNode(text))
 }
 
+const createCell = (text: string, className: string) => {
+  const cell = document.createElement("span")
+  cell.className = className
+  cell.textContent = text
+  return cell
+}
+
 const buildTooltipRow = (label: string, lowValue: string, highValue: string) => {
   const row = document.createElement("div")
   row.className = "award-viewer-tooltip-row"
-  const labelEl = document.createElement("span")
-  labelEl.textContent = label
-  const lowEl = document.createElement("span")
-  lowEl.textContent = lowValue
-  const highEl = document.createElement("span")
-  highEl.textContent = highValue
-  row.appendChild(labelEl)
-  row.appendChild(lowEl)
-  row.appendChild(highEl)
+  row.appendChild(createCell(label, "award-viewer-tooltip-cell award-viewer-tooltip-cell--label"))
+  row.appendChild(createCell(lowValue, "award-viewer-tooltip-cell award-viewer-tooltip-cell--value"))
+  row.appendChild(
+    createCell(
+      highValue,
+      "award-viewer-tooltip-cell award-viewer-tooltip-cell--value award-viewer-tooltip-cell--high"
+    )
+  )
   return row
 }
 
 const buildTooltipDividerRow = () => {
-  const row = document.createElement("div")
-  row.className = "award-viewer-tooltip-row award-viewer-tooltip-divider-row"
-  row.appendChild(document.createElement("span"))
-  row.appendChild(document.createElement("span"))
-  row.appendChild(document.createElement("span"))
-  return row
+  const divider = document.createElement("div")
+  divider.className = "award-viewer-tooltip-divider"
+  return divider
 }
 
 const setTooltipDetails = (tooltip: HTMLElement, info: IhgRateInfo) => {
@@ -347,13 +350,18 @@ const setTooltipDetails = (tooltip: HTMLElement, info: IhgRateInfo) => {
   grid.className = "award-viewer-tooltip-grid"
   const header = document.createElement("div")
   header.className = "award-viewer-tooltip-row award-viewer-tooltip-header"
-  header.appendChild(document.createElement("span"))
-  const lowLabel = document.createElement("span")
-  lowLabel.textContent = "Lowest"
-  const highLabel = document.createElement("span")
-  highLabel.textContent = "Highest"
-  header.appendChild(lowLabel)
-  header.appendChild(highLabel)
+  header.appendChild(
+    createCell("", "award-viewer-tooltip-cell award-viewer-tooltip-cell--label")
+  )
+  header.appendChild(
+    createCell("Lowest", "award-viewer-tooltip-cell award-viewer-tooltip-cell--value")
+  )
+  header.appendChild(
+    createCell(
+      "Highest",
+      "award-viewer-tooltip-cell award-viewer-tooltip-cell--value award-viewer-tooltip-cell--high"
+    )
+  )
   grid.appendChild(header)
   grid.appendChild(buildTooltipDividerRow())
   grid.appendChild(
@@ -1249,49 +1257,44 @@ const observePriceCards = () => {
         gap: 8px;
       }
       .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-grid {
-        display: flex;
-        flex-direction: column;
-        gap: 2px;
-      }
-      .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-row {
         display: grid;
-        grid-template-columns: max-content minmax(140px, 1fr) minmax(140px, 1fr);
-        gap: 6px;
+        grid-template-columns: max-content minmax(140px, auto) minmax(140px, auto);
+        column-gap: 12px;
+        row-gap: 2px;
         align-items: center;
         justify-content: start;
       }
-      .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-row span:first-child {
+      .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-row {
+        display: contents;
+      }
+      .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-cell {
+        white-space: nowrap;
+      }
+      .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-cell--label {
         color: #475569;
       }
-      .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-row span:not(:first-child) {
+      .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-cell--value {
         font-weight: 600;
         color: #0f172a;
         text-align: left;
-        white-space: nowrap;
-        min-width: 140px;
       }
-      .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-row span:last-child {
+      .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-cell--high {
         border-left: 1px solid #e2e8f0;
         padding-left: 8px;
       }
-      .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-row span {
-        white-space: nowrap;
-      }
-      .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-divider-row span {
+      .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-divider {
+        grid-column: 1 / -1;
         border-top: 1px solid #e2e8f0;
         height: 1px;
       }
-      .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-divider-row span:last-child {
-        border-left: 1px solid #e2e8f0;
-      }
-      .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-header span {
+      .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-header .award-viewer-tooltip-cell {
         font-size: 10px;
         font-weight: 600;
         text-transform: uppercase;
         letter-spacing: 0.04em;
         color: #475569;
       }
-      .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-header span:first-child {
+      .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-header .award-viewer-tooltip-cell--label {
         color: transparent;
       }
       .${PLACEHOLDER_VALUE_CLASS} {
