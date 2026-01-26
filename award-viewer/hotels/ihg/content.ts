@@ -11,6 +11,7 @@ import {
 
 const IHG_STORAGE_KEY = "award-viewer:ihg-last-request"
 const IHG_SENT_STORAGE_KEY = "award-viewer:ihg-sent-request"
+const IHG_CONVERSION_STORAGE_KEY = "award-viewer:ihg-currency-conversion-request"
 const MESSAGE_FLAG = "__AWARD_VIEWER_IHG__"
 const REPLAY_FLAG = "__AWARD_VIEWER_IHG_REPLAY__"
 const PLACEHOLDER_CLASS = "award-viewer-price-placeholder"
@@ -64,6 +65,24 @@ type IhgSentRequest = {
     bodyText: string | null
     bodyParsed?: unknown
   } | null
+}
+
+type IhgConversionRequest = {
+  currencyCode: string
+  targetCurrency: string
+  request: {
+    url: string
+    method: string
+    headers: Record<string, string>
+  }
+  response: {
+    status: number
+    statusText: string
+    bodyText: string | null
+    bodyParsed: unknown
+  } | null
+  error?: string | null
+  requestedAt?: string
 }
 
 type IhgRateInfo = {
@@ -135,6 +154,19 @@ const detectBookingType = (bodyText: string | null): IhgBookingType => {
   }
 
   return "unknown"
+}
+
+const saveConversionRequest = async (payload: IhgConversionRequest) => {
+  if (!chrome?.storage?.local) {
+    return
+  }
+
+  await chrome.storage.local.set({
+    [IHG_CONVERSION_STORAGE_KEY]: {
+      ...payload,
+      savedAt: new Date().toISOString()
+    }
+  })
 }
 
 const handleMessage = async (event: MessageEvent) => {
@@ -1067,28 +1099,119 @@ const fetchConversionRate = async (currencyCode: string) => {
     url.searchParams.set("qTcc", USD_CURRENCY)
     url.searchParams.set("qV", "1")
 
-    try {
-      const response = await fetch(url.toString(), {
-        headers: {
-          Accept: "application/json, text/plain, */*",
-          "content-type": "application/json; charset=UTF-8",
-          "x-ihg-api-key": IHG_API_KEY,
-          "ihg-language": "en-US"
-        },
-        credentials: "include"
-      })
-      if (!response.ok) {
+    const headers = {
+      Accept: "application/json, text/plain, */*",
+      "content-type": "application/json; charset=UTF-8",
+      "x-ihg-api-key": IHG_API_KEY,
+      "ihg-language": "en-US"
+    }
+    const requestDetails: IhgConversionRequest = {
+      currencyCode,
+      targetCurrency: USD_CURRENCY,
+      request: {
+        url: url.toString(),
+        method: "GET",
+        headers
+      },
+      response: null,
+      error: null,
+      requestedAt: new Date().toISOString()
+    }
+
+    const selectConversionRate = (
+      results: Array<{
+        from?: number
+        result?: number
+        source?: string
+        brand?: unknown
+      }> | null
+    ) => {
+      if (!results || results.length === 0) {
         return null
       }
-      const payload = (await response.json()) as {
-        results?: Array<{ result?: number }>
+
+      const valid = results.filter(
+        (entry) =>
+          entry &&
+          entry.from === 1 &&
+          typeof entry.result === "number" &&
+          Number.isFinite(entry.result)
+      )
+
+      const preferred =
+        valid.find((entry) => entry.source === "P") ??
+        valid.find((entry) => entry.brand === undefined) ??
+        valid[0]
+
+      return preferred?.result ?? null
+    }
+
+    try {
+      const response = await fetch(url.toString(), {
+        headers,
+        credentials: "include"
+      })
+      const responseBodyText = await response
+        .clone()
+        .text()
+        .catch(() => null)
+      const responsePayload = {
+        status: response.status,
+        statusText: response.statusText,
+        bodyText: responseBodyText,
+        bodyParsed: responseBodyText
       }
-      const rate = payload.results?.[0]?.result
+      if (responseBodyText) {
+        try {
+          responsePayload.bodyParsed = JSON.parse(responseBodyText)
+        } catch {
+          responsePayload.bodyParsed = responseBodyText
+        }
+      }
+      if (!response.ok) {
+        await saveConversionRequest({
+          ...requestDetails,
+          response: responsePayload,
+          error: `Request failed with ${response.status}`
+        })
+        return null
+      }
+
+      const parsedBody =
+        responsePayload.bodyParsed && typeof responsePayload.bodyParsed === "object"
+          ? (responsePayload.bodyParsed as {
+              results?: Array<{ result?: number }>
+            })
+          : null
+      const rate = selectConversionRate(
+        parsedBody?.results as
+          | Array<{
+              from?: number
+              result?: number
+              source?: string
+              brand?: unknown
+            }>
+          | null
+      )
       if (typeof rate === "number" && Number.isFinite(rate)) {
         currencyRates.set(currencyCode, rate)
+        await saveConversionRequest({
+          ...requestDetails,
+          response: responsePayload
+        })
         return rate
       }
+      await saveConversionRequest({
+        ...requestDetails,
+        response: responsePayload,
+        error: "Conversion rate missing from response."
+      })
     } catch {
+      await saveConversionRequest({
+        ...requestDetails,
+        response: null,
+        error: "Request failed."
+      })
       return null
     }
     return null
