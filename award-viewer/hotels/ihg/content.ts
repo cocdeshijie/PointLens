@@ -1118,6 +1118,34 @@ const fetchConversionRate = async (currencyCode: string) => {
       requestedAt: new Date().toISOString()
     }
 
+    const selectConversionRate = (
+      results: Array<{
+        from?: number
+        result?: number
+        source?: string
+        brand?: unknown
+      }> | null
+    ) => {
+      if (!results || results.length === 0) {
+        return null
+      }
+
+      const valid = results.filter(
+        (entry) =>
+          entry &&
+          entry.from === 1 &&
+          typeof entry.result === "number" &&
+          Number.isFinite(entry.result)
+      )
+
+      const preferred =
+        valid.find((entry) => entry.source === "P") ??
+        valid.find((entry) => entry.brand === undefined) ??
+        valid[0]
+
+      return preferred?.result ?? null
+    }
+
     try {
       const response = await fetch(url.toString(), {
         headers,
@@ -1155,7 +1183,16 @@ const fetchConversionRate = async (currencyCode: string) => {
               results?: Array<{ result?: number }>
             })
           : null
-      const rate = parsedBody?.results?.[0]?.result
+      const rate = selectConversionRate(
+        parsedBody?.results as
+          | Array<{
+              from?: number
+              result?: number
+              source?: string
+              brand?: unknown
+            }>
+          | null
+      )
       if (typeof rate === "number" && Number.isFinite(rate)) {
         currencyRates.set(currencyCode, rate)
         await saveConversionRequest({
