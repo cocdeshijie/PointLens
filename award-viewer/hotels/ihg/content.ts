@@ -64,6 +64,13 @@ type IhgRateInfo = {
   cashAmount?: number
   points?: number
   cpp?: number
+  cppLow?: number
+  cppHigh?: number
+  lowestCash?: IhgCashCost
+  highestCash?: IhgCashCost
+  lowestPoints?: number
+  highestPoints?: number
+  currency?: string
 }
 
 let ihgRatesByHotel = new Map<string, IhgRateInfo>()
@@ -73,6 +80,13 @@ let ihgLastRateSource: string | null = null
 const iconRoots = new WeakMap<HTMLElement, ReturnType<typeof createRoot>>()
 const currencyRates = new Map<string, number>()
 const inflightCurrencyRates = new Map<string, Promise<number | null>>()
+
+type IhgCashCost = {
+  baseAmount?: number
+  excludedFeeSubTotal?: number
+  amountAfterTax?: number
+  basePlusExcludedFeesAmount?: number
+}
 
 const normalizeHotelId = (id: string | null | undefined) => {
   if (!id) {
@@ -227,6 +241,162 @@ const formatCpp = (cpp?: number) => {
   return `${cpp.toFixed(2)}¢/pt`
 }
 
+const formatPoints = (points?: number) => {
+  if (points === undefined) {
+    return "—"
+  }
+  return `${new Intl.NumberFormat("en-US").format(points)} pts`
+}
+
+const formatCppSuffix = (cpp?: number) => {
+  if (cpp === undefined || !Number.isFinite(cpp)) {
+    return ""
+  }
+  return ` (${cpp.toFixed(2)}¢/pt)`
+}
+
+const formatPointsWithCpp = (points?: number, cpp?: number) => {
+  return `${formatPoints(points)}${formatCppSuffix(cpp)}`
+}
+
+const formatCurrencyValue = (amount?: number, currency?: string) => {
+  if (amount === undefined) {
+    return "—"
+  }
+  if (currency) {
+    const maybeUsd =
+      currency !== USD_CURRENCY ? currencyRates.get(currency) : undefined
+    const usdSuffix =
+      currency !== USD_CURRENCY && maybeUsd !== undefined
+        ? ` (${new Intl.NumberFormat("en-US", {
+            style: "currency",
+            currency: USD_CURRENCY
+          }).format(amount * maybeUsd)})`
+        : ""
+    try {
+      return (
+        new Intl.NumberFormat("en-US", {
+          style: "currency",
+          currency
+        }).format(amount) + usdSuffix
+      )
+    } catch {
+      return `${amount.toFixed(2)} ${currency}${usdSuffix}`
+    }
+  }
+  return amount.toFixed(2)
+}
+
+const getUsdEquivalent = (amount?: number, currency?: string) => {
+  if (amount === undefined) {
+    return null
+  }
+  if (!currency || currency === USD_CURRENCY) {
+    return amount
+  }
+  const rate = currencyRates.get(currency)
+  if (rate === undefined) {
+    return null
+  }
+  return amount * rate
+}
+
+const formatUsdAmount = (amount?: number) => {
+  if (amount === undefined) {
+    return ""
+  }
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: USD_CURRENCY
+  }).format(amount)
+}
+
+const setTooltipText = (tooltip: HTMLElement, text: string) => {
+  tooltip.replaceChildren(document.createTextNode(text))
+}
+
+const createCell = (text: string, className: string) => {
+  const cell = document.createElement("span")
+  cell.className = className
+  cell.textContent = text
+  return cell
+}
+
+const buildTooltipRow = (label: string, lowValue: string, highValue: string) => {
+  const row = document.createElement("div")
+  row.className = "award-viewer-tooltip-row"
+  row.appendChild(createCell(label, "award-viewer-tooltip-cell award-viewer-tooltip-cell--label"))
+  row.appendChild(createCell(lowValue, "award-viewer-tooltip-cell award-viewer-tooltip-cell--value"))
+  row.appendChild(
+    createCell(
+      highValue,
+      "award-viewer-tooltip-cell award-viewer-tooltip-cell--value award-viewer-tooltip-cell--high"
+    )
+  )
+  return row
+}
+
+const buildTooltipDividerRow = () => {
+  const divider = document.createElement("div")
+  divider.className = "award-viewer-tooltip-divider"
+  return divider
+}
+
+const setTooltipDetails = (tooltip: HTMLElement, info: IhgRateInfo) => {
+  const content = document.createElement("div")
+  content.className = "award-viewer-tooltip-content"
+
+  const grid = document.createElement("div")
+  grid.className = "award-viewer-tooltip-grid"
+  const header = document.createElement("div")
+  header.className = "award-viewer-tooltip-row award-viewer-tooltip-header"
+  header.appendChild(
+    createCell("", "award-viewer-tooltip-cell award-viewer-tooltip-cell--label")
+  )
+  header.appendChild(
+    createCell("Lowest", "award-viewer-tooltip-cell award-viewer-tooltip-cell--value")
+  )
+  header.appendChild(
+    createCell(
+      "Highest",
+      "award-viewer-tooltip-cell award-viewer-tooltip-cell--value award-viewer-tooltip-cell--high"
+    )
+  )
+  grid.appendChild(header)
+  grid.appendChild(buildTooltipDividerRow())
+  grid.appendChild(
+    buildTooltipRow(
+      "Base",
+      formatCurrencyValue(info.lowestCash?.baseAmount, info.currency),
+      formatCurrencyValue(info.highestCash?.baseAmount, info.currency)
+    )
+  )
+  grid.appendChild(
+    buildTooltipRow(
+      "Fees",
+      formatCurrencyValue(info.lowestCash?.excludedFeeSubTotal, info.currency),
+      formatCurrencyValue(info.highestCash?.excludedFeeSubTotal, info.currency)
+    )
+  )
+  grid.appendChild(
+    buildTooltipRow(
+      "Total",
+      formatCurrencyValue(info.lowestCash?.amountAfterTax, info.currency),
+      formatCurrencyValue(info.highestCash?.amountAfterTax, info.currency)
+    )
+  )
+  grid.appendChild(buildTooltipDividerRow())
+  grid.appendChild(
+    buildTooltipRow(
+      "Points",
+      formatPointsWithCpp(info.lowestPoints ?? info.points, info.cppLow ?? info.cpp),
+      formatPointsWithCpp(info.highestPoints ?? info.points, info.cppHigh ?? info.cpp)
+    )
+  )
+  content.appendChild(grid)
+  tooltip.replaceChildren(content)
+}
+
 const ensurePlaceholderContents = (placeholder: HTMLElement) => {
   let iconWrapper = placeholder.querySelector<HTMLElement>(
     `.${PLACEHOLDER_ICON_CLASS}`
@@ -241,7 +411,7 @@ const ensurePlaceholderContents = (placeholder: HTMLElement) => {
 
     const tooltip = document.createElement("span")
     tooltip.className = "award-viewer-tooltip"
-    tooltip.textContent = "More details coming soon"
+    tooltip.textContent = "Awaiting points response"
     iconWrapper.appendChild(tooltip)
 
     placeholder.appendChild(iconWrapper)
@@ -301,13 +471,26 @@ const updatePlaceholderText = (placeholder: HTMLElement) => {
   }
 
   const info = ihgRatesByHotel.get(hotelId)
+  const { iconWrapper, valueEl } = ensurePlaceholderContents(placeholder)
+  const tooltip = iconWrapper.querySelector<HTMLElement>(".award-viewer-tooltip")
+  const errorMessage =
+    ihgRateErrorsByHotel.get(hotelId) ?? ihgLastRateError ?? "Awaiting points response"
+
   if (info?.cpp !== undefined && Number.isFinite(info.cpp)) {
-    const { valueEl } = ensurePlaceholderContents(placeholder)
     placeholder.classList.remove("is-loading")
-    valueEl.textContent = formatCpp(info.cpp)
+    const lowestTotal = getCashTotal(info.lowestCash)
+    const usdTotal = getUsdEquivalent(lowestTotal, info.currency)
+    const usdSuffix = usdTotal !== null ? ` (${formatUsdAmount(usdTotal)})` : ""
+    valueEl.textContent = `${formatCpp(info.cpp)}${usdSuffix}`
+    if (tooltip) {
+      setTooltipDetails(tooltip, info)
+    }
     return
   }
 
+  if (tooltip) {
+    setTooltipText(tooltip, errorMessage)
+  }
   setSkeleton(placeholder)
 }
 
@@ -562,6 +745,80 @@ const getRateValue = (
   return undefined
 }
 
+const normalizeCashCost = (value: unknown): IhgCashCost | undefined => {
+  if (!value || typeof value !== "object") {
+    return undefined
+  }
+
+  const record = value as Record<string, unknown>
+  const baseAmount = extractNumber(record.baseAmount)
+  const excludedFeeSubTotal = extractNumber(record.excludedFeeSubTotal)
+  const amountAfterTax = extractNumber(record.amountAfterTax)
+  const basePlusExcludedFeesAmount = extractNumber(record.basePlusExcludedFeesAmount)
+
+  if (
+    baseAmount === undefined &&
+    excludedFeeSubTotal === undefined &&
+    amountAfterTax === undefined &&
+    basePlusExcludedFeesAmount === undefined
+  ) {
+    return undefined
+  }
+
+  return {
+    baseAmount,
+    excludedFeeSubTotal,
+    amountAfterTax,
+    basePlusExcludedFeesAmount
+  }
+}
+
+const getCashCostByPath = (
+  hotel: Record<string, unknown>,
+  paths: string[][]
+) => {
+  for (const path of paths) {
+    const raw = getValueByPath(hotel, path)
+    const normalized = normalizeCashCost(raw)
+    if (normalized) {
+      return normalized
+    }
+  }
+  return undefined
+}
+
+const getCashTotal = (cost?: IhgCashCost) => {
+  if (!cost) {
+    return undefined
+  }
+  return (
+    cost.amountAfterTax ??
+    cost.basePlusExcludedFeesAmount ??
+    cost.baseAmount
+  )
+}
+
+const getPointsCostByPath = (
+  hotel: Record<string, unknown>,
+  paths: string[][]
+) => {
+  for (const path of paths) {
+    const raw = getValueByPath(hotel, path)
+    if (raw && typeof raw === "object") {
+      const record = raw as Record<string, unknown>
+      const points = extractNumber(record.points ?? record.originalPoints)
+      if (points !== undefined) {
+        return points
+      }
+    }
+    const parsed = extractNumber(raw)
+    if (parsed !== undefined) {
+      return parsed
+    }
+  }
+  return undefined
+}
+
 const parseRateMap = (responseBodyText: string | null) => {
   if (!responseBodyText) {
     return {
@@ -604,12 +861,36 @@ const parseRateMap = (responseBodyText: string | null) => {
     ["lowestCashOnlyCost", "amountAfterTax"],
     ["lowestCashOnlyCost", "amount"]
   ]
+  const lowestCashPaths = [
+    ["summary", "rateRanges", "lowestCashOnlyCost"],
+    ["rateRanges", "lowestCashOnlyCost"],
+    ["summary", "lowestCashOnlyCost"],
+    ["lowestCashOnlyCost"]
+  ]
+  const highestCashPaths = [
+    ["summary", "rateRanges", "highestCashOnlyCost"],
+    ["rateRanges", "highestCashOnlyCost"],
+    ["summary", "highestCashOnlyCost"],
+    ["highestCashOnlyCost"]
+  ]
 
   const pointsPaths = [
     ["summary", "rateRanges", "lowestPointsOnlyCost", "points"],
     ["rateRanges", "lowestPointsOnlyCost", "points"],
     ["summary", "lowestPointsOnlyCost", "points"],
     ["lowestPointsOnlyCost", "points"]
+  ]
+  const lowestPointsPaths = [
+    ["summary", "rateRanges", "lowestPointsOnlyCost"],
+    ["rateRanges", "lowestPointsOnlyCost"],
+    ["summary", "lowestPointsOnlyCost"],
+    ["lowestPointsOnlyCost"]
+  ]
+  const highestPointsPaths = [
+    ["summary", "rateRanges", "highestPointsOnlyCost"],
+    ["rateRanges", "highestPointsOnlyCost"],
+    ["summary", "highestPointsOnlyCost"],
+    ["highestPointsOnlyCost"]
   ]
 
   hotels.forEach((hotel) => {
@@ -627,15 +908,37 @@ const parseRateMap = (responseBodyText: string | null) => {
       typeof record.propertyCurrency === "string"
         ? record.propertyCurrency
         : undefined
+    const lowestCash = getCashCostByPath(record, lowestCashPaths)
+    const highestCash = getCashCostByPath(record, highestCashPaths)
+    const lowestPoints = getPointsCostByPath(record, lowestPointsPaths)
+    const highestPoints = getPointsCostByPath(record, highestPointsPaths)
     const cashAmount = getRateValue(record, cashPaths)
     const points = getRateValue(record, pointsPaths)
+    const lowestCashTotal = getCashTotal(lowestCash)
+    const highestCashTotal = getCashTotal(highestCash)
     let usdCashAmount = cashAmount
-    if (cashAmount !== undefined && propertyCurrency && propertyCurrency !== USD_CURRENCY) {
+    let usdLowestCash = lowestCashTotal
+    let usdHighestCash = highestCashTotal
+    if (propertyCurrency && propertyCurrency !== USD_CURRENCY) {
       const conversionRate = currencyRates.get(propertyCurrency)
       if (conversionRate !== undefined) {
-        usdCashAmount = cashAmount * conversionRate
-      } else {
+        if (usdCashAmount !== undefined) {
+          usdCashAmount = usdCashAmount * conversionRate
+        }
+        if (usdLowestCash !== undefined) {
+          usdLowestCash = usdLowestCash * conversionRate
+        }
+        if (usdHighestCash !== undefined) {
+          usdHighestCash = usdHighestCash * conversionRate
+        }
+      } else if (
+        usdCashAmount !== undefined ||
+        usdLowestCash !== undefined ||
+        usdHighestCash !== undefined
+      ) {
         usdCashAmount = undefined
+        usdLowestCash = undefined
+        usdHighestCash = undefined
         currenciesNeeded.add(propertyCurrency)
       }
     }
@@ -645,13 +948,21 @@ const parseRateMap = (responseBodyText: string | null) => {
         : usdCashAmount === undefined
           ? "Missing cash rate"
           : points === undefined || points <= 0
-            ? "Missing points rate"
-            : null
+        ? "Missing points rate"
+        : null
 
-    const cpp =
-      usdCashAmount !== undefined && points !== undefined && points > 0
-        ? (usdCashAmount / points) * 100
+    const cppLow =
+      usdLowestCash !== undefined && lowestPoints !== undefined && lowestPoints > 0
+        ? (usdLowestCash / lowestPoints) * 100
         : undefined
+    const cppHigh =
+      usdHighestCash !== undefined && highestPoints !== undefined && highestPoints > 0
+        ? (usdHighestCash / highestPoints) * 100
+        : undefined
+    const cppCandidates = [cppLow, cppHigh].filter(
+      (value): value is number => value !== undefined && Number.isFinite(value)
+    )
+    const cpp = cppCandidates.length > 0 ? Math.min(...cppCandidates) : undefined
 
     hotelIds.forEach((hotelId) => {
       if (errorMessage) {
@@ -660,7 +971,14 @@ const parseRateMap = (responseBodyText: string | null) => {
       nextMap.set(hotelId, {
         cashAmount: usdCashAmount,
         points,
-        cpp
+        cpp,
+        cppLow,
+        cppHigh,
+        lowestCash,
+        highestCash,
+        lowestPoints,
+        highestPoints,
+        currency: propertyCurrency
       })
     })
   })
@@ -917,18 +1235,67 @@ const observePriceCards = () => {
         transform: translateY(-4px);
         opacity: 0;
         pointer-events: none;
-        background: #111827;
-        color: #ffffff;
+        background: #f5f5f5;
+        color: #111827;
+        border: 1px solid #cbd5e1;
         font-size: 11px;
-        padding: 4px 6px;
+        padding: 8px;
         border-radius: 4px;
-        white-space: nowrap;
+        white-space: normal;
         transition: opacity 0.15s ease, transform 0.15s ease;
         z-index: 9999;
+        box-shadow: 0 4px 12px rgba(15, 23, 42, 0.12);
+        min-width: 320px;
       }
       .${PLACEHOLDER_ICON_CLASS}:hover .award-viewer-tooltip {
         opacity: 1;
         transform: translateY(-8px);
+      }
+      .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-content {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-grid {
+        display: grid;
+        grid-template-columns: max-content minmax(140px, auto) minmax(140px, auto);
+        column-gap: 12px;
+        row-gap: 2px;
+        align-items: center;
+        justify-content: start;
+      }
+      .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-row {
+        display: contents;
+      }
+      .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-cell {
+        white-space: nowrap;
+      }
+      .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-cell--label {
+        color: #475569;
+      }
+      .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-cell--value {
+        font-weight: 400;
+        color: #0f172a;
+        text-align: left;
+      }
+      .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-cell--high {
+        border-left: 1px solid #e2e8f0;
+        padding-left: 8px;
+      }
+      .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-divider {
+        grid-column: 1 / -1;
+        border-top: 1px solid #e2e8f0;
+        height: 1px;
+      }
+      .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-header .award-viewer-tooltip-cell {
+        font-size: 10px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: #475569;
+      }
+      .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-header .award-viewer-tooltip-cell--label {
+        color: transparent;
       }
       .${PLACEHOLDER_VALUE_CLASS} {
         display: inline-flex;
