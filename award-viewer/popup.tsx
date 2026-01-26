@@ -19,6 +19,7 @@ type SupportedSiteId = (typeof SUPPORTED_SITES)[number]["id"]
 function IndexPopup() {
   const [activeSite, setActiveSite] = useState<SupportedSiteId | null>(null)
   const [selectedSite, setSelectedSite] = useState<SupportedSiteId | null>(null)
+  const [forceHome, setForceHome] = useState(false)
 
   useEffect(() => {
     const root = document.documentElement
@@ -47,15 +48,19 @@ function IndexPopup() {
           url.includes(site.domain)
         )
         setActiveSite(matchedSite?.id ?? null)
+        if (!matchedSite) {
+          setForceHome(false)
+        }
       } catch {
         setActiveSite(null)
+        setForceHome(false)
       }
     }
 
     void checkActiveTab()
   }, [])
 
-  const siteToShow = activeSite ?? selectedSite
+  const siteToShow = forceHome ? null : activeSite ?? selectedSite
   const selectedSiteConfig =
     siteToShow === null
       ? null
@@ -124,11 +129,10 @@ function IndexPopup() {
             {selectedSiteConfig.id === "ihg" ? (
               <IhgPopup
                 onBack={
-                  activeSite
-                    ? undefined
-                    : () => {
-                        setSelectedSite(null)
-                      }
+                  () => {
+                    setSelectedSite(null)
+                    setForceHome(true)
+                  }
                 }
                 site={{
                   name: selectedSiteConfig.label,
@@ -146,6 +150,7 @@ function IndexPopup() {
                   type="button"
                   onClick={() => {
                     setSelectedSite(site.id)
+                    setForceHome(false)
                   }}
                   style={{
                     width: "100%",
