@@ -1246,7 +1246,7 @@ const observePriceCards = () => {
       .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-grid {
         display: flex;
         flex-direction: column;
-        gap: 4px;
+        gap: 2px;
       }
       .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-row {
         display: grid;
@@ -1263,13 +1263,17 @@ const observePriceCards = () => {
         text-align: left;
         white-space: nowrap;
       }
+      .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-row span:last-child {
+        border-left: 1px solid #e2e8f0;
+        padding-left: 8px;
+      }
       .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-row span {
         white-space: nowrap;
       }
       .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-divider {
         height: 1px;
         background: #e2e8f0;
-        margin: 2px 0;
+        margin: 0;
       }
       .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-header span {
         font-size: 10px;
