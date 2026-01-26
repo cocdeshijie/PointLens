@@ -1184,7 +1184,7 @@ const observePriceCards = () => {
         transition: opacity 0.15s ease, transform 0.15s ease;
         z-index: 9999;
         box-shadow: 0 4px 12px rgba(15, 23, 42, 0.12);
-        min-width: 220px;
+        min-width: 320px;
       }
       .${PLACEHOLDER_ICON_CLASS}:hover .award-viewer-tooltip {
         opacity: 1;
@@ -1213,6 +1213,10 @@ const observePriceCards = () => {
         font-weight: 600;
         color: #0f172a;
         text-align: left;
+        white-space: nowrap;
+      }
+      .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-row span {
+        white-space: nowrap;
       }
       .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-header span {
         font-size: 10px;
