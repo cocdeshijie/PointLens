@@ -419,60 +419,14 @@ const buildPointsBodyFromText = (bodyText?: string | null) => {
 
   try {
     const parsed = JSON.parse(bodyText) as Record<string, unknown>
-    const startDate =
-      typeof parsed.startDate === "string" ? parsed.startDate : MIN_BODY.startDate
-    const endDate =
-      typeof parsed.endDate === "string" ? parsed.endDate : MIN_BODY.endDate
-    const geoLocation =
-      Array.isArray(parsed.geoLocation) && parsed.geoLocation.length > 0
-        ? parsed.geoLocation
-        : MIN_BODY.geoLocation
 
-    const product =
-      Array.isArray(parsed.products) && parsed.products.length > 0
-        ? (parsed.products[0] as Record<string, unknown>)
-        : null
-    const productCode =
-      product && typeof product.productCode === "string"
-        ? product.productCode
-        : "SR"
-    const quantity =
-      product && typeof product.quantity === "number" ? product.quantity : 1
-    const guestCounts =
-      product && Array.isArray(product.guestCounts) ? product.guestCounts : undefined
-
+    const rates = parsed.rates as { ratePlanCodes?: unknown } | undefined
     return {
-      radius:
-        typeof parsed.radius === "number" ? parsed.radius : MIN_BODY.radius,
-      maxRadius:
-        typeof parsed.maxRadius === "number" ? parsed.maxRadius : undefined,
-      minHotels:
-        typeof parsed.minHotels === "number" ? parsed.minHotels : undefined,
-      incrementRadiusBy:
-        typeof parsed.incrementRadiusBy === "number"
-          ? parsed.incrementRadiusBy
-          : undefined,
-      distanceUnit:
-        typeof parsed.distanceUnit === "string"
-          ? parsed.distanceUnit
-          : "MI",
-      distanceType:
-        typeof parsed.distanceType === "string"
-          ? parsed.distanceType
-          : MIN_BODY.distanceType,
-      startDate,
-      endDate,
-      geoLocation,
-      products: [
-        {
-          productCode,
-          startDate,
-          endDate,
-          quantity,
-          ...(guestCounts ? { guestCounts } : {})
-        }
-      ],
-      rates: MIN_BODY.rates
+      ...parsed,
+      rates: {
+        ...rates,
+        ratePlanCodes: MIN_BODY.rates.ratePlanCodes
+      }
     }
   } catch {
     return MIN_BODY
