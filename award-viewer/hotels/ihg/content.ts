@@ -1274,7 +1274,7 @@ const observePriceCards = () => {
         color: #475569;
       }
       .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-cell--value {
-        font-weight: 600;
+        font-weight: 400;
         color: #0f172a;
         text-align: left;
       }
