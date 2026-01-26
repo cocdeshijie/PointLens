@@ -1,10 +1,15 @@
 import type { PlasmoCSConfig } from "plasmo"
+import React from "react"
+import { createRoot } from "react-dom/client"
+import { CiSquareMore } from "react-icons/ci"
 
 const IHG_STORAGE_KEY = "award-viewer:ihg-last-request"
 const IHG_SENT_STORAGE_KEY = "award-viewer:ihg-sent-request"
 const MESSAGE_FLAG = "__AWARD_VIEWER_IHG__"
 const REPLAY_FLAG = "__AWARD_VIEWER_IHG_REPLAY__"
 const PLACEHOLDER_CLASS = "award-viewer-price-placeholder"
+const PLACEHOLDER_ICON_CLASS = "award-viewer-cpp-icon"
+const PLACEHOLDER_VALUE_CLASS = "award-viewer-cpp-value"
 const PLACEHOLDER_STYLE_ID = "award-viewer-placeholder-style"
 
 export const config: PlasmoCSConfig = {
@@ -63,6 +68,7 @@ let ihgRatesByHotel = new Map<string, IhgRateInfo>()
 let ihgRateErrorsByHotel = new Map<string, string>()
 let ihgLastRateError: string | null = null
 let ihgLastRateSource: string | null = null
+const iconRoots = new WeakMap<HTMLElement, ReturnType<typeof createRoot>>()
 
 const normalizeHotelId = (id: string | null | undefined) => {
   if (!id) {
@@ -217,13 +223,53 @@ const formatCpp = (cpp?: number) => {
   return `${cpp.toFixed(2)}¢/pt`
 }
 
+const ensurePlaceholderContents = (placeholder: HTMLElement) => {
+  let iconWrapper = placeholder.querySelector<HTMLElement>(
+    `.${PLACEHOLDER_ICON_CLASS}`
+  )
+  if (!iconWrapper) {
+    iconWrapper = document.createElement("span")
+    iconWrapper.className = PLACEHOLDER_ICON_CLASS
+
+    const iconTarget = document.createElement("span")
+    iconTarget.className = "award-viewer-icon"
+    iconWrapper.appendChild(iconTarget)
+
+    const tooltip = document.createElement("span")
+    tooltip.className = "award-viewer-tooltip"
+    tooltip.textContent = "More details coming soon"
+    iconWrapper.appendChild(tooltip)
+
+    placeholder.appendChild(iconWrapper)
+    const root = createRoot(iconTarget)
+    root.render(React.createElement(CiSquareMore, { "aria-hidden": "true" }))
+    iconRoots.set(iconTarget, root)
+  }
+
+  let valueEl = placeholder.querySelector<HTMLElement>(
+    `.${PLACEHOLDER_VALUE_CLASS}`
+  )
+  if (!valueEl) {
+    valueEl = document.createElement("span")
+    valueEl.className = PLACEHOLDER_VALUE_CLASS
+    placeholder.appendChild(valueEl)
+  }
+
+  return { iconWrapper, valueEl }
+}
+
 const setSkeleton = (placeholder: HTMLElement) => {
+  const { valueEl } = ensurePlaceholderContents(placeholder)
   placeholder.classList.add("is-loading")
-  placeholder.textContent = ""
+  valueEl.textContent = ""
+  const existing = valueEl.querySelector(".award-viewer-skeleton")
+  if (existing) {
+    return
+  }
   const skeleton = document.createElement("span")
   skeleton.className = "award-viewer-skeleton"
   skeleton.setAttribute("aria-hidden", "true")
-  placeholder.appendChild(skeleton)
+  valueEl.appendChild(skeleton)
 }
 
 const updatePlaceholderText = (placeholder: HTMLElement) => {
@@ -252,8 +298,9 @@ const updatePlaceholderText = (placeholder: HTMLElement) => {
 
   const info = ihgRatesByHotel.get(hotelId)
   if (info?.cpp !== undefined && Number.isFinite(info.cpp)) {
+    const { valueEl } = ensurePlaceholderContents(placeholder)
     placeholder.classList.remove("is-loading")
-    placeholder.textContent = formatCpp(info.cpp)
+    valueEl.textContent = formatCpp(info.cpp)
     return
   }
 
@@ -278,6 +325,7 @@ const ensurePlaceholder = (priceElement: Element) => {
     placeholder.dataset.hotelId = hotelId
   }
   parent.insertBefore(placeholder, priceElement.nextSibling)
+  ensurePlaceholderContents(placeholder)
   updatePlaceholderText(placeholder)
 }
 
@@ -759,9 +807,44 @@ const observePriceCards = () => {
       .${PLACEHOLDER_CLASS} {
         display: inline-flex;
         align-items: center;
+        justify-content: flex-end;
         min-height: 16px;
         min-width: 64px;
         margin-left: 8px;
+        gap: 6px;
+        font-size: 14px;
+        text-align: right;
+      }
+      .${PLACEHOLDER_ICON_CLASS} {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        color: #6b7280;
+        cursor: default;
+      }
+      .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip {
+        position: absolute;
+        right: 0;
+        bottom: 100%;
+        transform: translateY(-4px);
+        opacity: 0;
+        pointer-events: none;
+        background: #111827;
+        color: #ffffff;
+        font-size: 11px;
+        padding: 4px 6px;
+        border-radius: 4px;
+        white-space: nowrap;
+        transition: opacity 0.15s ease, transform 0.15s ease;
+        z-index: 9999;
+      }
+      .${PLACEHOLDER_ICON_CLASS}:hover .award-viewer-tooltip {
+        opacity: 1;
+        transform: translateY(-8px);
+      }
+      .${PLACEHOLDER_VALUE_CLASS} {
+        display: inline-flex;
+        align-items: center;
       }
       .${PLACEHOLDER_CLASS}.is-loading .award-viewer-skeleton {
         display: inline-block;
