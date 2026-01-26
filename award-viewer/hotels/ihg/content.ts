@@ -547,7 +547,11 @@ const updatePlaceholderText = (placeholder: HTMLElement) => {
       ? formatPoints(info.lowestPoints ?? info.points)
       : ""
     const pointsSuffix = pointsValue ? ` (${pointsValue})` : ""
-    valueEl.textContent = `${formatCpp(info.cpp)}${pointsSuffix}${usdSuffix}`
+    const displayCpp =
+      info.cppLow !== undefined && Number.isFinite(info.cppLow)
+        ? info.cppLow
+        : info.cpp
+    valueEl.textContent = `${formatCpp(displayCpp)}${pointsSuffix}${usdSuffix}`
     if (tooltip) {
       setTooltipDetails(tooltip, info)
     }
