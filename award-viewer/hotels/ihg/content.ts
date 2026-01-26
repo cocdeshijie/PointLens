@@ -1,7 +1,7 @@
 import type { PlasmoCSConfig } from "plasmo"
 import React from "react"
 import { createRoot } from "react-dom/client"
-import { FcViewDetails } from "react-icons/fc"
+import { CiCircleInfo } from "react-icons/ci"
 
 const IHG_STORAGE_KEY = "award-viewer:ihg-last-request"
 const IHG_SENT_STORAGE_KEY = "award-viewer:ihg-sent-request"
@@ -242,7 +242,7 @@ const ensurePlaceholderContents = (placeholder: HTMLElement) => {
 
     placeholder.appendChild(iconWrapper)
     const root = createRoot(iconTarget)
-    root.render(React.createElement(FcViewDetails, { "aria-hidden": "true" }))
+    root.render(React.createElement(CiCircleInfo, { "aria-hidden": "true" }))
     iconRoots.set(iconTarget, root)
   }
 
