@@ -1,7 +1,7 @@
 import type { PlasmoCSConfig } from "plasmo"
 import React from "react"
 import { createRoot } from "react-dom/client"
-import { CiSquareMore } from "react-icons/ci"
+import { CgMoreR } from "react-icons/cg"
 
 const IHG_STORAGE_KEY = "award-viewer:ihg-last-request"
 const IHG_SENT_STORAGE_KEY = "award-viewer:ihg-sent-request"
@@ -242,7 +242,7 @@ const ensurePlaceholderContents = (placeholder: HTMLElement) => {
 
     placeholder.appendChild(iconWrapper)
     const root = createRoot(iconTarget)
-    root.render(React.createElement(CiSquareMore, { "aria-hidden": "true" }))
+    root.render(React.createElement(CgMoreR, { "aria-hidden": "true" }))
     iconRoots.set(iconTarget, root)
   }
 
@@ -822,7 +822,7 @@ const observePriceCards = () => {
         align-items: center;
         color: #6b7280;
         cursor: default;
-        font-size: 18px;
+        font-size: 22px;
         line-height: 1;
       }
       .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip {
@@ -848,6 +848,10 @@ const observePriceCards = () => {
       .${PLACEHOLDER_VALUE_CLASS} {
         display: inline-flex;
         align-items: center;
+        padding: 2px 6px;
+        border: 1px solid #6b7280;
+        background: #e5e7eb;
+        border-radius: 4px;
       }
       .${PLACEHOLDER_CLASS}.is-loading .award-viewer-skeleton {
         display: inline-block;
