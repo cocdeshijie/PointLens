@@ -510,7 +510,7 @@ const toHeaderRecord = (headers?: chrome.webRequest.HttpHeader[]) => {
 const runBackgroundRequest = async (
   requestId: string,
   bodyText?: string | null,
-  requestHeaders?: chrome.webRequest.HttpHeader[]
+  rawRequestHeaders?: chrome.webRequest.HttpHeader[]
 ) => {
   const existing = await chrome.storage.local.get(IHG_STORAGE_KEY)
   const existingPayload = existing[IHG_STORAGE_KEY] as IhgMessagePayload | undefined
@@ -523,7 +523,9 @@ const runBackgroundRequest = async (
 
   try {
     const pointsBody = buildPointsBodyFromText(bodyText ?? existingPayload?.bodyText)
-    const derivedHeaders = toHeaderRecord(requestHeaders ?? existingPayload?.requestHeaders)
+    const derivedHeaders = toHeaderRecord(
+      rawRequestHeaders ?? existingPayload?.requestHeaders
+    )
     const requestHeaders = {
       ...MIN_HEADERS,
       ...derivedHeaders,
@@ -562,7 +564,9 @@ const runBackgroundRequest = async (
     })
   } catch (error) {
     const pointsBody = buildPointsBodyFromText(bodyText ?? existingPayload?.bodyText)
-    const derivedHeaders = toHeaderRecord(requestHeaders ?? existingPayload?.requestHeaders)
+    const derivedHeaders = toHeaderRecord(
+      rawRequestHeaders ?? existingPayload?.requestHeaders
+    )
     const requestHeaders = {
       ...MIN_HEADERS,
       ...derivedHeaders,
