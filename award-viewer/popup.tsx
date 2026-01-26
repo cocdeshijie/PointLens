@@ -110,15 +110,6 @@ function IndexPopup() {
             }}>
             P
           </div>
-          <h1
-            style={{
-              fontSize: 16,
-              fontWeight: 700,
-              margin: 0,
-              letterSpacing: "-0.01em"
-            }}>
-            PointValue
-          </h1>
         </div>
       </header>
       <main
@@ -132,7 +123,6 @@ function IndexPopup() {
           <div className="animate-in fade-in slide-in-from-right-4">
             {selectedSiteConfig.id === "ihg" ? (
               <IhgPopup
-                isActiveSite={activeSite === "ihg"}
                 onBack={
                   activeSite
                     ? undefined
@@ -214,25 +204,6 @@ function IndexPopup() {
           </div>
         )}
       </main>
-      <footer
-        style={{
-          padding: 12,
-          background: "#ffffff",
-          borderTop: "1px solid #f1f5f9",
-          display: "flex",
-          justifyContent: "center"
-        }}>
-        <span
-          style={{
-            fontSize: 10,
-            fontWeight: 700,
-            letterSpacing: "0.2em",
-            textTransform: "uppercase",
-            color: "#cbd5e1"
-          }}>
-          Version 1.2.0
-        </span>
-      </footer>
       <style>{`
         .custom-scrollbar::-webkit-scrollbar {
           width: 4px;

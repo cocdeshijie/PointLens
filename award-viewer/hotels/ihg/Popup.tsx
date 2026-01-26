@@ -248,7 +248,6 @@ const buildSentRequestPayload = (
 }
 
 type IhgPopupProps = {
-  isActiveSite?: boolean
   onBack?: () => void
   site: {
     name: string
@@ -256,7 +255,7 @@ type IhgPopupProps = {
   }
 }
 
-function IhgPopup({ isActiveSite = false, onBack, site }: IhgPopupProps) {
+function IhgPopup({ onBack, site }: IhgPopupProps) {
   const [showDetails, setShowDetails] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [requestDetails, setRequestDetails] = useState<IhgRequestPayload | null>(
@@ -387,21 +386,6 @@ function IhgPopup({ isActiveSite = false, onBack, site }: IhgPopupProps) {
           </p>
         </div>
       </div>
-      {isActiveSite ? (
-        <span
-          style={{
-            alignSelf: "flex-start",
-            fontSize: 11,
-            fontWeight: 700,
-            color: "#4f46e5",
-            background: "#eef2ff",
-            border: "1px solid #c7d2fe",
-            borderRadius: 999,
-            padding: "4px 10px"
-          }}>
-          im current on ihg.com
-        </span>
-      ) : null}
       <div
         style={{
           background: "#ffffff",
