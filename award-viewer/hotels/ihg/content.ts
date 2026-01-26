@@ -5,6 +5,7 @@ const IHG_SENT_STORAGE_KEY = "award-viewer:ihg-sent-request"
 const MESSAGE_FLAG = "__AWARD_VIEWER_IHG__"
 const REPLAY_FLAG = "__AWARD_VIEWER_IHG_REPLAY__"
 const PLACEHOLDER_CLASS = "award-viewer-price-placeholder"
+const PLACEHOLDER_STYLE_ID = "award-viewer-placeholder-style"
 
 export const config: PlasmoCSConfig = {
   matches: ["https://www.ihg.com/*"],
@@ -213,11 +214,16 @@ const getHotelIdFromElement = (element: Element): string | null => {
 }
 
 const formatCpp = (cpp?: number) => {
-  if (cpp === undefined || !Number.isFinite(cpp)) {
-    return "placeholder"
-  }
-
   return `${cpp.toFixed(2)}¢/pt`
+}
+
+const setSkeleton = (placeholder: HTMLElement) => {
+  placeholder.classList.add("is-loading")
+  placeholder.textContent = ""
+  const skeleton = document.createElement("span")
+  skeleton.className = "award-viewer-skeleton"
+  skeleton.setAttribute("aria-hidden", "true")
+  placeholder.appendChild(skeleton)
 }
 
 const updatePlaceholderText = (placeholder: HTMLElement) => {
@@ -234,7 +240,7 @@ const updatePlaceholderText = (placeholder: HTMLElement) => {
   }
 
   if (!hotelId) {
-    placeholder.textContent = "CPP unavailable: missing hotel id"
+    setSkeleton(placeholder)
     return
   }
 
@@ -246,35 +252,12 @@ const updatePlaceholderText = (placeholder: HTMLElement) => {
 
   const info = ihgRatesByHotel.get(hotelId)
   if (info?.cpp !== undefined && Number.isFinite(info.cpp)) {
+    placeholder.classList.remove("is-loading")
     placeholder.textContent = formatCpp(info.cpp)
     return
   }
 
-  const hotelError = ihgRateErrorsByHotel.get(hotelId)
-  if (hotelError) {
-    placeholder.textContent = `CPP unavailable: ${hotelError}`
-    return
-  }
-
-  if (info) {
-    placeholder.textContent = `CPP unavailable: incomplete rates for ${hotelId}`
-    return
-  }
-
-  if (ihgRatesByHotel.size > 0 && !ihgRatesByHotel.has(hotelId)) {
-    placeholder.textContent = `CPP unavailable: ${hotelId} not in points response`
-    return
-  }
-
-  if (ihgLastRateError) {
-    const sourceSuffix = ihgLastRateSource
-      ? ` (source: ${ihgLastRateSource} request)`
-      : ""
-    placeholder.textContent = `CPP unavailable: ${ihgLastRateError}${sourceSuffix}`
-    return
-  }
-
-  placeholder.textContent = `CPP unavailable: no rate data (${ihgRatesByHotel.size} hotels parsed)`
+  setSkeleton(placeholder)
 }
 
 const ensurePlaceholder = (priceElement: Element) => {
@@ -769,6 +752,34 @@ const refreshRatesFromStorage = async () => {
 }
 
 const observePriceCards = () => {
+  if (!document.getElementById(PLACEHOLDER_STYLE_ID)) {
+    const style = document.createElement("style")
+    style.id = PLACEHOLDER_STYLE_ID
+    style.textContent = `
+      .${PLACEHOLDER_CLASS} {
+        display: inline-flex;
+        align-items: center;
+        min-height: 16px;
+        min-width: 64px;
+        margin-left: 8px;
+      }
+      .${PLACEHOLDER_CLASS}.is-loading .award-viewer-skeleton {
+        display: inline-block;
+        width: 56px;
+        height: 12px;
+        border-radius: 6px;
+        background: linear-gradient(90deg, #e5e7eb 25%, #f3f4f6 37%, #e5e7eb 63%);
+        background-size: 400% 100%;
+        animation: award-viewer-skeleton 1.4s ease infinite;
+      }
+      @keyframes award-viewer-skeleton {
+        0% { background-position: 100% 50%; }
+        100% { background-position: 0 50%; }
+      }
+    `
+    document.head.appendChild(style)
+  }
+
   updatePlaceholders()
   void refreshRatesFromStorage()
 
