@@ -9,10 +9,14 @@ const requestMap = new Map<
     bodyType: string
     bodyText: string | null
     requestHeaders?: chrome.webRequest.HttpHeader[]
+    searchRadius?: number
+    searchSignature?: string | null
   }
 >()
 const replaySent = new Set<string>()
 const backgroundSent = new Set<string>()
+let maxSearchRadius = 0
+let lastSearchSignature: string | null = null
 const MIN_HEADERS = {
   "content-type": "application/json; charset=UTF-8",
   "X-CDC-API-KEY": "4_jpzahMO4CBnl9Elopzfr0A",
@@ -115,6 +119,63 @@ const detectBookingType = (bodyText: string | null): IhgBookingType => {
   return "unknown"
 }
 
+const parseBody = (bodyText: string | null) => {
+  if (!bodyText) {
+    return null
+  }
+  try {
+    return JSON.parse(bodyText) as Record<string, unknown>
+  } catch {
+    return null
+  }
+}
+
+const extractSearchSignature = (bodyText: string | null) => {
+  const parsed = parseBody(bodyText)
+  if (!parsed) {
+    return null
+  }
+
+  const startDate =
+    typeof parsed.startDate === "string" ? parsed.startDate : undefined
+  const endDate = typeof parsed.endDate === "string" ? parsed.endDate : undefined
+  const geo =
+    Array.isArray(parsed.geoLocation) && parsed.geoLocation.length > 0
+      ? parsed.geoLocation[0]
+      : null
+  const lat =
+    geo && typeof geo === "object" && "latitude" in geo
+      ? String((geo as { latitude?: number }).latitude ?? "")
+      : ""
+  const lng =
+    geo && typeof geo === "object" && "longitude" in geo
+      ? String((geo as { longitude?: number }).longitude ?? "")
+      : ""
+
+  if (!startDate || !endDate || !lat || !lng) {
+    return null
+  }
+
+  return `${startDate}|${endDate}|${lat}|${lng}`
+}
+
+const extractSearchRadius = (bodyText: string | null) => {
+  const parsed = parseBody(bodyText)
+  if (!parsed || !("radius" in parsed)) {
+    return null
+  }
+
+  const raw = parsed.radius
+  if (typeof raw === "number" && Number.isFinite(raw)) {
+    return raw
+  }
+  if (typeof raw === "string") {
+    const parsedNumber = Number.parseFloat(raw)
+    return Number.isFinite(parsedNumber) ? parsedNumber : null
+  }
+  return null
+}
+
 const decodeRawBody = (raw: RawBodyItem[]) => {
   if (!raw.length || !raw[0].bytes) {
     return null
@@ -162,31 +223,43 @@ const handleIhgRequest = (details: chrome.webRequest.WebRequestBodyDetails) => {
 
   const { bodyType, bodyText } = extractRequestBody(details)
   const bookingType = detectBookingType(bodyText)
+  const searchSignature = extractSearchSignature(bodyText)
+  if (searchSignature && searchSignature !== lastSearchSignature) {
+    lastSearchSignature = searchSignature
+    maxSearchRadius = 0
+  }
+  const searchRadius = extractSearchRadius(bodyText) ?? 0
 
   requestMap.set(details.requestId, {
     url: details.url,
     method: details.method,
     bodyType,
-    bodyText
+    bodyText,
+    searchRadius,
+    searchSignature
   })
 
   if (!chrome?.storage?.local) {
     return
   }
 
-  chrome.storage.local.set({
-    [IHG_STORAGE_KEY]: {
-      kind: "webRequest",
-      url: details.url,
-      method: details.method,
-      bodyType,
-      bodyText,
-      bookingType,
-      requestHeaders: requestMap.get(details.requestId)?.requestHeaders ?? [],
-      timestamp: Date.now(),
-      receivedAt: new Date().toISOString()
-    }
-  })
+  const isLargestSearch = searchRadius >= maxSearchRadius
+  if (isLargestSearch) {
+    maxSearchRadius = searchRadius
+    chrome.storage.local.set({
+      [IHG_STORAGE_KEY]: {
+        kind: "webRequest",
+        url: details.url,
+        method: details.method,
+        bodyType,
+        bodyText,
+        bookingType,
+        requestHeaders: requestMap.get(details.requestId)?.requestHeaders ?? [],
+        timestamp: Date.now(),
+        receivedAt: new Date().toISOString()
+      }
+    })
+  }
 }
 
 const handleIhgRequestHeaders = (
@@ -214,24 +287,33 @@ const handleIhgCompleted = async (
 
   const existing = await chrome.storage.local.get(IHG_STORAGE_KEY)
   const existingPayload = existing[IHG_STORAGE_KEY] as IhgStoredPayload | undefined
+  const searchRadius = entry.searchRadius ?? 0
+  const isLargestSearch = searchRadius >= maxSearchRadius
 
-  chrome.storage.local.set({
-    [IHG_STORAGE_KEY]: {
-      kind: "webRequest",
-      url: entry.url,
-      method: entry.method,
-      bodyType: entry.bodyType,
-      bodyText: entry.bodyText,
-      bookingType: detectBookingType(entry.bodyText),
-      requestHeaders: entry.requestHeaders ?? [],
-      statusCode: details.statusCode,
-      responseHeaders: details.responseHeaders ?? [],
-      responseBodyText: existingPayload?.responseBodyText ?? null,
-      completedAt: new Date().toISOString()
-    }
-  })
+  if (isLargestSearch) {
+    maxSearchRadius = searchRadius
+    chrome.storage.local.set({
+      [IHG_STORAGE_KEY]: {
+        kind: "webRequest",
+        url: entry.url,
+        method: entry.method,
+        bodyType: entry.bodyType,
+        bodyText: entry.bodyText,
+        bookingType: detectBookingType(entry.bodyText),
+        requestHeaders: entry.requestHeaders ?? [],
+        statusCode: details.statusCode,
+        responseHeaders: details.responseHeaders ?? [],
+        responseBodyText: existingPayload?.responseBodyText ?? null,
+        completedAt: new Date().toISOString()
+      }
+    })
+  }
 
-  if (!replaySent.has(details.requestId) && !existingPayload?.responseBodyText) {
+  if (
+    isLargestSearch &&
+    !replaySent.has(details.requestId) &&
+    !existingPayload?.responseBodyText
+  ) {
     replaySent.add(details.requestId)
     const replayPayload = {
       type: "ihg-replay",
