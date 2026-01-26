@@ -1349,19 +1349,19 @@ const observePriceCards = () => {
         border-radius: 4px;
       }
       .${PLACEHOLDER_VALUE_CLASS}.is-good {
-        background: #dcfce7;
-        border-color: #86efac;
-        color: #166534;
+        background: #d1fae5;
+        border-color: #a7f3d0;
+        color: #047857;
       }
       .${PLACEHOLDER_VALUE_CLASS}.is-bad {
-        background: #fee2e2;
-        border-color: #fecaca;
-        color: #991b1b;
+        background: #ffe4e6;
+        border-color: #fecdd3;
+        color: #be123c;
       }
       .${PLACEHOLDER_VALUE_CLASS}.is-mid {
-        background: #fef9c3;
-        border-color: #fde047;
-        color: #854d0e;
+        background: #fef3c7;
+        border-color: #fde68a;
+        color: #b45309;
       }
       .${PLACEHOLDER_CLASS}.is-loading .award-viewer-skeleton {
         display: inline-block;

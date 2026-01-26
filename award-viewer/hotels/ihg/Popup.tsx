@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
+import { FiArrowLeft, FiTerminal, FiZap } from "react-icons/fi"
 
 import {
   DEFAULT_IHG_DEAL_SETTINGS,
@@ -249,9 +250,13 @@ const buildSentRequestPayload = (
 type IhgPopupProps = {
   isActiveSite?: boolean
   onBack?: () => void
+  site: {
+    name: string
+    domain: string
+  }
 }
 
-function IhgPopup({ isActiveSite = false, onBack }: IhgPopupProps) {
+function IhgPopup({ isActiveSite = false, onBack, site }: IhgPopupProps) {
   const [showDetails, setShowDetails] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [requestDetails, setRequestDetails] = useState<IhgRequestPayload | null>(
@@ -343,68 +348,110 @@ function IhgPopup({ isActiveSite = false, onBack }: IhgPopupProps) {
   )
 
   return (
-    <div
-      style={{
-        minHeight: 700,
-        minWidth: 520,
-        width: 520,
-        padding: 16
-      }}>
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 8,
-          marginBottom: 8
-        }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
         {onBack ? (
           <button
             type="button"
             onClick={onBack}
             style={{
-              borderRadius: 6,
-              border: "1px solid #cbd5e1",
-              padding: "4px 8px"
-            }}>
-            Back
+              padding: 8,
+              borderRadius: 999,
+              border: "none",
+              background: "#e2e8f0",
+              color: "#64748b",
+              cursor: "pointer"
+            }}
+            aria-label="Back">
+            <FiArrowLeft size={18} />
           </button>
         ) : null}
-        <h2
-          style={{
-            fontSize: 16,
-            margin: 0
-          }}>
-          IHG settings
-        </h2>
+        <div>
+          <h2
+            style={{
+              fontSize: 18,
+              fontWeight: 700,
+              color: "#0f172a",
+              margin: 0
+            }}>
+            {site.name} settings
+          </h2>
+          <p
+            style={{
+              margin: 0,
+              fontSize: 11,
+              fontWeight: 600,
+              color: "#94a3b8"
+            }}>
+            Configuration for {site.domain}
+          </p>
+        </div>
       </div>
-      {isActiveSite ? <p>im current on ihg.com</p> : null}
+      {isActiveSite ? (
+        <span
+          style={{
+            alignSelf: "flex-start",
+            fontSize: 11,
+            fontWeight: 700,
+            color: "#4f46e5",
+            background: "#eef2ff",
+            border: "1px solid #c7d2fe",
+            borderRadius: 999,
+            padding: "4px 10px"
+          }}>
+          im current on ihg.com
+        </span>
+      ) : null}
       <div
         style={{
+          background: "#ffffff",
+          borderRadius: 20,
           border: "1px solid #e2e8f0",
-          borderRadius: 8,
-          padding: 12
+          padding: 20,
+          boxShadow: "0 1px 2px rgba(15, 23, 42, 0.06)"
         }}>
-        <p
-          style={{
-            marginTop: 0
-          }}>
-          Highlight deals on IHG search results by cents per point.
-        </p>
-        <div
-          style={{
-            display: "grid",
-            gap: 12
-          }}>
-          <label
+        <div style={{ display: "flex", gap: 12, marginBottom: 16 }}>
+          <div
             style={{
-              display: "grid",
-              gap: 6
+              width: 32,
+              height: 32,
+              borderRadius: 999,
+              background: "#eef2ff",
+              color: "#4f46e5",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center"
             }}>
-            <span>Good deal threshold (¢/pt)</span>
+            <FiZap size={16} />
+          </div>
+          <p
+            style={{
+              margin: 0,
+              fontSize: 12,
+              color: "#64748b",
+              lineHeight: 1.5
+            }}>
+            Highlight deals on IHG search results automatically when the value
+            meets your thresholds.
+          </p>
+        </div>
+        <div style={{ display: "grid", gap: 16 }}>
+          <label style={{ display: "grid", gap: 6 }}>
+            <span
+              style={{
+                fontSize: 10,
+                fontWeight: 700,
+                color: "#94a3b8",
+                textTransform: "uppercase",
+                letterSpacing: "0.18em",
+                marginLeft: 4
+              }}>
+              Good deal threshold (¢/pt)
+            </span>
             <input
               type="number"
               min={0}
-              step={0.01}
+              step={0.1}
               value={dealSettings.goodDealThreshold}
               onChange={(event) => {
                 const parsed = Number.parseFloat(event.target.value)
@@ -413,18 +460,32 @@ function IhgPopup({ isActiveSite = false, onBack }: IhgPopupProps) {
                   : DEFAULT_IHG_DEAL_SETTINGS.goodDealThreshold
                 void updateSetting("goodDealThreshold", nextValue)
               }}
+              style={{
+                width: "100%",
+                padding: "12px 14px",
+                borderRadius: 14,
+                border: "1px solid #e2e8f0",
+                background: "#f8fafc",
+                fontWeight: 600
+              }}
             />
           </label>
-          <label
-            style={{
-              display: "grid",
-              gap: 6
-            }}>
-            <span>Bad deal threshold (¢/pt)</span>
+          <label style={{ display: "grid", gap: 6 }}>
+            <span
+              style={{
+                fontSize: 10,
+                fontWeight: 700,
+                color: "#94a3b8",
+                textTransform: "uppercase",
+                letterSpacing: "0.18em",
+                marginLeft: 4
+              }}>
+              Bad deal threshold (¢/pt)
+            </span>
             <input
               type="number"
               min={0}
-              step={0.01}
+              step={0.1}
               value={dealSettings.badDealThreshold}
               onChange={(event) => {
                 const parsed = Number.parseFloat(event.target.value)
@@ -433,45 +494,93 @@ function IhgPopup({ isActiveSite = false, onBack }: IhgPopupProps) {
                   : DEFAULT_IHG_DEAL_SETTINGS.badDealThreshold
                 void updateSetting("badDealThreshold", nextValue)
               }}
+              style={{
+                width: "100%",
+                padding: "12px 14px",
+                borderRadius: 14,
+                border: "1px solid #e2e8f0",
+                background: "#f8fafc",
+                fontWeight: 600
+              }}
             />
           </label>
         </div>
         <div
           style={{
             display: "flex",
+            alignItems: "center",
             gap: 8,
-            marginTop: 12,
-            fontSize: 12
+            marginTop: 16,
+            flexWrap: "wrap"
           }}>
           <span
             style={{
-              background: "#dcfce7",
-              border: "1px solid #86efac",
-              borderRadius: 4,
-              color: "#166534",
-              padding: "2px 6px"
+              padding: "6px 10px",
+              background: "#d1fae5",
+              color: "#047857",
+              borderRadius: 10,
+              fontSize: 10,
+              fontWeight: 700,
+              border: "1px solid #a7f3d0",
+              display: "flex",
+              alignItems: "center",
+              gap: 6
             }}>
-            Good deal
+            <span
+              style={{
+                width: 6,
+                height: 6,
+                borderRadius: 999,
+                background: "#10b981"
+              }}
+            />
+            Good
           </span>
           <span
             style={{
-              background: "#fef9c3",
-              border: "1px solid #fde047",
-              borderRadius: 4,
-              color: "#854d0e",
-              padding: "2px 6px"
+              padding: "6px 10px",
+              background: "#fef3c7",
+              color: "#b45309",
+              borderRadius: 10,
+              fontSize: 10,
+              fontWeight: 700,
+              border: "1px solid #fde68a",
+              display: "flex",
+              alignItems: "center",
+              gap: 6
             }}>
-            Fair deal
+            <span
+              style={{
+                width: 6,
+                height: 6,
+                borderRadius: 999,
+                background: "#f59e0b"
+              }}
+            />
+            Fair
           </span>
           <span
             style={{
-              background: "#fee2e2",
-              border: "1px solid #fecaca",
-              borderRadius: 4,
-              color: "#991b1b",
-              padding: "2px 6px"
+              padding: "6px 10px",
+              background: "#ffe4e6",
+              color: "#be123c",
+              borderRadius: 10,
+              fontSize: 10,
+              fontWeight: 700,
+              border: "1px solid #fecdd3",
+              display: "flex",
+              alignItems: "center",
+              gap: 6
             }}>
-            Bad deal
+            <span
+              style={{
+                width: 6,
+                height: 6,
+                borderRadius: 999,
+                background: "#f43f5e"
+              }}
+            />
+            Bad
           </span>
         </div>
       </div>
@@ -482,18 +591,33 @@ function IhgPopup({ isActiveSite = false, onBack }: IhgPopupProps) {
             void handleDebugClick()
           }}
           style={{
-            marginTop: 12
+            width: "100%",
+            padding: "14px 16px",
+            borderRadius: 14,
+            border: "none",
+            background: "#0f172a",
+            color: "#ffffff",
+            fontWeight: 700,
+            fontSize: 13,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 8,
+            boxShadow: "0 16px 24px rgba(15, 23, 42, 0.2)",
+            cursor: "pointer"
           }}>
+          <FiTerminal size={16} />
           Debug IHG Request
         </button>
       ) : null}
       {showDetails && IS_DEV ? (
         <div
           style={{
-            border: "1px solid #ccc",
-            borderRadius: 8,
-            marginTop: 12,
-            padding: 12
+            border: "1px solid #e2e8f0",
+            borderRadius: 16,
+            marginTop: 4,
+            padding: 16,
+            background: "#ffffff"
           }}>
           <div
             style={{
