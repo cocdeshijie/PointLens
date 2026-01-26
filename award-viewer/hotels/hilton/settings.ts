@@ -1,11 +1,11 @@
-export const IHG_VALUE_SETTINGS_KEY = "award-viewer:ihg-value-settings"
+export const HILTON_VALUE_SETTINGS_KEY = "award-viewer:hilton-value-settings"
 
-export type IhgValueSettings = {
+export type HiltonValueSettings = {
   goodValueThreshold: number
   badValueThreshold: number
 }
 
-export const DEFAULT_IHG_VALUE_SETTINGS: IhgValueSettings = {
+export const DEFAULT_HILTON_VALUE_SETTINGS: HiltonValueSettings = {
   goodValueThreshold: 0.7,
   badValueThreshold: 0.5
 }
@@ -14,17 +14,17 @@ const coerceNumber = (value: unknown, fallback: number) => {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback
 }
 
-export const normalizeIhgValueSettings = (
-  value?: Partial<IhgValueSettings> | null
-): IhgValueSettings => {
+export const normalizeHiltonValueSettings = (
+  value?: Partial<HiltonValueSettings> | null
+): HiltonValueSettings => {
   return {
     goodValueThreshold: coerceNumber(
       value?.goodValueThreshold,
-      DEFAULT_IHG_VALUE_SETTINGS.goodValueThreshold
+      DEFAULT_HILTON_VALUE_SETTINGS.goodValueThreshold
     ),
     badValueThreshold: coerceNumber(
       value?.badValueThreshold,
-      DEFAULT_IHG_VALUE_SETTINGS.badValueThreshold
+      DEFAULT_HILTON_VALUE_SETTINGS.badValueThreshold
     )
   }
 }

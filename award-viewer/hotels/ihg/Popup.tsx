@@ -2,10 +2,10 @@ import { useEffect, useMemo, useState } from "react"
 import { FiArrowLeft, FiTerminal, FiZap } from "react-icons/fi"
 
 import {
-  DEFAULT_IHG_DEAL_SETTINGS,
-  IHG_DEAL_SETTINGS_KEY,
-  IhgDealSettings,
-  normalizeIhgDealSettings
+  DEFAULT_IHG_VALUE_SETTINGS,
+  IHG_VALUE_SETTINGS_KEY,
+  IhgValueSettings,
+  normalizeIhgValueSettings
 } from "./settings"
 
 const IHG_STORAGE_KEY = "award-viewer:ihg-last-request"
@@ -298,21 +298,21 @@ function IhgPopup({ onBack, site }: IhgPopupProps) {
   const [sentRequest, setSentRequest] = useState<IhgSentRequest | null>(null)
   const [conversionRequest, setConversionRequest] =
     useState<IhgConversionRequest | null>(null)
-  const [dealSettings, setDealSettings] = useState<IhgDealSettings>(
-    DEFAULT_IHG_DEAL_SETTINGS
+  const [valueSettings, setValueSettings] = useState<IhgValueSettings>(
+    DEFAULT_IHG_VALUE_SETTINGS
   )
 
   useEffect(() => {
     const loadSettings = async () => {
       if (!chrome?.storage?.local) {
-        setDealSettings(DEFAULT_IHG_DEAL_SETTINGS)
+        setValueSettings(DEFAULT_IHG_VALUE_SETTINGS)
         return
       }
 
-      const stored = await chrome.storage.local.get([IHG_DEAL_SETTINGS_KEY])
-      setDealSettings(
-        normalizeIhgDealSettings(
-          stored[IHG_DEAL_SETTINGS_KEY] as Partial<IhgDealSettings> | undefined
+      const stored = await chrome.storage.local.get([IHG_VALUE_SETTINGS_KEY])
+      setValueSettings(
+        normalizeIhgValueSettings(
+          stored[IHG_VALUE_SETTINGS_KEY] as Partial<IhgValueSettings> | undefined
         )
       )
     }
@@ -321,21 +321,21 @@ function IhgPopup({ onBack, site }: IhgPopupProps) {
   }, [])
 
   const updateSetting = async (
-    key: keyof IhgDealSettings,
+    key: keyof IhgValueSettings,
     value: number
   ) => {
-    const nextSettings = normalizeIhgDealSettings({
-      ...dealSettings,
+    const nextSettings = normalizeIhgValueSettings({
+      ...valueSettings,
       [key]: value
     })
-    setDealSettings(nextSettings)
+    setValueSettings(nextSettings)
 
     if (!chrome?.storage?.local) {
       return
     }
 
     await chrome.storage.local.set({
-      [IHG_DEAL_SETTINGS_KEY]: nextSettings
+      [IHG_VALUE_SETTINGS_KEY]: nextSettings
     })
   }
 
@@ -464,7 +464,7 @@ function IhgPopup({ onBack, site }: IhgPopupProps) {
               color: "#64748b",
               lineHeight: 1.5
             }}>
-            Highlight deals on IHG search results automatically when the value
+            Highlight values on IHG search results automatically when the value
             meets your thresholds.
           </p>
         </div>
@@ -479,19 +479,19 @@ function IhgPopup({ onBack, site }: IhgPopupProps) {
                 letterSpacing: "0.18em",
                 marginLeft: 4
               }}>
-              Good deal threshold (¢/pt)
+              Good value threshold (¢/pt)
             </span>
             <input
               type="number"
               min={0}
               step={0.1}
-              value={dealSettings.goodDealThreshold}
+              value={valueSettings.goodValueThreshold}
               onChange={(event) => {
                 const parsed = Number.parseFloat(event.target.value)
                 const nextValue = Number.isFinite(parsed)
                   ? parsed
-                  : DEFAULT_IHG_DEAL_SETTINGS.goodDealThreshold
-                void updateSetting("goodDealThreshold", nextValue)
+                  : DEFAULT_IHG_VALUE_SETTINGS.goodValueThreshold
+                void updateSetting("goodValueThreshold", nextValue)
               }}
               style={{
                 width: "100%",
@@ -513,19 +513,19 @@ function IhgPopup({ onBack, site }: IhgPopupProps) {
                 letterSpacing: "0.18em",
                 marginLeft: 4
               }}>
-              Bad deal threshold (¢/pt)
+              Bad value threshold (¢/pt)
             </span>
             <input
               type="number"
               min={0}
               step={0.1}
-              value={dealSettings.badDealThreshold}
+              value={valueSettings.badValueThreshold}
               onChange={(event) => {
                 const parsed = Number.parseFloat(event.target.value)
                 const nextValue = Number.isFinite(parsed)
                   ? parsed
-                  : DEFAULT_IHG_DEAL_SETTINGS.badDealThreshold
-                void updateSetting("badDealThreshold", nextValue)
+                  : DEFAULT_IHG_VALUE_SETTINGS.badValueThreshold
+                void updateSetting("badValueThreshold", nextValue)
               }}
               style={{
                 width: "100%",
