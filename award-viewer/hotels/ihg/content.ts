@@ -64,6 +64,11 @@ type IhgRateInfo = {
   cashAmount?: number
   points?: number
   cpp?: number
+  lowestCash?: IhgCashCost
+  highestCash?: IhgCashCost
+  lowestPoints?: number
+  highestPoints?: number
+  currency?: string
 }
 
 let ihgRatesByHotel = new Map<string, IhgRateInfo>()
@@ -73,6 +78,13 @@ let ihgLastRateSource: string | null = null
 const iconRoots = new WeakMap<HTMLElement, ReturnType<typeof createRoot>>()
 const currencyRates = new Map<string, number>()
 const inflightCurrencyRates = new Map<string, Promise<number | null>>()
+
+type IhgCashCost = {
+  baseAmount?: number
+  excludedFeeSubTotal?: number
+  amountAfterTax?: number
+  basePlusExcludedFeesAmount?: number
+}
 
 const normalizeHotelId = (id: string | null | undefined) => {
   if (!id) {
@@ -227,6 +239,102 @@ const formatCpp = (cpp?: number) => {
   return `${cpp.toFixed(2)}¢/pt`
 }
 
+const formatPoints = (points?: number) => {
+  if (points === undefined) {
+    return "—"
+  }
+  return `${new Intl.NumberFormat("en-US").format(points)} pts`
+}
+
+const formatCurrencyValue = (amount?: number, currency?: string) => {
+  if (amount === undefined) {
+    return "—"
+  }
+  if (currency) {
+    try {
+      return new Intl.NumberFormat("en-US", {
+        style: "currency",
+        currency
+      }).format(amount)
+    } catch {
+      return `${amount.toFixed(2)} ${currency}`
+    }
+  }
+  return amount.toFixed(2)
+}
+
+const setTooltipText = (tooltip: HTMLElement, text: string) => {
+  tooltip.replaceChildren(document.createTextNode(text))
+}
+
+const buildTooltipRow = (label: string, value: string) => {
+  const row = document.createElement("div")
+  row.className = "award-viewer-tooltip-row"
+  const labelEl = document.createElement("span")
+  labelEl.textContent = label
+  const valueEl = document.createElement("span")
+  valueEl.textContent = value
+  row.appendChild(labelEl)
+  row.appendChild(valueEl)
+  return row
+}
+
+const buildTooltipColumn = (
+  title: string,
+  cost: IhgCashCost | undefined,
+  currency?: string
+) => {
+  const col = document.createElement("div")
+  col.className = "award-viewer-tooltip-col"
+  const heading = document.createElement("div")
+  heading.className = "award-viewer-tooltip-title"
+  heading.textContent = title
+  col.appendChild(heading)
+  col.appendChild(
+    buildTooltipRow("Base", formatCurrencyValue(cost?.baseAmount, currency))
+  )
+  col.appendChild(
+    buildTooltipRow("Fees", formatCurrencyValue(cost?.excludedFeeSubTotal, currency))
+  )
+  col.appendChild(
+    buildTooltipRow("Total", formatCurrencyValue(cost?.amountAfterTax, currency))
+  )
+  return col
+}
+
+const setTooltipDetails = (tooltip: HTMLElement, info: IhgRateInfo) => {
+  const content = document.createElement("div")
+  content.className = "award-viewer-tooltip-content"
+
+  const grid = document.createElement("div")
+  grid.className = "award-viewer-tooltip-grid"
+  grid.appendChild(buildTooltipColumn("Lowest", info.lowestCash, info.currency))
+  grid.appendChild(buildTooltipColumn("Highest", info.highestCash, info.currency))
+  content.appendChild(grid)
+
+  const pointsSection = document.createElement("div")
+  pointsSection.className = "award-viewer-tooltip-points"
+  const pointsTitle = document.createElement("div")
+  pointsTitle.className = "award-viewer-tooltip-title"
+  pointsTitle.textContent = "Points"
+  pointsSection.appendChild(pointsTitle)
+
+  const pointsGrid = document.createElement("div")
+  pointsGrid.className = "award-viewer-tooltip-points-grid"
+  const lowestPoints = document.createElement("div")
+  lowestPoints.className = "award-viewer-tooltip-points-value"
+  lowestPoints.textContent = formatPoints(info.lowestPoints ?? info.points)
+  const highestPoints = document.createElement("div")
+  highestPoints.className = "award-viewer-tooltip-points-value"
+  highestPoints.textContent = formatPoints(info.highestPoints ?? info.points)
+  pointsGrid.appendChild(lowestPoints)
+  pointsGrid.appendChild(highestPoints)
+  pointsSection.appendChild(pointsGrid)
+
+  content.appendChild(pointsSection)
+  tooltip.replaceChildren(content)
+}
+
 const ensurePlaceholderContents = (placeholder: HTMLElement) => {
   let iconWrapper = placeholder.querySelector<HTMLElement>(
     `.${PLACEHOLDER_ICON_CLASS}`
@@ -241,7 +349,7 @@ const ensurePlaceholderContents = (placeholder: HTMLElement) => {
 
     const tooltip = document.createElement("span")
     tooltip.className = "award-viewer-tooltip"
-    tooltip.textContent = "More details coming soon"
+    tooltip.textContent = "Awaiting points response"
     iconWrapper.appendChild(tooltip)
 
     placeholder.appendChild(iconWrapper)
@@ -301,13 +409,23 @@ const updatePlaceholderText = (placeholder: HTMLElement) => {
   }
 
   const info = ihgRatesByHotel.get(hotelId)
+  const { iconWrapper, valueEl } = ensurePlaceholderContents(placeholder)
+  const tooltip = iconWrapper.querySelector<HTMLElement>(".award-viewer-tooltip")
+  const errorMessage =
+    ihgRateErrorsByHotel.get(hotelId) ?? ihgLastRateError ?? "Awaiting points response"
+
   if (info?.cpp !== undefined && Number.isFinite(info.cpp)) {
-    const { valueEl } = ensurePlaceholderContents(placeholder)
     placeholder.classList.remove("is-loading")
     valueEl.textContent = formatCpp(info.cpp)
+    if (tooltip) {
+      setTooltipDetails(tooltip, info)
+    }
     return
   }
 
+  if (tooltip) {
+    setTooltipText(tooltip, errorMessage)
+  }
   setSkeleton(placeholder)
 }
 
@@ -562,6 +680,80 @@ const getRateValue = (
   return undefined
 }
 
+const normalizeCashCost = (value: unknown): IhgCashCost | undefined => {
+  if (!value || typeof value !== "object") {
+    return undefined
+  }
+
+  const record = value as Record<string, unknown>
+  const baseAmount = extractNumber(record.baseAmount)
+  const excludedFeeSubTotal = extractNumber(record.excludedFeeSubTotal)
+  const amountAfterTax = extractNumber(record.amountAfterTax)
+  const basePlusExcludedFeesAmount = extractNumber(record.basePlusExcludedFeesAmount)
+
+  if (
+    baseAmount === undefined &&
+    excludedFeeSubTotal === undefined &&
+    amountAfterTax === undefined &&
+    basePlusExcludedFeesAmount === undefined
+  ) {
+    return undefined
+  }
+
+  return {
+    baseAmount,
+    excludedFeeSubTotal,
+    amountAfterTax,
+    basePlusExcludedFeesAmount
+  }
+}
+
+const getCashCostByPath = (
+  hotel: Record<string, unknown>,
+  paths: string[][]
+) => {
+  for (const path of paths) {
+    const raw = getValueByPath(hotel, path)
+    const normalized = normalizeCashCost(raw)
+    if (normalized) {
+      return normalized
+    }
+  }
+  return undefined
+}
+
+const getCashTotal = (cost?: IhgCashCost) => {
+  if (!cost) {
+    return undefined
+  }
+  return (
+    cost.amountAfterTax ??
+    cost.basePlusExcludedFeesAmount ??
+    cost.baseAmount
+  )
+}
+
+const getPointsCostByPath = (
+  hotel: Record<string, unknown>,
+  paths: string[][]
+) => {
+  for (const path of paths) {
+    const raw = getValueByPath(hotel, path)
+    if (raw && typeof raw === "object") {
+      const record = raw as Record<string, unknown>
+      const points = extractNumber(record.points ?? record.originalPoints)
+      if (points !== undefined) {
+        return points
+      }
+    }
+    const parsed = extractNumber(raw)
+    if (parsed !== undefined) {
+      return parsed
+    }
+  }
+  return undefined
+}
+
 const parseRateMap = (responseBodyText: string | null) => {
   if (!responseBodyText) {
     return {
@@ -604,12 +796,36 @@ const parseRateMap = (responseBodyText: string | null) => {
     ["lowestCashOnlyCost", "amountAfterTax"],
     ["lowestCashOnlyCost", "amount"]
   ]
+  const lowestCashPaths = [
+    ["summary", "rateRanges", "lowestCashOnlyCost"],
+    ["rateRanges", "lowestCashOnlyCost"],
+    ["summary", "lowestCashOnlyCost"],
+    ["lowestCashOnlyCost"]
+  ]
+  const highestCashPaths = [
+    ["summary", "rateRanges", "highestCashOnlyCost"],
+    ["rateRanges", "highestCashOnlyCost"],
+    ["summary", "highestCashOnlyCost"],
+    ["highestCashOnlyCost"]
+  ]
 
   const pointsPaths = [
     ["summary", "rateRanges", "lowestPointsOnlyCost", "points"],
     ["rateRanges", "lowestPointsOnlyCost", "points"],
     ["summary", "lowestPointsOnlyCost", "points"],
     ["lowestPointsOnlyCost", "points"]
+  ]
+  const lowestPointsPaths = [
+    ["summary", "rateRanges", "lowestPointsOnlyCost"],
+    ["rateRanges", "lowestPointsOnlyCost"],
+    ["summary", "lowestPointsOnlyCost"],
+    ["lowestPointsOnlyCost"]
+  ]
+  const highestPointsPaths = [
+    ["summary", "rateRanges", "highestPointsOnlyCost"],
+    ["rateRanges", "highestPointsOnlyCost"],
+    ["summary", "highestPointsOnlyCost"],
+    ["highestPointsOnlyCost"]
   ]
 
   hotels.forEach((hotel) => {
@@ -627,15 +843,37 @@ const parseRateMap = (responseBodyText: string | null) => {
       typeof record.propertyCurrency === "string"
         ? record.propertyCurrency
         : undefined
+    const lowestCash = getCashCostByPath(record, lowestCashPaths)
+    const highestCash = getCashCostByPath(record, highestCashPaths)
+    const lowestPoints = getPointsCostByPath(record, lowestPointsPaths)
+    const highestPoints = getPointsCostByPath(record, highestPointsPaths)
     const cashAmount = getRateValue(record, cashPaths)
     const points = getRateValue(record, pointsPaths)
+    const lowestCashTotal = getCashTotal(lowestCash)
+    const highestCashTotal = getCashTotal(highestCash)
     let usdCashAmount = cashAmount
-    if (cashAmount !== undefined && propertyCurrency && propertyCurrency !== USD_CURRENCY) {
+    let usdLowestCash = lowestCashTotal
+    let usdHighestCash = highestCashTotal
+    if (propertyCurrency && propertyCurrency !== USD_CURRENCY) {
       const conversionRate = currencyRates.get(propertyCurrency)
       if (conversionRate !== undefined) {
-        usdCashAmount = cashAmount * conversionRate
-      } else {
+        if (usdCashAmount !== undefined) {
+          usdCashAmount = usdCashAmount * conversionRate
+        }
+        if (usdLowestCash !== undefined) {
+          usdLowestCash = usdLowestCash * conversionRate
+        }
+        if (usdHighestCash !== undefined) {
+          usdHighestCash = usdHighestCash * conversionRate
+        }
+      } else if (
+        usdCashAmount !== undefined ||
+        usdLowestCash !== undefined ||
+        usdHighestCash !== undefined
+      ) {
         usdCashAmount = undefined
+        usdLowestCash = undefined
+        usdHighestCash = undefined
         currenciesNeeded.add(propertyCurrency)
       }
     }
@@ -645,13 +883,21 @@ const parseRateMap = (responseBodyText: string | null) => {
         : usdCashAmount === undefined
           ? "Missing cash rate"
           : points === undefined || points <= 0
-            ? "Missing points rate"
-            : null
+        ? "Missing points rate"
+        : null
 
-    const cpp =
-      usdCashAmount !== undefined && points !== undefined && points > 0
-        ? (usdCashAmount / points) * 100
+    const cppLow =
+      usdLowestCash !== undefined && lowestPoints !== undefined && lowestPoints > 0
+        ? (usdLowestCash / lowestPoints) * 100
         : undefined
+    const cppHigh =
+      usdHighestCash !== undefined && highestPoints !== undefined && highestPoints > 0
+        ? (usdHighestCash / highestPoints) * 100
+        : undefined
+    const cppCandidates = [cppLow, cppHigh].filter(
+      (value): value is number => value !== undefined && Number.isFinite(value)
+    )
+    const cpp = cppCandidates.length > 0 ? Math.min(...cppCandidates) : undefined
 
     hotelIds.forEach((hotelId) => {
       if (errorMessage) {
@@ -660,7 +906,12 @@ const parseRateMap = (responseBodyText: string | null) => {
       nextMap.set(hotelId, {
         cashAmount: usdCashAmount,
         points,
-        cpp
+        cpp,
+        lowestCash,
+        highestCash,
+        lowestPoints,
+        highestPoints,
+        currency: propertyCurrency
       })
     })
   })
@@ -917,18 +1168,68 @@ const observePriceCards = () => {
         transform: translateY(-4px);
         opacity: 0;
         pointer-events: none;
-        background: #111827;
-        color: #ffffff;
+        background: #f5f5f5;
+        color: #111827;
+        border: 1px solid #cbd5e1;
         font-size: 11px;
-        padding: 4px 6px;
+        padding: 8px;
         border-radius: 4px;
-        white-space: nowrap;
+        white-space: normal;
         transition: opacity 0.15s ease, transform 0.15s ease;
         z-index: 9999;
+        box-shadow: 0 4px 12px rgba(15, 23, 42, 0.12);
+        min-width: 220px;
       }
       .${PLACEHOLDER_ICON_CLASS}:hover .award-viewer-tooltip {
         opacity: 1;
         transform: translateY(-8px);
+      }
+      .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-content {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+      }
+      .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-col {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-title {
+        font-size: 10px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: #475569;
+      }
+      .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-row {
+        display: flex;
+        justify-content: space-between;
+        gap: 6px;
+      }
+      .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-row span:last-child {
+        font-weight: 600;
+        color: #0f172a;
+      }
+      .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-points {
+        border-top: 1px solid #e2e8f0;
+        padding-top: 6px;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-points-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+      }
+      .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-points-value {
+        font-weight: 600;
+        color: #0f172a;
       }
       .${PLACEHOLDER_VALUE_CLASS} {
         display: inline-flex;
