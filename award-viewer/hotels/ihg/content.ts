@@ -4,9 +4,9 @@ import { createRoot } from "react-dom/client"
 import { CiCircleInfo } from "react-icons/ci"
 
 import {
-  DEFAULT_IHG_DEAL_SETTINGS,
-  IHG_DEAL_SETTINGS_KEY,
-  normalizeIhgDealSettings
+  DEFAULT_IHG_VALUE_SETTINGS,
+  IHG_VALUE_SETTINGS_KEY,
+  normalizeIhgValueSettings
 } from "./settings"
 
 const IHG_STORAGE_KEY = "award-viewer:ihg-last-request"
@@ -106,7 +106,7 @@ let ihgShowPointsWithCpp = false
 const iconRoots = new WeakMap<HTMLElement, ReturnType<typeof createRoot>>()
 const currencyRates = new Map<string, number>()
 const inflightCurrencyRates = new Map<string, Promise<number | null>>()
-let ihgDealSettings = DEFAULT_IHG_DEAL_SETTINGS
+let ihgValueSettings = DEFAULT_IHG_VALUE_SETTINGS
 
 type IhgCashCost = {
   baseAmount?: number
@@ -541,7 +541,7 @@ const updatePlaceholderText = (placeholder: HTMLElement) => {
       ? info.cppLow
       : info?.cpp
 
-  updateDealClass(valueEl, displayCpp)
+  updateValueClass(valueEl, displayCpp)
 
   if (info?.cpp !== undefined && Number.isFinite(info.cpp)) {
     placeholder.classList.remove("is-loading")
@@ -606,19 +606,19 @@ const updateExistingPlaceholders = () => {
   placeholders.forEach((placeholder) => updatePlaceholderText(placeholder))
 }
 
-const updateDealClass = (valueEl: HTMLElement, cpp?: number) => {
+const updateValueClass = (valueEl: HTMLElement, cpp?: number) => {
   valueEl.classList.remove("is-good", "is-bad", "is-mid")
 
   if (cpp === undefined || !Number.isFinite(cpp)) {
     return
   }
 
-  if (cpp >= ihgDealSettings.goodDealThreshold) {
+  if (cpp >= ihgValueSettings.goodValueThreshold) {
     valueEl.classList.add("is-good")
     return
   }
 
-  if (cpp <= ihgDealSettings.badDealThreshold) {
+  if (cpp <= ihgValueSettings.badValueThreshold) {
     valueEl.classList.add("is-bad")
     return
   }
@@ -1414,16 +1414,16 @@ const refreshRatesFromStorage = async () => {
   updateExistingPlaceholders()
 }
 
-const refreshDealSettings = async () => {
+const refreshValueSettings = async () => {
   if (!chrome?.storage?.local) {
-    ihgDealSettings = DEFAULT_IHG_DEAL_SETTINGS
+    ihgValueSettings = DEFAULT_IHG_VALUE_SETTINGS
     updateExistingPlaceholders()
     return
   }
 
-  const stored = await chrome.storage.local.get([IHG_DEAL_SETTINGS_KEY])
-  ihgDealSettings = normalizeIhgDealSettings(
-    stored[IHG_DEAL_SETTINGS_KEY] as Partial<typeof ihgDealSettings> | undefined
+  const stored = await chrome.storage.local.get([IHG_VALUE_SETTINGS_KEY])
+  ihgValueSettings = normalizeIhgValueSettings(
+    stored[IHG_VALUE_SETTINGS_KEY] as Partial<typeof ihgValueSettings> | undefined
   )
   updateExistingPlaceholders()
 }
@@ -1569,7 +1569,7 @@ const observePriceCards = () => {
 
   updatePlaceholders()
   void refreshRatesFromStorage()
-  void refreshDealSettings()
+  void refreshValueSettings()
 
   const observer = new MutationObserver((mutations) => {
     for (const mutation of mutations) {
@@ -1602,10 +1602,10 @@ if (chrome?.storage?.onChanged) {
     if (changes[IHG_STORAGE_KEY] || changes[IHG_SENT_STORAGE_KEY]) {
       void refreshRatesFromStorage()
     }
-    if (changes[IHG_DEAL_SETTINGS_KEY]) {
-      ihgDealSettings = normalizeIhgDealSettings(
-        changes[IHG_DEAL_SETTINGS_KEY]?.newValue as
-          | Partial<typeof ihgDealSettings>
+    if (changes[IHG_VALUE_SETTINGS_KEY]) {
+      ihgValueSettings = normalizeIhgValueSettings(
+        changes[IHG_VALUE_SETTINGS_KEY]?.newValue as
+          | Partial<typeof ihgValueSettings>
           | undefined
       )
       updateExistingPlaceholders()

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react"
 import { FiChevronRight, FiGlobe } from "react-icons/fi"
 
+import HiltonPopup from "./hotels/hilton/Popup"
 import IhgPopup from "./hotels/ihg/Popup"
 
 const POPUP_MIN_WIDTH = 380
@@ -11,6 +12,12 @@ const SUPPORTED_SITES = [
     label: "IHG",
     domain: "ihg.com",
     icon: "I"
+  },
+  {
+    id: "hilton",
+    label: "Hilton",
+    domain: "hilton.com",
+    icon: "H"
   }
 ] as const
 
@@ -128,6 +135,19 @@ function IndexPopup() {
           <div className="animate-in fade-in slide-in-from-right-4">
             {selectedSiteConfig.id === "ihg" ? (
               <IhgPopup
+                onBack={
+                  () => {
+                    setSelectedSite(null)
+                    setForceHome(true)
+                  }
+                }
+                site={{
+                  name: selectedSiteConfig.label,
+                  domain: selectedSiteConfig.domain
+                }}
+              />
+            ) : selectedSiteConfig.id === "hilton" ? (
+              <HiltonPopup
                 onBack={
                   () => {
                     setSelectedSite(null)
