@@ -10,6 +10,7 @@ import {
 
 const IHG_STORAGE_KEY = "award-viewer:ihg-last-request"
 const IHG_SENT_STORAGE_KEY = "award-viewer:ihg-sent-request"
+const IHG_CONVERSION_STORAGE_KEY = "award-viewer:ihg-currency-conversion-request"
 const IS_DEV =  process.env.NODE_ENV === "development"
 
 type IhgRequestPayload = {
@@ -49,7 +50,25 @@ type IhgSentRequest = {
   sentAt?: string
 }
 
-type TabKey = "detected" | "sent"
+type IhgConversionRequest = {
+  currencyCode: string
+  targetCurrency: string
+  request: {
+    url: string
+    method: string
+    headers: Record<string, string>
+  }
+  response: {
+    status: number
+    statusText: string
+    bodyText: string | null
+    bodyParsed: unknown
+  } | null
+  error?: string | null
+  requestedAt?: string
+}
+
+type TabKey = "detected" | "sent" | "conversion"
 
 const MIN_BODY_RATE_PLAN_CODES = [
   { internal: "IVAN1" },
@@ -277,6 +296,8 @@ function IhgPopup({ onBack, site }: IhgPopupProps) {
   const [activeTab, setActiveTab] = useState<TabKey>("detected")
   const [isSending, setIsSending] = useState(false)
   const [sentRequest, setSentRequest] = useState<IhgSentRequest | null>(null)
+  const [conversionRequest, setConversionRequest] =
+    useState<IhgConversionRequest | null>(null)
   const [dealSettings, setDealSettings] = useState<IhgDealSettings>(
     DEFAULT_IHG_DEAL_SETTINGS
   )
@@ -329,6 +350,19 @@ function IhgPopup({ onBack, site }: IhgPopupProps) {
     setSentRequest(payload ?? null)
   }
 
+  const loadConversionRequest = async () => {
+    if (!chrome?.storage?.local) {
+      setConversionRequest(null)
+      return
+    }
+
+    const result = await chrome.storage.local.get(IHG_CONVERSION_STORAGE_KEY)
+    const payload = result[
+      IHG_CONVERSION_STORAGE_KEY
+    ] as IhgConversionRequest | undefined
+    setConversionRequest(payload ?? null)
+  }
+
   const handleDebugClick = async () => {
     setShowDetails(true)
     setIsLoading(true)
@@ -345,6 +379,7 @@ function IhgPopup({ onBack, site }: IhgPopupProps) {
 
     setRequestDetails(payload ?? null)
     await loadSentRequest()
+    await loadConversionRequest()
     setIsLoading(false)
   }
 
@@ -354,6 +389,7 @@ function IhgPopup({ onBack, site }: IhgPopupProps) {
   const responseHeaders = requestDetails?.responseHeaders ?? []
   const lastBookingType =
     requestDetails?.bookingType ?? detectBookingType(requestDetails?.bodyText ?? null)
+  const hasConversionRequest = Boolean(conversionRequest)
   const minimalBody = useMemo(
     () => buildMinimalBody(requestDetails),
     [requestDetails]
@@ -620,7 +656,8 @@ function IhgPopup({ onBack, site }: IhgPopupProps) {
             style={{
               display: "flex",
               gap: 8,
-              marginBottom: 12
+              marginBottom: 12,
+              flexWrap: "wrap"
             }}>
             <button
               type="button"
@@ -649,7 +686,34 @@ function IhgPopup({ onBack, site }: IhgPopupProps) {
               }}>
               Last request sent
             </button>
+            {hasConversionRequest ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab("conversion")
+                  void loadConversionRequest()
+                }}
+                style={{
+                  background: activeTab === "conversion" ? "#e7f0ff" : "#f4f4f4",
+                  border: "1px solid #ccc",
+                  borderRadius: 6,
+                  padding: "6px 10px"
+                }}>
+                Currency conversion
+              </button>
+            ) : null}
           </div>
+          {!hasConversionRequest ? (
+            <p
+              style={{
+                marginTop: -6,
+                marginBottom: 12,
+                fontSize: 12,
+                color: "#64748b"
+              }}>
+              Currency conversion request has not been used yet.
+            </p>
+          ) : null}
           {isLoading ? (
             <p>Loading…</p>
           ) : activeTab === "detected" ? (
@@ -784,7 +848,7 @@ function IhgPopup({ onBack, site }: IhgPopupProps) {
             ) : (
               <p>No request captured yet.</p>
             )
-          ) : (
+          ) : activeTab === "sent" ? (
             <div>
               <p
                 style={{
@@ -989,6 +1053,103 @@ function IhgPopup({ onBack, site }: IhgPopupProps) {
                   {sentRequest.error}
                 </p>
               ) : null}
+            </div>
+          ) : (
+            <div>
+              {conversionRequest ? (
+                <div>
+                  <h4
+                    style={{
+                      fontSize: 13,
+                      margin: "0 0 6px"
+                    }}>
+                    Request details
+                  </h4>
+                  <pre
+                    style={{
+                      background: "#f7f7f7",
+                      borderRadius: 6,
+                      fontSize: 12,
+                      margin: "0 0 12px",
+                      padding: 8,
+                      whiteSpace: "pre-wrap",
+                      wordBreak: "break-word"
+                    }}>
+                    {JSON.stringify(
+                      {
+                        url: conversionRequest.request.url,
+                        method: conversionRequest.request.method,
+                        currencyCode: conversionRequest.currencyCode,
+                        targetCurrency: conversionRequest.targetCurrency,
+                        requestedAt: conversionRequest.requestedAt ?? null
+                      },
+                      null,
+                      2
+                    )}
+                  </pre>
+                  <h4
+                    style={{
+                      fontSize: 13,
+                      margin: "0 0 6px"
+                    }}>
+                    Request headers
+                  </h4>
+                  <pre
+                    style={{
+                      background: "#f7f7f7",
+                      borderRadius: 6,
+                      fontSize: 12,
+                      margin: "0 0 12px",
+                      padding: 8,
+                      whiteSpace: "pre-wrap",
+                      wordBreak: "break-word"
+                    }}>
+                    {JSON.stringify(conversionRequest.request.headers, null, 2)}
+                  </pre>
+                  <h4
+                    style={{
+                      fontSize: 13,
+                      margin: "0 0 6px"
+                    }}>
+                    Response body
+                  </h4>
+                  <pre
+                    style={{
+                      background: "#f7f7f7",
+                      borderRadius: 6,
+                      fontSize: 12,
+                      margin: "0 0 12px",
+                      padding: 8,
+                      whiteSpace: "pre-wrap",
+                      wordBreak: "break-word"
+                    }}>
+                    {JSON.stringify(
+                      conversionRequest.response
+                        ? {
+                            responseParsed: conversionRequest.response.bodyParsed,
+                            responseBodyText: conversionRequest.response.bodyText,
+                            responseStatus: conversionRequest.response.status,
+                            responseStatusText:
+                              conversionRequest.response.statusText
+                          }
+                        : null,
+                      null,
+                      2
+                    )}
+                  </pre>
+                  {conversionRequest.error ? (
+                    <p
+                      style={{
+                        color: "#b00020",
+                        margin: 0
+                      }}>
+                      {conversionRequest.error}
+                    </p>
+                  ) : null}
+                </div>
+              ) : (
+                <p>No currency conversion request captured yet.</p>
+              )}
             </div>
           )}
         </div>
