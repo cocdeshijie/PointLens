@@ -351,7 +351,11 @@ const handleIhgCompleted = async (
     const bookingType = detectBookingType(entry.bodyText)
     if (bookingType !== "points") {
       backgroundSent.add(details.requestId)
-      void runBackgroundRequest(details.requestId)
+      void runBackgroundRequest(
+        details.requestId,
+        entry.bodyText,
+        entry.requestHeaders ?? []
+      )
     }
   }
 
@@ -408,8 +412,7 @@ chrome.runtime.onMessage.addListener((message: { type?: string; payload?: IhgMes
   })
 })
 
-const buildPointsBody = (payload?: IhgMessagePayload) => {
-  const bodyText = payload?.bodyText
+const buildPointsBodyFromText = (bodyText?: string | null) => {
   if (!bodyText) {
     return MIN_BODY
   }
@@ -504,7 +507,11 @@ const toHeaderRecord = (headers?: chrome.webRequest.HttpHeader[]) => {
   return record
 }
 
-const runBackgroundRequest = async (requestId: string) => {
+const runBackgroundRequest = async (
+  requestId: string,
+  bodyText?: string | null,
+  requestHeaders?: chrome.webRequest.HttpHeader[]
+) => {
   const existing = await chrome.storage.local.get(IHG_STORAGE_KEY)
   const existingPayload = existing[IHG_STORAGE_KEY] as IhgMessagePayload | undefined
   if (
@@ -515,8 +522,8 @@ const runBackgroundRequest = async (requestId: string) => {
   }
 
   try {
-    const pointsBody = buildPointsBody(existingPayload)
-    const derivedHeaders = toHeaderRecord(existingPayload?.requestHeaders)
+    const pointsBody = buildPointsBodyFromText(bodyText ?? existingPayload?.bodyText)
+    const derivedHeaders = toHeaderRecord(requestHeaders ?? existingPayload?.requestHeaders)
     const requestHeaders = {
       ...MIN_HEADERS,
       ...derivedHeaders,
@@ -554,8 +561,8 @@ const runBackgroundRequest = async (requestId: string) => {
       [IHG_SENT_STORAGE_KEY]: sentRequest
     })
   } catch (error) {
-    const pointsBody = buildPointsBody(existingPayload)
-    const derivedHeaders = toHeaderRecord(existingPayload?.requestHeaders)
+    const pointsBody = buildPointsBodyFromText(bodyText ?? existingPayload?.bodyText)
+    const derivedHeaders = toHeaderRecord(requestHeaders ?? existingPayload?.requestHeaders)
     const requestHeaders = {
       ...MIN_HEADERS,
       ...derivedHeaders,
