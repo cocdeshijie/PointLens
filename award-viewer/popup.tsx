@@ -4,9 +4,19 @@ import IhgPopup from "./hotels/ihg/Popup"
 
 const POPUP_MIN_WIDTH = 520
 const POPUP_MIN_HEIGHT = 700
+const SUPPORTED_SITES = [
+  {
+    id: "ihg",
+    label: "IHG",
+    domain: "ihg.com"
+  }
+] as const
+
+type SupportedSiteId = (typeof SUPPORTED_SITES)[number]["id"]
 
 function IndexPopup() {
-  const [isIhg, setIsIhg] = useState(false)
+  const [activeSite, setActiveSite] = useState<SupportedSiteId | null>(null)
+  const [selectedSite, setSelectedSite] = useState<SupportedSiteId | null>(null)
 
   useEffect(() => {
     const root = document.documentElement
@@ -31,17 +41,31 @@ function IndexPopup() {
         })
 
         const url = tab?.url ?? ""
-        setIsIhg(url.includes("ihg.com"))
+        const matchedSite = SUPPORTED_SITES.find((site) =>
+          url.includes(site.domain)
+        )
+        setActiveSite(matchedSite?.id ?? null)
       } catch {
-        setIsIhg(false)
+        setActiveSite(null)
       }
     }
 
     void checkActiveTab()
   }, [])
 
-  if (isIhg) {
-    return <IhgPopup />
+  const siteToShow = activeSite ?? selectedSite
+
+  if (siteToShow === "ihg") {
+    return (
+      <IhgPopup
+        isActiveSite={activeSite === "ihg"}
+        onBack={
+          activeSite ? undefined : () => {
+            setSelectedSite(null)
+          }
+        }
+      />
+    )
   }
 
   return (
@@ -52,7 +76,50 @@ function IndexPopup() {
         width: POPUP_MIN_WIDTH,
         padding: 16
       }}>
-      <p>Open ihg.com to see the IHG popup.</p>
+      <h2
+        style={{
+          fontSize: 16,
+          margin: "0 0 8px"
+        }}>
+        Supported sites
+      </h2>
+      <p
+        style={{
+          marginTop: 0,
+          color: "#475569"
+        }}>
+        Select a site to configure its popup settings.
+      </p>
+      <div
+        style={{
+          display: "grid",
+          gap: 12
+        }}>
+        {SUPPORTED_SITES.map((site) => (
+          <button
+            key={site.id}
+            type="button"
+            onClick={() => {
+              setSelectedSite(site.id)
+            }}
+            style={{
+              border: "1px solid #cbd5e1",
+              borderRadius: 8,
+              padding: "10px 12px",
+              textAlign: "left",
+              background: "#f8fafc"
+            }}>
+            <strong>{site.label}</strong>
+            <div
+              style={{
+                color: "#64748b",
+                fontSize: 12
+              }}>
+              {site.domain}
+            </div>
+          </button>
+        ))}
+      </div>
     </div>
   )
 }

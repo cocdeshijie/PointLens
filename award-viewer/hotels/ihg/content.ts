@@ -3,6 +3,12 @@ import React from "react"
 import { createRoot } from "react-dom/client"
 import { CiCircleInfo } from "react-icons/ci"
 
+import {
+  DEFAULT_IHG_DEAL_SETTINGS,
+  IHG_DEAL_SETTINGS_KEY,
+  normalizeIhgDealSettings
+} from "./settings"
+
 const IHG_STORAGE_KEY = "award-viewer:ihg-last-request"
 const IHG_SENT_STORAGE_KEY = "award-viewer:ihg-sent-request"
 const MESSAGE_FLAG = "__AWARD_VIEWER_IHG__"
@@ -80,6 +86,7 @@ let ihgLastRateSource: string | null = null
 const iconRoots = new WeakMap<HTMLElement, ReturnType<typeof createRoot>>()
 const currencyRates = new Map<string, number>()
 const inflightCurrencyRates = new Map<string, Promise<number | null>>()
+let ihgDealSettings = DEFAULT_IHG_DEAL_SETTINGS
 
 type IhgCashCost = {
   baseAmount?: number
@@ -476,6 +483,8 @@ const updatePlaceholderText = (placeholder: HTMLElement) => {
   const errorMessage =
     ihgRateErrorsByHotel.get(hotelId) ?? ihgLastRateError ?? "Awaiting points response"
 
+  updateDealClass(valueEl, info?.cpp)
+
   if (info?.cpp !== undefined && Number.isFinite(info.cpp)) {
     placeholder.classList.remove("is-loading")
     const lowestTotal = getCashTotal(info.lowestCash)
@@ -524,6 +533,26 @@ const updatePlaceholders = (root: ParentNode = document) => {
 const updateExistingPlaceholders = () => {
   const placeholders = document.querySelectorAll<HTMLElement>(`.${PLACEHOLDER_CLASS}`)
   placeholders.forEach((placeholder) => updatePlaceholderText(placeholder))
+}
+
+const updateDealClass = (valueEl: HTMLElement, cpp?: number) => {
+  valueEl.classList.remove("is-good", "is-bad", "is-mid")
+
+  if (cpp === undefined || !Number.isFinite(cpp)) {
+    return
+  }
+
+  if (cpp >= ihgDealSettings.goodDealThreshold) {
+    valueEl.classList.add("is-good")
+    return
+  }
+
+  if (cpp <= ihgDealSettings.badDealThreshold) {
+    valueEl.classList.add("is-bad")
+    return
+  }
+
+  valueEl.classList.add("is-mid")
 }
 
 const extractNumber = (value: unknown) => {
@@ -1198,6 +1227,20 @@ const refreshRatesFromStorage = async () => {
   updateExistingPlaceholders()
 }
 
+const refreshDealSettings = async () => {
+  if (!chrome?.storage?.local) {
+    ihgDealSettings = DEFAULT_IHG_DEAL_SETTINGS
+    updateExistingPlaceholders()
+    return
+  }
+
+  const stored = await chrome.storage.local.get([IHG_DEAL_SETTINGS_KEY])
+  ihgDealSettings = normalizeIhgDealSettings(
+    stored[IHG_DEAL_SETTINGS_KEY] as Partial<typeof ihgDealSettings> | undefined
+  )
+  updateExistingPlaceholders()
+}
+
 const observePriceCards = () => {
   if (!document.getElementById(PLACEHOLDER_STYLE_ID)) {
     const style = document.createElement("style")
@@ -1305,6 +1348,21 @@ const observePriceCards = () => {
         background: #f5f5f5;
         border-radius: 4px;
       }
+      .${PLACEHOLDER_VALUE_CLASS}.is-good {
+        background: #dcfce7;
+        border-color: #86efac;
+        color: #166534;
+      }
+      .${PLACEHOLDER_VALUE_CLASS}.is-bad {
+        background: #fee2e2;
+        border-color: #fecaca;
+        color: #991b1b;
+      }
+      .${PLACEHOLDER_VALUE_CLASS}.is-mid {
+        background: #fef9c3;
+        border-color: #fde047;
+        color: #854d0e;
+      }
       .${PLACEHOLDER_CLASS}.is-loading .award-viewer-skeleton {
         display: inline-block;
         width: 56px;
@@ -1324,6 +1382,7 @@ const observePriceCards = () => {
 
   updatePlaceholders()
   void refreshRatesFromStorage()
+  void refreshDealSettings()
 
   const observer = new MutationObserver((mutations) => {
     for (const mutation of mutations) {
@@ -1355,6 +1414,14 @@ if (chrome?.storage?.onChanged) {
 
     if (changes[IHG_STORAGE_KEY] || changes[IHG_SENT_STORAGE_KEY]) {
       void refreshRatesFromStorage()
+    }
+    if (changes[IHG_DEAL_SETTINGS_KEY]) {
+      ihgDealSettings = normalizeIhgDealSettings(
+        changes[IHG_DEAL_SETTINGS_KEY]?.newValue as
+          | Partial<typeof ihgDealSettings>
+          | undefined
+      )
+      updateExistingPlaceholders()
     }
   })
 }

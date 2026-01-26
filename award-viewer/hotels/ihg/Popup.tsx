@@ -1,4 +1,11 @@
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
+
+import {
+  DEFAULT_IHG_DEAL_SETTINGS,
+  IHG_DEAL_SETTINGS_KEY,
+  IhgDealSettings,
+  normalizeIhgDealSettings
+} from "./settings"
 
 const IHG_STORAGE_KEY = "award-viewer:ihg-last-request"
 const IHG_SENT_STORAGE_KEY = "award-viewer:ihg-sent-request"
@@ -239,7 +246,12 @@ const buildSentRequestPayload = (
   }
 }
 
-function IhgPopup() {
+type IhgPopupProps = {
+  isActiveSite?: boolean
+  onBack?: () => void
+}
+
+function IhgPopup({ isActiveSite = false, onBack }: IhgPopupProps) {
   const [showDetails, setShowDetails] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [requestDetails, setRequestDetails] = useState<IhgRequestPayload | null>(
@@ -248,6 +260,46 @@ function IhgPopup() {
   const [activeTab, setActiveTab] = useState<TabKey>("detected")
   const [isSending, setIsSending] = useState(false)
   const [sentRequest, setSentRequest] = useState<IhgSentRequest | null>(null)
+  const [dealSettings, setDealSettings] = useState<IhgDealSettings>(
+    DEFAULT_IHG_DEAL_SETTINGS
+  )
+
+  useEffect(() => {
+    const loadSettings = async () => {
+      if (!chrome?.storage?.local) {
+        setDealSettings(DEFAULT_IHG_DEAL_SETTINGS)
+        return
+      }
+
+      const stored = await chrome.storage.local.get([IHG_DEAL_SETTINGS_KEY])
+      setDealSettings(
+        normalizeIhgDealSettings(
+          stored[IHG_DEAL_SETTINGS_KEY] as Partial<IhgDealSettings> | undefined
+        )
+      )
+    }
+
+    void loadSettings()
+  }, [])
+
+  const updateSetting = async (
+    key: keyof IhgDealSettings,
+    value: number
+  ) => {
+    const nextSettings = normalizeIhgDealSettings({
+      ...dealSettings,
+      [key]: value
+    })
+    setDealSettings(nextSettings)
+
+    if (!chrome?.storage?.local) {
+      return
+    }
+
+    await chrome.storage.local.set({
+      [IHG_DEAL_SETTINGS_KEY]: nextSettings
+    })
+  }
 
   const loadSentRequest = async () => {
     if (!chrome?.storage?.local) {
@@ -298,7 +350,131 @@ function IhgPopup() {
         width: 520,
         padding: 16
       }}>
-      <p>im current on ihg.com</p>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          marginBottom: 8
+        }}>
+        {onBack ? (
+          <button
+            type="button"
+            onClick={onBack}
+            style={{
+              borderRadius: 6,
+              border: "1px solid #cbd5e1",
+              padding: "4px 8px"
+            }}>
+            Back
+          </button>
+        ) : null}
+        <h2
+          style={{
+            fontSize: 16,
+            margin: 0
+          }}>
+          IHG settings
+        </h2>
+      </div>
+      {isActiveSite ? <p>im current on ihg.com</p> : null}
+      <div
+        style={{
+          border: "1px solid #e2e8f0",
+          borderRadius: 8,
+          padding: 12
+        }}>
+        <p
+          style={{
+            marginTop: 0
+          }}>
+          Highlight deals on IHG search results by cents per point.
+        </p>
+        <div
+          style={{
+            display: "grid",
+            gap: 12
+          }}>
+          <label
+            style={{
+              display: "grid",
+              gap: 6
+            }}>
+            <span>Good deal threshold (¢/pt)</span>
+            <input
+              type="number"
+              min={0}
+              step={0.01}
+              value={dealSettings.goodDealThreshold}
+              onChange={(event) => {
+                const parsed = Number.parseFloat(event.target.value)
+                const nextValue = Number.isFinite(parsed)
+                  ? parsed
+                  : DEFAULT_IHG_DEAL_SETTINGS.goodDealThreshold
+                void updateSetting("goodDealThreshold", nextValue)
+              }}
+            />
+          </label>
+          <label
+            style={{
+              display: "grid",
+              gap: 6
+            }}>
+            <span>Bad deal threshold (¢/pt)</span>
+            <input
+              type="number"
+              min={0}
+              step={0.01}
+              value={dealSettings.badDealThreshold}
+              onChange={(event) => {
+                const parsed = Number.parseFloat(event.target.value)
+                const nextValue = Number.isFinite(parsed)
+                  ? parsed
+                  : DEFAULT_IHG_DEAL_SETTINGS.badDealThreshold
+                void updateSetting("badDealThreshold", nextValue)
+              }}
+            />
+          </label>
+        </div>
+        <div
+          style={{
+            display: "flex",
+            gap: 8,
+            marginTop: 12,
+            fontSize: 12
+          }}>
+          <span
+            style={{
+              background: "#dcfce7",
+              border: "1px solid #86efac",
+              borderRadius: 4,
+              color: "#166534",
+              padding: "2px 6px"
+            }}>
+            Good deal
+          </span>
+          <span
+            style={{
+              background: "#fef9c3",
+              border: "1px solid #fde047",
+              borderRadius: 4,
+              color: "#854d0e",
+              padding: "2px 6px"
+            }}>
+            Fair deal
+          </span>
+          <span
+            style={{
+              background: "#fee2e2",
+              border: "1px solid #fecaca",
+              borderRadius: 4,
+              color: "#991b1b",
+              padding: "2px 6px"
+            }}>
+            Bad deal
+          </span>
+        </div>
+      </div>
       {IS_DEV ? (
         <button
           type="button"
