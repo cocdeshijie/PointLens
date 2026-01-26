@@ -64,6 +64,8 @@ type IhgRateInfo = {
   cashAmount?: number
   points?: number
   cpp?: number
+  cppLow?: number
+  cppHigh?: number
   lowestCash?: IhgCashCost
   highestCash?: IhgCashCost
   lowestPoints?: number
@@ -246,6 +248,17 @@ const formatPoints = (points?: number) => {
   return `${new Intl.NumberFormat("en-US").format(points)} pts`
 }
 
+const formatCppSuffix = (cpp?: number) => {
+  if (cpp === undefined || !Number.isFinite(cpp)) {
+    return ""
+  }
+  return ` (${cpp.toFixed(2)}¢/pt)`
+}
+
+const formatPointsWithCpp = (points?: number, cpp?: number) => {
+  return `${formatPoints(points)}${formatCppSuffix(cpp)}`
+}
+
 const formatCurrencyValue = (amount?: number, currency?: string) => {
   if (amount === undefined) {
     return "—"
@@ -263,8 +276,8 @@ const formatCurrencyValue = (amount?: number, currency?: string) => {
     try {
       return (
         new Intl.NumberFormat("en-US", {
-        style: "currency",
-        currency
+          style: "currency",
+          currency
         }).format(amount) + usdSuffix
       )
     } catch {
@@ -272,6 +285,30 @@ const formatCurrencyValue = (amount?: number, currency?: string) => {
     }
   }
   return amount.toFixed(2)
+}
+
+const getUsdEquivalent = (amount?: number, currency?: string) => {
+  if (amount === undefined) {
+    return null
+  }
+  if (!currency || currency === USD_CURRENCY) {
+    return amount
+  }
+  const rate = currencyRates.get(currency)
+  if (rate === undefined) {
+    return null
+  }
+  return amount * rate
+}
+
+const formatUsdAmount = (amount?: number) => {
+  if (amount === undefined) {
+    return ""
+  }
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: USD_CURRENCY
+  }).format(amount)
 }
 
 const setTooltipText = (tooltip: HTMLElement, text: string) => {
@@ -309,6 +346,9 @@ const setTooltipDetails = (tooltip: HTMLElement, info: IhgRateInfo) => {
   header.appendChild(lowLabel)
   header.appendChild(highLabel)
   grid.appendChild(header)
+  const headerDivider = document.createElement("div")
+  headerDivider.className = "award-viewer-tooltip-divider"
+  grid.appendChild(headerDivider)
   grid.appendChild(
     buildTooltipRow(
       "Base",
@@ -336,8 +376,8 @@ const setTooltipDetails = (tooltip: HTMLElement, info: IhgRateInfo) => {
   grid.appendChild(
     buildTooltipRow(
       "Points",
-      formatPoints(info.lowestPoints ?? info.points),
-      formatPoints(info.highestPoints ?? info.points)
+      formatPointsWithCpp(info.lowestPoints ?? info.points, info.cppLow ?? info.cpp),
+      formatPointsWithCpp(info.highestPoints ?? info.points, info.cppHigh ?? info.cpp)
     )
   )
   content.appendChild(grid)
@@ -425,7 +465,10 @@ const updatePlaceholderText = (placeholder: HTMLElement) => {
 
   if (info?.cpp !== undefined && Number.isFinite(info.cpp)) {
     placeholder.classList.remove("is-loading")
-    valueEl.textContent = formatCpp(info.cpp)
+    const lowestTotal = getCashTotal(info.lowestCash)
+    const usdTotal = getUsdEquivalent(lowestTotal, info.currency)
+    const usdSuffix = usdTotal !== null ? ` (${formatUsdAmount(usdTotal)})` : ""
+    valueEl.textContent = `${formatCpp(info.cpp)}${usdSuffix}`
     if (tooltip) {
       setTooltipDetails(tooltip, info)
     }
@@ -916,6 +959,8 @@ const parseRateMap = (responseBodyText: string | null) => {
         cashAmount: usdCashAmount,
         points,
         cpp,
+        cppLow,
+        cppHigh,
         lowestCash,
         highestCash,
         lowestPoints,
@@ -1224,7 +1269,7 @@ const observePriceCards = () => {
       .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-divider {
         height: 1px;
         background: #e2e8f0;
-        margin: 4px 0;
+        margin: 2px 0;
       }
       .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-header span {
         font-size: 10px;
