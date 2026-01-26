@@ -536,7 +536,12 @@ const updatePlaceholderText = (placeholder: HTMLElement) => {
       info.points !== undefined)
   const pointsUnavailable = hasCashRates && !hasPointsRates
 
-  updateDealClass(valueEl, info?.cpp)
+  const displayCpp =
+    info?.cppLow !== undefined && Number.isFinite(info.cppLow)
+      ? info.cppLow
+      : info?.cpp
+
+  updateDealClass(valueEl, displayCpp)
 
   if (info?.cpp !== undefined && Number.isFinite(info.cpp)) {
     placeholder.classList.remove("is-loading")
@@ -547,10 +552,6 @@ const updatePlaceholderText = (placeholder: HTMLElement) => {
       ? formatPoints(info.lowestPoints ?? info.points)
       : ""
     const pointsSuffix = pointsValue ? ` (${pointsValue})` : ""
-    const displayCpp =
-      info.cppLow !== undefined && Number.isFinite(info.cppLow)
-        ? info.cppLow
-        : info.cpp
     valueEl.textContent = `${formatCpp(displayCpp)}${pointsSuffix}${usdSuffix}`
     if (tooltip) {
       setTooltipDetails(tooltip, info)
