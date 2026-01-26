@@ -83,6 +83,7 @@ let ihgRatesByHotel = new Map<string, IhgRateInfo>()
 let ihgRateErrorsByHotel = new Map<string, string>()
 let ihgLastRateError: string | null = null
 let ihgLastRateSource: string | null = null
+let ihgShowPointsWithCpp = false
 const iconRoots = new WeakMap<HTMLElement, ReturnType<typeof createRoot>>()
 const currencyRates = new Map<string, number>()
 const inflightCurrencyRates = new Map<string, Promise<number | null>>()
@@ -490,7 +491,11 @@ const updatePlaceholderText = (placeholder: HTMLElement) => {
     const lowestTotal = getCashTotal(info.lowestCash)
     const usdTotal = getUsdEquivalent(lowestTotal, info.currency)
     const usdSuffix = usdTotal !== null ? ` (${formatUsdAmount(usdTotal)})` : ""
-    valueEl.textContent = `${formatCpp(info.cpp)}${usdSuffix}`
+    const pointsValue = ihgShowPointsWithCpp
+      ? formatPoints(info.lowestPoints ?? info.points)
+      : ""
+    const pointsSuffix = pointsValue ? ` (${pointsValue})` : ""
+    valueEl.textContent = `${formatCpp(info.cpp)}${pointsSuffix}${usdSuffix}`
     if (tooltip) {
       setTooltipDetails(tooltip, info)
     }
@@ -1211,6 +1216,9 @@ const refreshRatesFromStorage = async () => {
 
   const lastRequest = stored[IHG_STORAGE_KEY] as IhgStoredPayload | undefined
   const sentRequest = stored[IHG_SENT_STORAGE_KEY] as IhgSentRequest | undefined
+  const lastBookingType =
+    lastRequest?.bookingType ?? detectBookingType(lastRequest?.bodyText ?? null)
+  ihgShowPointsWithCpp = lastBookingType !== "points"
 
   const hotelIdElements = document.querySelectorAll(
     "app-hotel-card-list-view[id], .hotel-card-list-view-container[id], [data-testid='hotel-card'][id]"
