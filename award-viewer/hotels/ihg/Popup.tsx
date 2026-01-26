@@ -190,6 +190,19 @@ const toHeaderRecord = (headers: chrome.webRequest.HttpHeader[]) => {
 const buildMinimalBody = (requestDetails: IhgRequestPayload | null) => {
   const parsed = formatBody(requestDetails)
 
+  if (parsed && typeof parsed === "object") {
+    const base = parsed as Record<string, unknown>
+    const rates = base.rates as { ratePlanCodes?: unknown } | undefined
+
+    return {
+      ...base,
+      rates: {
+        ...rates,
+        ratePlanCodes: MIN_BODY_RATE_PLAN_CODES
+      }
+    }
+  }
+
   const startDate =
     typeof parsed === "object" && parsed && "startDate" in parsed
       ? String((parsed as { startDate?: string }).startDate ?? "")
