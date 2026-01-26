@@ -382,7 +382,11 @@ const buildTooltipDividerRow = () => {
   return divider
 }
 
-const setTooltipDetails = (tooltip: HTMLElement, info: IhgRateInfo) => {
+const setTooltipDetails = (
+  tooltip: HTMLElement,
+  info: IhgRateInfo,
+  options?: { pointsLabel?: string }
+) => {
   const content = document.createElement("div")
   content.className = "award-viewer-tooltip-content"
 
@@ -429,8 +433,13 @@ const setTooltipDetails = (tooltip: HTMLElement, info: IhgRateInfo) => {
   grid.appendChild(
     buildTooltipRow(
       "Points",
-      formatPointsWithCpp(info.lowestPoints ?? info.points, info.cppLow ?? info.cpp),
-      formatPointsWithCpp(info.highestPoints ?? info.points, info.cppHigh ?? info.cpp)
+      options?.pointsLabel ??
+        formatPointsWithCpp(info.lowestPoints ?? info.points, info.cppLow ?? info.cpp),
+      options?.pointsLabel ??
+        formatPointsWithCpp(
+          info.highestPoints ?? info.points,
+          info.cppHigh ?? info.cpp
+        )
     )
   )
   content.appendChild(grid)
@@ -515,6 +524,17 @@ const updatePlaceholderText = (placeholder: HTMLElement) => {
   const tooltip = iconWrapper.querySelector<HTMLElement>(".award-viewer-tooltip")
   const errorMessage =
     ihgRateErrorsByHotel.get(hotelId) ?? ihgLastRateError ?? "Awaiting points response"
+  const hasCashRates =
+    info !== undefined &&
+    (info.lowestCash !== undefined ||
+      info.highestCash !== undefined ||
+      info.cashAmount !== undefined)
+  const hasPointsRates =
+    info !== undefined &&
+    (info.lowestPoints !== undefined ||
+      info.highestPoints !== undefined ||
+      info.points !== undefined)
+  const pointsUnavailable = hasCashRates && !hasPointsRates
 
   updateDealClass(valueEl, info?.cpp)
 
@@ -530,6 +550,15 @@ const updatePlaceholderText = (placeholder: HTMLElement) => {
     valueEl.textContent = `${formatCpp(info.cpp)}${pointsSuffix}${usdSuffix}`
     if (tooltip) {
       setTooltipDetails(tooltip, info)
+    }
+    return
+  }
+
+  if (info && pointsUnavailable) {
+    placeholder.classList.remove("is-loading")
+    valueEl.textContent = "Reward Nights Unavailable"
+    if (tooltip) {
+      setTooltipDetails(tooltip, info, { pointsLabel: "Unavailable" })
     }
     return
   }
