@@ -1,7 +1,7 @@
 import type { PlasmoCSConfig } from "plasmo"
 import React from "react"
 import { createRoot } from "react-dom/client"
-import { CgMoreR } from "react-icons/cg"
+import { FcViewDetails } from "react-icons/fc"
 
 const IHG_STORAGE_KEY = "award-viewer:ihg-last-request"
 const IHG_SENT_STORAGE_KEY = "award-viewer:ihg-sent-request"
@@ -242,7 +242,7 @@ const ensurePlaceholderContents = (placeholder: HTMLElement) => {
 
     placeholder.appendChild(iconWrapper)
     const root = createRoot(iconTarget)
-    root.render(React.createElement(CgMoreR, { "aria-hidden": "true" }))
+    root.render(React.createElement(FcViewDetails, { "aria-hidden": "true" }))
     iconRoots.set(iconTarget, root)
   }
 
@@ -824,6 +824,10 @@ const observePriceCards = () => {
         cursor: default;
         font-size: 22px;
         line-height: 1;
+      }
+      .${PLACEHOLDER_ICON_CLASS} .award-viewer-icon {
+        display: inline-flex;
+        align-items: center;
       }
       .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip {
         position: absolute;
