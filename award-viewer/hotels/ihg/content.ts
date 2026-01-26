@@ -814,6 +814,7 @@ const observePriceCards = () => {
         gap: 6px;
         font-size: 14px;
         text-align: right;
+        width: 100%;
       }
       .${PLACEHOLDER_ICON_CLASS} {
         position: relative;
@@ -821,6 +822,8 @@ const observePriceCards = () => {
         align-items: center;
         color: #6b7280;
         cursor: default;
+        font-size: 18px;
+        line-height: 1;
       }
       .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip {
         position: absolute;
