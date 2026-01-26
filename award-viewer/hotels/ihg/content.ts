@@ -1255,9 +1255,10 @@ const observePriceCards = () => {
       }
       .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-row {
         display: grid;
-        grid-template-columns: max-content minmax(0, 1fr) minmax(0, 1fr);
-        gap: 8px;
+        grid-template-columns: max-content max-content max-content;
+        gap: 6px;
         align-items: center;
+        justify-content: start;
       }
       .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-row span:first-child {
         color: #475569;
