@@ -853,8 +853,8 @@ const observePriceCards = () => {
         display: inline-flex;
         align-items: center;
         padding: 2px 6px;
-        border: 1px solid #6b7280;
-        background: #e5e7eb;
+        border: 1px solid #cbd5e1;
+        background: #f5f5f5;
         border-radius: 4px;
       }
       .${PLACEHOLDER_CLASS}.is-loading .award-viewer-skeleton {
