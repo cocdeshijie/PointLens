@@ -326,6 +326,102 @@ chrome.runtime.onMessage.addListener((message: { type?: string; payload?: IhgMes
   })
 })
 
+const buildPointsBody = (payload?: IhgMessagePayload) => {
+  const bodyText = payload?.bodyText
+  if (!bodyText) {
+    return MIN_BODY
+  }
+
+  try {
+    const parsed = JSON.parse(bodyText) as Record<string, unknown>
+    const startDate =
+      typeof parsed.startDate === "string" ? parsed.startDate : MIN_BODY.startDate
+    const endDate =
+      typeof parsed.endDate === "string" ? parsed.endDate : MIN_BODY.endDate
+    const geoLocation =
+      Array.isArray(parsed.geoLocation) && parsed.geoLocation.length > 0
+        ? parsed.geoLocation
+        : MIN_BODY.geoLocation
+
+    const product =
+      Array.isArray(parsed.products) && parsed.products.length > 0
+        ? (parsed.products[0] as Record<string, unknown>)
+        : null
+    const productCode =
+      product && typeof product.productCode === "string"
+        ? product.productCode
+        : "SR"
+    const quantity =
+      product && typeof product.quantity === "number" ? product.quantity : 1
+    const guestCounts =
+      product && Array.isArray(product.guestCounts) ? product.guestCounts : undefined
+
+    return {
+      radius:
+        typeof parsed.radius === "number" ? parsed.radius : MIN_BODY.radius,
+      maxRadius:
+        typeof parsed.maxRadius === "number" ? parsed.maxRadius : undefined,
+      minHotels:
+        typeof parsed.minHotels === "number" ? parsed.minHotels : undefined,
+      incrementRadiusBy:
+        typeof parsed.incrementRadiusBy === "number"
+          ? parsed.incrementRadiusBy
+          : undefined,
+      distanceUnit:
+        typeof parsed.distanceUnit === "string"
+          ? parsed.distanceUnit
+          : "MI",
+      distanceType:
+        typeof parsed.distanceType === "string"
+          ? parsed.distanceType
+          : MIN_BODY.distanceType,
+      startDate,
+      endDate,
+      geoLocation,
+      products: [
+        {
+          productCode,
+          startDate,
+          endDate,
+          quantity,
+          ...(guestCounts ? { guestCounts } : {})
+        }
+      ],
+      rates: MIN_BODY.rates
+    }
+  } catch {
+    return MIN_BODY
+  }
+}
+
+const toHeaderRecord = (headers?: chrome.webRequest.HttpHeader[]) => {
+  if (!headers) {
+    return {}
+  }
+
+  const record: Record<string, string> = {}
+  for (const header of headers) {
+    if (!header.name || header.value === undefined) {
+      continue
+    }
+
+    const normalized = header.name.toLowerCase()
+    if (
+      normalized === "content-length" ||
+      normalized === "host" ||
+      normalized === "origin" ||
+      normalized === "referer" ||
+      normalized === "accept-encoding"
+    ) {
+      continue
+    }
+
+    record[header.name] = header.value
+  }
+
+  return record
+}
+
 const runBackgroundRequest = async (requestId: string) => {
   const existing = await chrome.storage.local.get(IHG_STORAGE_KEY)
   const existingPayload = existing[IHG_STORAGE_KEY] as IhgMessagePayload | undefined
@@ -337,12 +433,19 @@ const runBackgroundRequest = async (requestId: string) => {
   }
 
   try {
+    const pointsBody = buildPointsBody(existingPayload)
+    const derivedHeaders = toHeaderRecord(existingPayload?.requestHeaders)
+    const requestHeaders = {
+      ...MIN_HEADERS,
+      ...derivedHeaders,
+      "content-type": "application/json; charset=UTF-8"
+    }
     const response = await fetch(
       "https://apis.ihg.com/availability/v3/hotels/offers?fieldset=summary,summary.rateRanges",
       {
         method: "POST",
-        headers: MIN_HEADERS,
-        body: JSON.stringify(MIN_BODY),
+        headers: requestHeaders,
+        body: JSON.stringify(pointsBody),
         credentials: "include"
       }
     )
@@ -351,10 +454,10 @@ const runBackgroundRequest = async (requestId: string) => {
       request: {
         url: "https://apis.ihg.com/availability/v3/hotels/offers?fieldset=summary,summary.rateRanges",
         method: "POST",
-        headers: MIN_HEADERS,
-        body: MIN_BODY
+        headers: requestHeaders,
+        body: pointsBody
       },
-      bookingType: detectBookingType(JSON.stringify(MIN_BODY)),
+      bookingType: detectBookingType(JSON.stringify(pointsBody)),
       response: {
         status: response.status,
         statusText: response.statusText,
@@ -369,14 +472,21 @@ const runBackgroundRequest = async (requestId: string) => {
       [IHG_SENT_STORAGE_KEY]: sentRequest
     })
   } catch (error) {
+    const pointsBody = buildPointsBody(existingPayload)
+    const derivedHeaders = toHeaderRecord(existingPayload?.requestHeaders)
+    const requestHeaders = {
+      ...MIN_HEADERS,
+      ...derivedHeaders,
+      "content-type": "application/json; charset=UTF-8"
+    }
     const sentRequest: IhgSentRequest = {
       request: {
         url: "https://apis.ihg.com/availability/v3/hotels/offers?fieldset=summary,summary.rateRanges",
         method: "POST",
-        headers: MIN_HEADERS,
-        body: MIN_BODY
+        headers: requestHeaders,
+        body: pointsBody
       },
-      bookingType: detectBookingType(JSON.stringify(MIN_BODY)),
+      bookingType: detectBookingType(JSON.stringify(pointsBody)),
       response: null,
       error: error instanceof Error ? error.message : "Request failed",
       sentAt: new Date().toISOString()

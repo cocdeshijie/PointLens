@@ -249,6 +249,17 @@ function IhgPopup() {
   const [isSending, setIsSending] = useState(false)
   const [sentRequest, setSentRequest] = useState<IhgSentRequest | null>(null)
 
+  const loadSentRequest = async () => {
+    if (!chrome?.storage?.local) {
+      setSentRequest(null)
+      return
+    }
+
+    const result = await chrome.storage.local.get(IHG_SENT_STORAGE_KEY)
+    const payload = result[IHG_SENT_STORAGE_KEY] as IhgSentRequest | undefined
+    setSentRequest(payload ?? null)
+  }
+
   const handleDebugClick = async () => {
     setShowDetails(true)
     setIsLoading(true)
@@ -264,6 +275,7 @@ function IhgPopup() {
     const payload = result[IHG_STORAGE_KEY] as IhgRequestPayload | undefined
 
     setRequestDetails(payload ?? null)
+    await loadSentRequest()
     setIsLoading(false)
   }
 
@@ -330,6 +342,7 @@ function IhgPopup() {
               type="button"
               onClick={() => {
                 setActiveTab("sent")
+                void loadSentRequest()
               }}
               style={{
                 background: activeTab === "sent" ? "#e7f0ff" : "#f4f4f4",
