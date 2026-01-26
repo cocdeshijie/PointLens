@@ -330,6 +330,9 @@ const setTooltipDetails = (tooltip: HTMLElement, info: IhgRateInfo) => {
       formatCurrencyValue(info.highestCash?.amountAfterTax, info.currency)
     )
   )
+  const divider = document.createElement("div")
+  divider.className = "award-viewer-tooltip-divider"
+  grid.appendChild(divider)
   grid.appendChild(
     buildTooltipRow(
       "Points",
@@ -1217,6 +1220,11 @@ const observePriceCards = () => {
       }
       .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-row span {
         white-space: nowrap;
+      }
+      .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-divider {
+        height: 1px;
+        background: #e2e8f0;
+        margin: 4px 0;
       }
       .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-header span {
         font-size: 10px;
