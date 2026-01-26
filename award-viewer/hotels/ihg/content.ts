@@ -3,6 +3,12 @@ import React from "react"
 import { createRoot } from "react-dom/client"
 import { CiCircleInfo } from "react-icons/ci"
 
+import {
+  DEFAULT_IHG_DEAL_SETTINGS,
+  IHG_DEAL_SETTINGS_KEY,
+  normalizeIhgDealSettings
+} from "./settings"
+
 const IHG_STORAGE_KEY = "award-viewer:ihg-last-request"
 const IHG_SENT_STORAGE_KEY = "award-viewer:ihg-sent-request"
 const MESSAGE_FLAG = "__AWARD_VIEWER_IHG__"
@@ -77,9 +83,11 @@ let ihgRatesByHotel = new Map<string, IhgRateInfo>()
 let ihgRateErrorsByHotel = new Map<string, string>()
 let ihgLastRateError: string | null = null
 let ihgLastRateSource: string | null = null
+let ihgShowPointsWithCpp = false
 const iconRoots = new WeakMap<HTMLElement, ReturnType<typeof createRoot>>()
 const currencyRates = new Map<string, number>()
 const inflightCurrencyRates = new Map<string, Promise<number | null>>()
+let ihgDealSettings = DEFAULT_IHG_DEAL_SETTINGS
 
 type IhgCashCost = {
   baseAmount?: number
@@ -476,12 +484,18 @@ const updatePlaceholderText = (placeholder: HTMLElement) => {
   const errorMessage =
     ihgRateErrorsByHotel.get(hotelId) ?? ihgLastRateError ?? "Awaiting points response"
 
+  updateDealClass(valueEl, info?.cpp)
+
   if (info?.cpp !== undefined && Number.isFinite(info.cpp)) {
     placeholder.classList.remove("is-loading")
     const lowestTotal = getCashTotal(info.lowestCash)
     const usdTotal = getUsdEquivalent(lowestTotal, info.currency)
     const usdSuffix = usdTotal !== null ? ` (${formatUsdAmount(usdTotal)})` : ""
-    valueEl.textContent = `${formatCpp(info.cpp)}${usdSuffix}`
+    const pointsValue = ihgShowPointsWithCpp
+      ? formatPoints(info.lowestPoints ?? info.points)
+      : ""
+    const pointsSuffix = pointsValue ? ` (${pointsValue})` : ""
+    valueEl.textContent = `${formatCpp(info.cpp)}${pointsSuffix}${usdSuffix}`
     if (tooltip) {
       setTooltipDetails(tooltip, info)
     }
@@ -524,6 +538,26 @@ const updatePlaceholders = (root: ParentNode = document) => {
 const updateExistingPlaceholders = () => {
   const placeholders = document.querySelectorAll<HTMLElement>(`.${PLACEHOLDER_CLASS}`)
   placeholders.forEach((placeholder) => updatePlaceholderText(placeholder))
+}
+
+const updateDealClass = (valueEl: HTMLElement, cpp?: number) => {
+  valueEl.classList.remove("is-good", "is-bad", "is-mid")
+
+  if (cpp === undefined || !Number.isFinite(cpp)) {
+    return
+  }
+
+  if (cpp >= ihgDealSettings.goodDealThreshold) {
+    valueEl.classList.add("is-good")
+    return
+  }
+
+  if (cpp <= ihgDealSettings.badDealThreshold) {
+    valueEl.classList.add("is-bad")
+    return
+  }
+
+  valueEl.classList.add("is-mid")
 }
 
 const extractNumber = (value: unknown) => {
@@ -842,8 +876,6 @@ const parseRateMap = (responseBodyText: string | null) => {
   const hotels = getHotelCollection(parsed)
   const nextMap = new Map<string, IhgRateInfo>()
   const errorsByHotel = new Map<string, string>()
-  const currenciesNeeded = new Set<string>()
-
   if (!Array.isArray(hotels) || hotels.length === 0) {
     return {
       map: nextMap,
@@ -931,15 +963,10 @@ const parseRateMap = (responseBodyText: string | null) => {
         if (usdHighestCash !== undefined) {
           usdHighestCash = usdHighestCash * conversionRate
         }
-      } else if (
-        usdCashAmount !== undefined ||
-        usdLowestCash !== undefined ||
-        usdHighestCash !== undefined
-      ) {
+      } else {
         usdCashAmount = undefined
         usdLowestCash = undefined
         usdHighestCash = undefined
-        currenciesNeeded.add(propertyCurrency)
       }
     }
     const errorMessage =
@@ -986,9 +1013,39 @@ const parseRateMap = (responseBodyText: string | null) => {
   return {
     map: nextMap,
     errorsByHotel,
-    error: nextMap.size === 0 ? "No matching hotels in points response" : null,
-    currenciesNeeded
+    error: nextMap.size === 0 ? "No matching hotels in points response" : null
   }
+}
+
+const collectCurrencies = (responseBodyText: string | null) => {
+  if (!responseBodyText) {
+    return new Set<string>()
+  }
+
+  let parsed: Record<string, unknown>
+  try {
+    parsed = JSON.parse(responseBodyText) as Record<string, unknown>
+  } catch {
+    return new Set<string>()
+  }
+
+  const hotels = getHotelCollection(parsed)
+  const currencies = new Set<string>()
+  hotels.forEach((hotel) => {
+    if (!hotel || typeof hotel !== "object") {
+      return
+    }
+    const record = hotel as Record<string, unknown>
+    const propertyCurrency =
+      typeof record.propertyCurrency === "string"
+        ? record.propertyCurrency
+        : undefined
+    if (propertyCurrency && propertyCurrency !== USD_CURRENCY) {
+      currencies.add(propertyCurrency)
+    }
+  })
+
+  return currencies
 }
 
 const fetchConversionRate = async (currencyCode: string) => {
@@ -1159,6 +1216,9 @@ const refreshRatesFromStorage = async () => {
 
   const lastRequest = stored[IHG_STORAGE_KEY] as IhgStoredPayload | undefined
   const sentRequest = stored[IHG_SENT_STORAGE_KEY] as IhgSentRequest | undefined
+  const lastBookingType =
+    lastRequest?.bookingType ?? detectBookingType(lastRequest?.bodyText ?? null)
+  ihgShowPointsWithCpp = lastBookingType !== "points"
 
   const hotelIdElements = document.querySelectorAll(
     "app-hotel-card-list-view[id], .hotel-card-list-view-container[id], [data-testid='hotel-card'][id]"
@@ -1181,20 +1241,33 @@ const refreshRatesFromStorage = async () => {
     return
   }
 
-  const parsed = parseRateMap(selected.responseBodyText)
-  if (parsed.currenciesNeeded.size > 0) {
+  const currenciesNeeded = collectCurrencies(selected.responseBodyText)
+  if (currenciesNeeded.size > 0) {
     await Promise.all(
-      Array.from(parsed.currenciesNeeded).map((currencyCode) =>
+      Array.from(currenciesNeeded).map((currencyCode) =>
         fetchConversionRate(currencyCode)
       )
     )
   }
-  const finalParsed =
-    parsed.currenciesNeeded.size > 0 ? parseRateMap(selected.responseBodyText) : parsed
-  ihgRatesByHotel = finalParsed.map
-  ihgRateErrorsByHotel = finalParsed.errorsByHotel
-  ihgLastRateError = selected.error ?? finalParsed.error
+  const parsed = parseRateMap(selected.responseBodyText)
+  ihgRatesByHotel = parsed.map
+  ihgRateErrorsByHotel = parsed.errorsByHotel
+  ihgLastRateError = selected.error ?? parsed.error
   ihgLastRateSource = selected.source
+  updateExistingPlaceholders()
+}
+
+const refreshDealSettings = async () => {
+  if (!chrome?.storage?.local) {
+    ihgDealSettings = DEFAULT_IHG_DEAL_SETTINGS
+    updateExistingPlaceholders()
+    return
+  }
+
+  const stored = await chrome.storage.local.get([IHG_DEAL_SETTINGS_KEY])
+  ihgDealSettings = normalizeIhgDealSettings(
+    stored[IHG_DEAL_SETTINGS_KEY] as Partial<typeof ihgDealSettings> | undefined
+  )
   updateExistingPlaceholders()
 }
 
@@ -1305,6 +1378,21 @@ const observePriceCards = () => {
         background: #f5f5f5;
         border-radius: 4px;
       }
+      .${PLACEHOLDER_VALUE_CLASS}.is-good {
+        background: #d1fae5;
+        border-color: #a7f3d0;
+        color: #047857;
+      }
+      .${PLACEHOLDER_VALUE_CLASS}.is-bad {
+        background: #ffe4e6;
+        border-color: #fecdd3;
+        color: #be123c;
+      }
+      .${PLACEHOLDER_VALUE_CLASS}.is-mid {
+        background: #fef3c7;
+        border-color: #fde68a;
+        color: #b45309;
+      }
       .${PLACEHOLDER_CLASS}.is-loading .award-viewer-skeleton {
         display: inline-block;
         width: 56px;
@@ -1324,6 +1412,7 @@ const observePriceCards = () => {
 
   updatePlaceholders()
   void refreshRatesFromStorage()
+  void refreshDealSettings()
 
   const observer = new MutationObserver((mutations) => {
     for (const mutation of mutations) {
@@ -1355,6 +1444,14 @@ if (chrome?.storage?.onChanged) {
 
     if (changes[IHG_STORAGE_KEY] || changes[IHG_SENT_STORAGE_KEY]) {
       void refreshRatesFromStorage()
+    }
+    if (changes[IHG_DEAL_SETTINGS_KEY]) {
+      ihgDealSettings = normalizeIhgDealSettings(
+        changes[IHG_DEAL_SETTINGS_KEY]?.newValue as
+          | Partial<typeof ihgDealSettings>
+          | undefined
+      )
+      updateExistingPlaceholders()
     }
   })
 }

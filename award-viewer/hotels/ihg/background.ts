@@ -9,10 +9,14 @@ const requestMap = new Map<
     bodyType: string
     bodyText: string | null
     requestHeaders?: chrome.webRequest.HttpHeader[]
+    searchRadius?: number
+    searchSignature?: string | null
   }
 >()
 const replaySent = new Set<string>()
 const backgroundSent = new Set<string>()
+let maxSearchRadius = 0
+let lastSearchSignature: string | null = null
 const MIN_HEADERS = {
   "content-type": "application/json; charset=UTF-8",
   "X-CDC-API-KEY": "4_jpzahMO4CBnl9Elopzfr0A",
@@ -115,6 +119,63 @@ const detectBookingType = (bodyText: string | null): IhgBookingType => {
   return "unknown"
 }
 
+const parseBody = (bodyText: string | null) => {
+  if (!bodyText) {
+    return null
+  }
+  try {
+    return JSON.parse(bodyText) as Record<string, unknown>
+  } catch {
+    return null
+  }
+}
+
+const extractSearchSignature = (bodyText: string | null) => {
+  const parsed = parseBody(bodyText)
+  if (!parsed) {
+    return null
+  }
+
+  const startDate =
+    typeof parsed.startDate === "string" ? parsed.startDate : undefined
+  const endDate = typeof parsed.endDate === "string" ? parsed.endDate : undefined
+  const geo =
+    Array.isArray(parsed.geoLocation) && parsed.geoLocation.length > 0
+      ? parsed.geoLocation[0]
+      : null
+  const lat =
+    geo && typeof geo === "object" && "latitude" in geo
+      ? String((geo as { latitude?: number }).latitude ?? "")
+      : ""
+  const lng =
+    geo && typeof geo === "object" && "longitude" in geo
+      ? String((geo as { longitude?: number }).longitude ?? "")
+      : ""
+
+  if (!startDate || !endDate || !lat || !lng) {
+    return null
+  }
+
+  return `${startDate}|${endDate}|${lat}|${lng}`
+}
+
+const extractSearchRadius = (bodyText: string | null) => {
+  const parsed = parseBody(bodyText)
+  if (!parsed || !("radius" in parsed)) {
+    return null
+  }
+
+  const raw = parsed.radius
+  if (typeof raw === "number" && Number.isFinite(raw)) {
+    return raw
+  }
+  if (typeof raw === "string") {
+    const parsedNumber = Number.parseFloat(raw)
+    return Number.isFinite(parsedNumber) ? parsedNumber : null
+  }
+  return null
+}
+
 const decodeRawBody = (raw: RawBodyItem[]) => {
   if (!raw.length || !raw[0].bytes) {
     return null
@@ -162,31 +223,43 @@ const handleIhgRequest = (details: chrome.webRequest.WebRequestBodyDetails) => {
 
   const { bodyType, bodyText } = extractRequestBody(details)
   const bookingType = detectBookingType(bodyText)
+  const searchSignature = extractSearchSignature(bodyText)
+  if (searchSignature && searchSignature !== lastSearchSignature) {
+    lastSearchSignature = searchSignature
+    maxSearchRadius = 0
+  }
+  const searchRadius = extractSearchRadius(bodyText) ?? 0
 
   requestMap.set(details.requestId, {
     url: details.url,
     method: details.method,
     bodyType,
-    bodyText
+    bodyText,
+    searchRadius,
+    searchSignature
   })
 
   if (!chrome?.storage?.local) {
     return
   }
 
-  chrome.storage.local.set({
-    [IHG_STORAGE_KEY]: {
-      kind: "webRequest",
-      url: details.url,
-      method: details.method,
-      bodyType,
-      bodyText,
-      bookingType,
-      requestHeaders: requestMap.get(details.requestId)?.requestHeaders ?? [],
-      timestamp: Date.now(),
-      receivedAt: new Date().toISOString()
-    }
-  })
+  const isLargestSearch = searchRadius >= maxSearchRadius
+  if (isLargestSearch) {
+    maxSearchRadius = searchRadius
+    chrome.storage.local.set({
+      [IHG_STORAGE_KEY]: {
+        kind: "webRequest",
+        url: details.url,
+        method: details.method,
+        bodyType,
+        bodyText,
+        bookingType,
+        requestHeaders: requestMap.get(details.requestId)?.requestHeaders ?? [],
+        timestamp: Date.now(),
+        receivedAt: new Date().toISOString()
+      }
+    })
+  }
 }
 
 const handleIhgRequestHeaders = (
@@ -214,24 +287,33 @@ const handleIhgCompleted = async (
 
   const existing = await chrome.storage.local.get(IHG_STORAGE_KEY)
   const existingPayload = existing[IHG_STORAGE_KEY] as IhgStoredPayload | undefined
+  const searchRadius = entry.searchRadius ?? 0
+  const isLargestSearch = searchRadius >= maxSearchRadius
 
-  chrome.storage.local.set({
-    [IHG_STORAGE_KEY]: {
-      kind: "webRequest",
-      url: entry.url,
-      method: entry.method,
-      bodyType: entry.bodyType,
-      bodyText: entry.bodyText,
-      bookingType: detectBookingType(entry.bodyText),
-      requestHeaders: entry.requestHeaders ?? [],
-      statusCode: details.statusCode,
-      responseHeaders: details.responseHeaders ?? [],
-      responseBodyText: existingPayload?.responseBodyText ?? null,
-      completedAt: new Date().toISOString()
-    }
-  })
+  if (isLargestSearch) {
+    maxSearchRadius = searchRadius
+    chrome.storage.local.set({
+      [IHG_STORAGE_KEY]: {
+        kind: "webRequest",
+        url: entry.url,
+        method: entry.method,
+        bodyType: entry.bodyType,
+        bodyText: entry.bodyText,
+        bookingType: detectBookingType(entry.bodyText),
+        requestHeaders: entry.requestHeaders ?? [],
+        statusCode: details.statusCode,
+        responseHeaders: details.responseHeaders ?? [],
+        responseBodyText: existingPayload?.responseBodyText ?? null,
+        completedAt: new Date().toISOString()
+      }
+    })
+  }
 
-  if (!replaySent.has(details.requestId) && !existingPayload?.responseBodyText) {
+  if (
+    isLargestSearch &&
+    !replaySent.has(details.requestId) &&
+    !existingPayload?.responseBodyText
+  ) {
     replaySent.add(details.requestId)
     const replayPayload = {
       type: "ihg-replay",
@@ -269,7 +351,11 @@ const handleIhgCompleted = async (
     const bookingType = detectBookingType(entry.bodyText)
     if (bookingType !== "points") {
       backgroundSent.add(details.requestId)
-      void runBackgroundRequest(details.requestId)
+      void runBackgroundRequest(
+        details.requestId,
+        entry.bodyText,
+        entry.requestHeaders ?? []
+      )
     }
   }
 
@@ -326,68 +412,21 @@ chrome.runtime.onMessage.addListener((message: { type?: string; payload?: IhgMes
   })
 })
 
-const buildPointsBody = (payload?: IhgMessagePayload) => {
-  const bodyText = payload?.bodyText
+const buildPointsBodyFromText = (bodyText?: string | null) => {
   if (!bodyText) {
     return MIN_BODY
   }
 
   try {
     const parsed = JSON.parse(bodyText) as Record<string, unknown>
-    const startDate =
-      typeof parsed.startDate === "string" ? parsed.startDate : MIN_BODY.startDate
-    const endDate =
-      typeof parsed.endDate === "string" ? parsed.endDate : MIN_BODY.endDate
-    const geoLocation =
-      Array.isArray(parsed.geoLocation) && parsed.geoLocation.length > 0
-        ? parsed.geoLocation
-        : MIN_BODY.geoLocation
 
-    const product =
-      Array.isArray(parsed.products) && parsed.products.length > 0
-        ? (parsed.products[0] as Record<string, unknown>)
-        : null
-    const productCode =
-      product && typeof product.productCode === "string"
-        ? product.productCode
-        : "SR"
-    const quantity =
-      product && typeof product.quantity === "number" ? product.quantity : 1
-    const guestCounts =
-      product && Array.isArray(product.guestCounts) ? product.guestCounts : undefined
-
+    const rates = parsed.rates as { ratePlanCodes?: unknown } | undefined
     return {
-      radius:
-        typeof parsed.radius === "number" ? parsed.radius : MIN_BODY.radius,
-      maxRadius:
-        typeof parsed.maxRadius === "number" ? parsed.maxRadius : undefined,
-      minHotels:
-        typeof parsed.minHotels === "number" ? parsed.minHotels : undefined,
-      incrementRadiusBy:
-        typeof parsed.incrementRadiusBy === "number"
-          ? parsed.incrementRadiusBy
-          : undefined,
-      distanceUnit:
-        typeof parsed.distanceUnit === "string"
-          ? parsed.distanceUnit
-          : "MI",
-      distanceType:
-        typeof parsed.distanceType === "string"
-          ? parsed.distanceType
-          : MIN_BODY.distanceType,
-      startDate,
-      endDate,
-      geoLocation,
-      products: [
-        {
-          productCode,
-          startDate,
-          endDate,
-          quantity,
-          ...(guestCounts ? { guestCounts } : {})
-        }
-      ],
-      rates: MIN_BODY.rates
+      ...parsed,
+      rates: {
+        ...rates,
+        ratePlanCodes: MIN_BODY.rates.ratePlanCodes
+      }
     }
   } catch {
     return MIN_BODY
@@ -422,7 +461,11 @@ const toHeaderRecord = (headers?: chrome.webRequest.HttpHeader[]) => {
   return record
 }
 
-const runBackgroundRequest = async (requestId: string) => {
+const runBackgroundRequest = async (
+  requestId: string,
+  bodyText?: string | null,
+  rawRequestHeaders?: chrome.webRequest.HttpHeader[]
+) => {
   const existing = await chrome.storage.local.get(IHG_STORAGE_KEY)
   const existingPayload = existing[IHG_STORAGE_KEY] as IhgMessagePayload | undefined
   if (
@@ -433,8 +476,10 @@ const runBackgroundRequest = async (requestId: string) => {
   }
 
   try {
-    const pointsBody = buildPointsBody(existingPayload)
-    const derivedHeaders = toHeaderRecord(existingPayload?.requestHeaders)
+    const pointsBody = buildPointsBodyFromText(bodyText ?? existingPayload?.bodyText)
+    const derivedHeaders = toHeaderRecord(
+      rawRequestHeaders ?? existingPayload?.requestHeaders
+    )
     const requestHeaders = {
       ...MIN_HEADERS,
       ...derivedHeaders,
@@ -472,8 +517,10 @@ const runBackgroundRequest = async (requestId: string) => {
       [IHG_SENT_STORAGE_KEY]: sentRequest
     })
   } catch (error) {
-    const pointsBody = buildPointsBody(existingPayload)
-    const derivedHeaders = toHeaderRecord(existingPayload?.requestHeaders)
+    const pointsBody = buildPointsBodyFromText(bodyText ?? existingPayload?.bodyText)
+    const derivedHeaders = toHeaderRecord(
+      rawRequestHeaders ?? existingPayload?.requestHeaders
+    )
     const requestHeaders = {
       ...MIN_HEADERS,
       ...derivedHeaders,
