@@ -11,6 +11,8 @@ const PLACEHOLDER_CLASS = "award-viewer-price-placeholder"
 const PLACEHOLDER_ICON_CLASS = "award-viewer-cpp-icon"
 const PLACEHOLDER_VALUE_CLASS = "award-viewer-cpp-value"
 const PLACEHOLDER_STYLE_ID = "award-viewer-placeholder-style"
+const IHG_API_KEY = "se9ym5iAzaW8pxfBjkmgbuGjJcr3Pj6Y"
+const USD_CURRENCY = "USD"
 
 export const config: PlasmoCSConfig = {
   matches: ["https://www.ihg.com/*"],
@@ -69,6 +71,8 @@ let ihgRateErrorsByHotel = new Map<string, string>()
 let ihgLastRateError: string | null = null
 let ihgLastRateSource: string | null = null
 const iconRoots = new WeakMap<HTMLElement, ReturnType<typeof createRoot>>()
+const currencyRates = new Map<string, number>()
+const inflightCurrencyRates = new Map<string, Promise<number | null>>()
 
 const normalizeHotelId = (id: string | null | undefined) => {
   if (!id) {
@@ -581,6 +585,7 @@ const parseRateMap = (responseBodyText: string | null) => {
   const hotels = getHotelCollection(parsed)
   const nextMap = new Map<string, IhgRateInfo>()
   const errorsByHotel = new Map<string, string>()
+  const currenciesNeeded = new Set<string>()
 
   if (!Array.isArray(hotels) || hotels.length === 0) {
     return {
@@ -618,20 +623,34 @@ const parseRateMap = (responseBodyText: string | null) => {
       return
     }
 
+    const propertyCurrency =
+      typeof record.propertyCurrency === "string"
+        ? record.propertyCurrency
+        : undefined
     const cashAmount = getRateValue(record, cashPaths)
     const points = getRateValue(record, pointsPaths)
+    let usdCashAmount = cashAmount
+    if (cashAmount !== undefined && propertyCurrency && propertyCurrency !== USD_CURRENCY) {
+      const conversionRate = currencyRates.get(propertyCurrency)
+      if (conversionRate !== undefined) {
+        usdCashAmount = cashAmount * conversionRate
+      } else {
+        usdCashAmount = undefined
+        currenciesNeeded.add(propertyCurrency)
+      }
+    }
     const errorMessage =
-      cashAmount === undefined && points === undefined
+      usdCashAmount === undefined && points === undefined
         ? "Missing cash and points rates"
-        : cashAmount === undefined
+        : usdCashAmount === undefined
           ? "Missing cash rate"
           : points === undefined || points <= 0
             ? "Missing points rate"
             : null
 
     const cpp =
-      cashAmount !== undefined && points !== undefined && points > 0
-        ? (cashAmount / points) * 100
+      usdCashAmount !== undefined && points !== undefined && points > 0
+        ? (usdCashAmount / points) * 100
         : undefined
 
     hotelIds.forEach((hotelId) => {
@@ -639,7 +658,7 @@ const parseRateMap = (responseBodyText: string | null) => {
         errorsByHotel.set(hotelId, errorMessage)
       }
       nextMap.set(hotelId, {
-        cashAmount,
+        cashAmount: usdCashAmount,
         points,
         cpp
       })
@@ -649,8 +668,61 @@ const parseRateMap = (responseBodyText: string | null) => {
   return {
     map: nextMap,
     errorsByHotel,
-    error: nextMap.size === 0 ? "No matching hotels in points response" : null
+    error: nextMap.size === 0 ? "No matching hotels in points response" : null,
+    currenciesNeeded
   }
+}
+
+const fetchConversionRate = async (currencyCode: string) => {
+  const cached = currencyRates.get(currencyCode)
+  if (cached !== undefined) {
+    return cached
+  }
+
+  const inflight = inflightCurrencyRates.get(currencyCode)
+  if (inflight) {
+    return inflight
+  }
+
+  const request = (async () => {
+    const url = new URL(
+      "https://apis.ihg.com/finance/conversions/v2/currencies"
+    )
+    url.searchParams.set("qFcc", currencyCode)
+    url.searchParams.set("qTcc", USD_CURRENCY)
+    url.searchParams.set("qV", "1")
+
+    try {
+      const response = await fetch(url.toString(), {
+        headers: {
+          Accept: "application/json, text/plain, */*",
+          "content-type": "application/json; charset=UTF-8",
+          "x-ihg-api-key": IHG_API_KEY,
+          "ihg-language": "en-US"
+        },
+        credentials: "include"
+      })
+      if (!response.ok) {
+        return null
+      }
+      const payload = (await response.json()) as {
+        results?: Array<{ result?: number }>
+      }
+      const rate = payload.results?.[0]?.result
+      if (typeof rate === "number" && Number.isFinite(rate)) {
+        currencyRates.set(currencyCode, rate)
+        return rate
+      }
+    } catch {
+      return null
+    }
+    return null
+  })()
+
+  inflightCurrencyRates.set(currencyCode, request)
+  const result = await request
+  inflightCurrencyRates.delete(currencyCode)
+  return result
 }
 
 const getPointsResponseText = (
@@ -792,9 +864,18 @@ const refreshRatesFromStorage = async () => {
   }
 
   const parsed = parseRateMap(selected.responseBodyText)
-  ihgRatesByHotel = parsed.map
-  ihgRateErrorsByHotel = parsed.errorsByHotel
-  ihgLastRateError = selected.error ?? parsed.error
+  if (parsed.currenciesNeeded.size > 0) {
+    await Promise.all(
+      Array.from(parsed.currenciesNeeded).map((currencyCode) =>
+        fetchConversionRate(currencyCode)
+      )
+    )
+  }
+  const finalParsed =
+    parsed.currenciesNeeded.size > 0 ? parseRateMap(selected.responseBodyText) : parsed
+  ihgRatesByHotel = finalParsed.map
+  ihgRateErrorsByHotel = finalParsed.errorsByHotel
+  ihgLastRateError = selected.error ?? finalParsed.error
   ihgLastRateSource = selected.source
   updateExistingPlaceholders()
 }
