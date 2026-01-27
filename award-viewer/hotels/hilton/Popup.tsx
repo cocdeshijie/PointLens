@@ -414,7 +414,9 @@ function HiltonPopup({ onBack, site }: HiltonPopupProps) {
             marginTop: 4,
             padding: 16,
             minHeight: 80,
-            background: "#ffffff"
+            background: "#ffffff",
+            maxHeight: 280,
+            overflow: "auto"
           }}>
           <div
             style={{
