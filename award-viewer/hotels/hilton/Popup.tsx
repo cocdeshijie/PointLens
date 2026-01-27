@@ -9,6 +9,19 @@ import {
 } from "./settings"
 
 const IS_DEV = process.env.NODE_ENV === "development"
+const HILTON_SUMMARY_STORAGE_KEY =
+  "award-viewer:hilton-last-hotel-summary-options"
+const HILTON_SHOP_STORAGE_KEY =
+  "award-viewer:hilton-last-shop-multi-prop-avail"
+
+type HiltonCapturePayload = {
+  url?: string
+  status?: number
+  operationName?: string | null
+  body?: unknown
+  receivedAt?: string
+  tabId?: number
+}
 
 type HiltonPopupProps = {
   onBack?: () => void
@@ -23,6 +36,11 @@ function HiltonPopup({ onBack, site }: HiltonPopupProps) {
     DEFAULT_HILTON_VALUE_SETTINGS
   )
   const [showDebug, setShowDebug] = useState(false)
+  const [latestCapture, setLatestCapture] =
+    useState<HiltonCapturePayload | null>(null)
+  const [latestCaptureSource, setLatestCaptureSource] = useState<string | null>(
+    null
+  )
 
   useEffect(() => {
     const loadSettings = async () => {
@@ -43,6 +61,83 @@ function HiltonPopup({ onBack, site }: HiltonPopupProps) {
 
     void loadSettings()
   }, [])
+
+  useEffect(() => {
+    if (!IS_DEV || !showDebug) {
+      return
+    }
+
+    if (!chrome?.storage?.local) {
+      setLatestCapture(null)
+      setLatestCaptureSource(null)
+      return
+    }
+
+    const toTimestamp = (value?: string) => {
+      if (!value) {
+        return 0
+      }
+      const parsed = Date.parse(value)
+      return Number.isNaN(parsed) ? 0 : parsed
+    }
+
+    const selectLatest = (
+      summary?: HiltonCapturePayload,
+      shop?: HiltonCapturePayload
+    ) => {
+      const summaryTime = toTimestamp(summary?.receivedAt)
+      const shopTime = toTimestamp(shop?.receivedAt)
+      if (summaryTime === 0 && shopTime === 0) {
+        return { capture: null, source: null }
+      }
+      if (summaryTime >= shopTime) {
+        return {
+          capture: summary ?? null,
+          source: summary ? "hotelSummaryOptions" : null
+        }
+      }
+      return {
+        capture: shop ?? null,
+        source: shop ? "shopMultiPropAvail" : null
+      }
+    }
+
+    const loadCaptures = async () => {
+      const stored = await chrome.storage.local.get([
+        HILTON_SUMMARY_STORAGE_KEY,
+        HILTON_SHOP_STORAGE_KEY
+      ])
+      const latest = selectLatest(
+        stored[HILTON_SUMMARY_STORAGE_KEY] as HiltonCapturePayload | undefined,
+        stored[HILTON_SHOP_STORAGE_KEY] as HiltonCapturePayload | undefined
+      )
+      setLatestCapture(latest.capture)
+      setLatestCaptureSource(latest.source)
+    }
+
+    void loadCaptures()
+
+    const handleStorageChange = (
+      changes: Record<string, chrome.storage.StorageChange>,
+      areaName: string
+    ) => {
+      if (areaName !== "local") {
+        return
+      }
+      if (
+        changes[HILTON_SUMMARY_STORAGE_KEY] ||
+        changes[HILTON_SHOP_STORAGE_KEY]
+      ) {
+        void loadCaptures()
+      }
+    }
+
+    chrome.storage.onChanged.addListener(handleStorageChange)
+
+    return () => {
+      chrome.storage.onChanged.removeListener(handleStorageChange)
+    }
+  }, [showDebug])
 
   const updateSetting = async (
     key: keyof HiltonValueSettings,
@@ -320,8 +415,55 @@ function HiltonPopup({ onBack, site }: HiltonPopupProps) {
             padding: 16,
             minHeight: 80,
             background: "#ffffff"
-          }}
-        />
+          }}>
+          <div
+            style={{
+              fontSize: 11,
+              fontWeight: 700,
+              textTransform: "uppercase",
+              letterSpacing: "0.14em",
+              color: "#94a3b8",
+              marginBottom: 12
+            }}>
+            Latest Hilton capture
+          </div>
+          {latestCapture ? (
+            <div style={{ display: "grid", gap: 12 }}>
+              <div style={{ display: "grid", gap: 4 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: "#0f172a" }}>
+                  {latestCaptureSource ?? latestCapture.operationName ?? "Unknown"}
+                </div>
+                <div style={{ fontSize: 11, color: "#64748b" }}>
+                  {latestCapture.url ?? "Missing URL"}
+                </div>
+                <div style={{ fontSize: 11, color: "#64748b" }}>
+                  Status: {latestCapture.status ?? "—"} • Received:{" "}
+                  {latestCapture.receivedAt ?? "—"}
+                </div>
+              </div>
+              <div
+                style={{
+                  background: "#f8fafc",
+                  borderRadius: 12,
+                  border: "1px solid #e2e8f0",
+                  padding: 12,
+                  fontSize: 11,
+                  color: "#0f172a",
+                  fontFamily: "SFMono-Regular, ui-monospace, Menlo, monospace",
+                  whiteSpace: "pre-wrap",
+                  wordBreak: "break-word",
+                  maxHeight: 180,
+                  overflow: "auto"
+                }}>
+                {JSON.stringify(latestCapture.body ?? null, null, 2)}
+              </div>
+            </div>
+          ) : (
+            <div style={{ fontSize: 12, color: "#64748b" }}>
+              No Hilton requests captured yet.
+            </div>
+          )}
+        </div>
       ) : null}
     </div>
   )
