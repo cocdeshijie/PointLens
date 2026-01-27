@@ -31,6 +31,16 @@
     ],
     "host_permissions": [
       "https://*/*"
+    ],
+    "web_accessible_resources": [
+      {
+        "resources": [
+          "hotels/hilton/injected/hilton-fetch-hook.js"
+        ],
+        "matches": [
+          "https://www.hilton.com/*"
+        ]
+      }
     ]
   }
 }
