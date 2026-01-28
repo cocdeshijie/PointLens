@@ -302,18 +302,18 @@ const ensurePlaceholderStyles = () => {
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      width: 18px;
-      height: 18px;
+      width: 22px;
+      height: 22px;
       border-radius: 999px;
       border: 1px solid #cbd5e1;
       color: #475569;
       background: #fff;
-      font-size: 12px;
+      font-size: 14px;
       line-height: 1;
     }
     .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip {
       position: absolute;
-      top: 140%;
+      bottom: 140%;
       left: 0;
       z-index: 20;
       min-width: 180px;
