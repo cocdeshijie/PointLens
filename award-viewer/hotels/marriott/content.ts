@@ -287,12 +287,17 @@ const ensurePlaceholderStyles = () => {
     .${PLACEHOLDER_CLASS} {
       display: inline-flex;
       align-items: center;
-      gap: 8px;
-      margin-top: 8px;
+      justify-content: flex-end;
+      min-height: 16px;
+      min-width: 64px;
+      margin-bottom: 0.5rem;
+      margin-left: 8px;
+      gap: 6px;
+      font-size: 14px;
+      text-align: right;
+      width: 100%;
       font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
       overflow: visible;
-    }
-    .${PLACEHOLDER_CLASS} {
       position: relative;
       z-index: 3;
     }
@@ -305,62 +310,67 @@ const ensurePlaceholderStyles = () => {
       position: relative;
       display: inline-flex;
       align-items: center;
+      color: #6b7280;
+      cursor: default;
+      font-size: 22px;
+      line-height: 1;
       z-index: 2;
     }
     .${PLACEHOLDER_ICON_CLASS} .award-viewer-icon {
       display: inline-flex;
       align-items: center;
-      justify-content: center;
-      width: 22px;
-      height: 22px;
-      border-radius: 999px;
-      border: 1px solid #cbd5e1;
-      color: #475569;
-      background: #fff;
-      font-size: 14px;
-      line-height: 1;
     }
     .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip {
       position: absolute;
-      bottom: 140%;
-      left: 0;
-      z-index: 20;
-      min-width: 180px;
-      padding: 8px 10px;
-      border-radius: 8px;
-      background: #fff;
-      border: 1px solid #e2e8f0;
-      box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
-      font-size: 12px;
-      color: #1f2937;
-      opacity: 0;
-      visibility: hidden;
-      pointer-events: none;
+      right: 0;
+      bottom: 100%;
       transform: translateY(-4px);
-      transition: opacity 120ms ease, transform 120ms ease;
+      opacity: 0;
+      pointer-events: none;
+      background: #f5f5f5;
+      color: #111827;
+      border: 1px solid #cbd5e1;
+      font-size: 11px;
+      padding: 6px;
+      border-radius: 4px;
+      white-space: normal;
+      transition: opacity 0.15s ease, transform 0.15s ease;
+      z-index: 9999;
+      box-shadow: 0 4px 12px rgba(15, 23, 42, 0.12);
+      min-width: 240px;
+      max-width: 280px;
     }
     .${PLACEHOLDER_ICON_CLASS}:hover .award-viewer-tooltip,
     .${PLACEHOLDER_ICON_CLASS}:focus-within .award-viewer-tooltip {
       opacity: 1;
-      visibility: visible;
-      transform: translateY(0);
-    }
-    .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-title {
-      font-weight: 600;
-      margin-bottom: 4px;
+      transform: translateY(-8px);
     }
     .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-grid {
       display: grid;
-      grid-template-columns: auto 1fr;
-      gap: 4px 8px;
+      grid-template-columns: max-content minmax(160px, auto);
+      column-gap: 12px;
+      row-gap: 2px;
+      align-items: center;
+      justify-content: start;
     }
-    .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-label {
+    .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-row {
+      display: contents;
+    }
+    .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-cell {
+      white-space: normal;
+    }
+    .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-cell--label {
       color: #475569;
     }
-    .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-value {
-      font-weight: 500;
+    .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-cell--value {
+      font-weight: 400;
       color: #0f172a;
-      text-align: right;
+      text-align: left;
+    }
+    .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-divider {
+      grid-column: 1 / -1;
+      border-top: 1px solid #e2e8f0;
+      height: 1px;
     }
     .${PLACEHOLDER_VALUE_CLASS} {
       display: inline-flex;
@@ -407,26 +417,25 @@ const ensurePlaceholderStyles = () => {
 }
 
 const buildTooltipContent = (info: MarriottRateInfo) => {
-  const fragment = document.createDocumentFragment()
-  const title = document.createElement("div")
-  title.className = "award-viewer-tooltip-title"
-  title.textContent = "Award Viewer"
-  fragment.appendChild(title)
-
+  const wrapper = document.createElement("div")
   const grid = document.createElement("div")
   grid.className = "award-viewer-tooltip-grid"
 
   const addRow = (label: string, value: string) => {
+    const row = document.createElement("div")
+    row.className = "award-viewer-tooltip-row"
+
     const labelEl = document.createElement("div")
-    labelEl.className = "award-viewer-tooltip-label"
+    labelEl.className = "award-viewer-tooltip-cell award-viewer-tooltip-cell--label"
     labelEl.textContent = label
 
     const valueEl = document.createElement("div")
-    valueEl.className = "award-viewer-tooltip-value"
+    valueEl.className = "award-viewer-tooltip-cell award-viewer-tooltip-cell--value"
     valueEl.textContent = value
 
-    grid.appendChild(labelEl)
-    grid.appendChild(valueEl)
+    row.appendChild(labelEl)
+    row.appendChild(valueEl)
+    grid.appendChild(row)
   }
 
   if (info.cash !== undefined) {
@@ -440,14 +449,12 @@ const buildTooltipContent = (info: MarriottRateInfo) => {
   }
 
   if (!grid.childNodes.length) {
-    const empty = document.createElement("div")
-    empty.textContent = "Awaiting Marriott response"
-    fragment.appendChild(empty)
-    return fragment
+    wrapper.textContent = "Awaiting Marriott response"
+    return wrapper
   }
 
-  fragment.appendChild(grid)
-  return fragment
+  wrapper.appendChild(grid)
+  return wrapper
 }
 
 const ensurePlaceholderContents = (placeholder: HTMLElement) => {
