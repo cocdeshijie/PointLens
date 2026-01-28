@@ -283,26 +283,20 @@ const buildTooltipContent = (info: HiltonRateInfo, showCpp: boolean) => {
   const wrapper = document.createElement("div")
   wrapper.className = "award-viewer-tooltip-content"
 
-  const title = document.createElement("div")
-  title.className = "award-viewer-tooltip-title"
-  title.textContent = "Lowest"
-  wrapper.appendChild(title)
+  const grid = document.createElement("div")
+  grid.className = "award-viewer-tooltip-grid"
 
-  const header = document.createElement("div")
-  header.className =
-    "award-viewer-tooltip-grid award-viewer-tooltip-row award-viewer-tooltip-header"
+  const headerRow = document.createElement("div")
+  headerRow.className = "award-viewer-tooltip-row award-viewer-tooltip-header"
   const headerLabel = document.createElement("div")
   headerLabel.className = "award-viewer-tooltip-cell award-viewer-tooltip-cell--label"
-  headerLabel.textContent = ""
+  headerLabel.textContent = "Lowest"
   const headerValue = document.createElement("div")
   headerValue.className = "award-viewer-tooltip-cell award-viewer-tooltip-cell--value"
   headerValue.textContent = "Price"
-  header.appendChild(headerLabel)
-  header.appendChild(headerValue)
-  wrapper.appendChild(header)
-
-  const grid = document.createElement("div")
-  grid.className = "award-viewer-tooltip-grid"
+  headerRow.appendChild(headerLabel)
+  headerRow.appendChild(headerValue)
+  grid.appendChild(headerRow)
 
   const priceLabel = formatUsdAmount(info.rateAmount ?? info.cash)
   const totalLabel = formatUsdAmount(info.amountAfterTax ?? info.cash)
@@ -404,11 +398,6 @@ function ensurePlaceholderStyles() {
       opacity: 1;
       transform: translateY(-8px);
     }
-    .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-content {
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-    }
     .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-grid {
       display: grid;
       grid-template-columns: max-content minmax(160px, auto);
@@ -437,16 +426,6 @@ function ensurePlaceholderStyles() {
       height: 1px;
     }
     .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-header .award-viewer-tooltip-cell {
-      font-size: 10px;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
-      color: #475569;
-    }
-    .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-header .award-viewer-tooltip-cell--label {
-      color: transparent;
-    }
-    .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-title {
       font-size: 10px;
       font-weight: 600;
       text-transform: uppercase;
