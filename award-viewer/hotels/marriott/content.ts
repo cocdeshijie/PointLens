@@ -1,9 +1,35 @@
 import type { PlasmoCSConfig } from "plasmo"
+import React from "react"
+import { createRoot } from "react-dom/client"
+import { CiCircleInfo } from "react-icons/ci"
+
+import {
+  DEFAULT_MARRIOTT_VALUE_SETTINGS,
+  MARRIOTT_VALUE_SETTINGS_KEY,
+  normalizeMarriottValueSettings
+} from "./settings"
 
 export const config: PlasmoCSConfig = {
   matches: ["https://www.marriott.com/*"],
   run_at: "document_start"
 }
+
+const MARRIOTT_STORAGE_KEY = "award-viewer:marriott-last-capture"
+const PLACEHOLDER_CLASS = "award-viewer-marriott-price-placeholder"
+const PLACEHOLDER_ICON_CLASS = "award-viewer-marriott-cpp-icon"
+const PLACEHOLDER_VALUE_CLASS = "award-viewer-marriott-cpp-value"
+const PLACEHOLDER_STYLE_ID = "award-viewer-marriott-placeholder-style"
+
+type MarriottRateInfo = {
+  cpp?: number
+  cash?: number
+  points?: number
+  currency?: string
+}
+
+const iconRoots = new WeakMap<HTMLElement, ReturnType<typeof createRoot>>()
+let marriottRatesByHotel = new Map<string, MarriottRateInfo>()
+let marriottValueSettings = DEFAULT_MARRIOTT_VALUE_SETTINGS
 
 function inject(src: string) {
   const script = document.createElement("script")
@@ -14,6 +40,538 @@ function inject(src: string) {
 }
 
 inject(chrome.runtime.getURL("hotels/marriott/injected/marriott-fetch-hook.js"))
+
+const normalizeHotelId = (id: string | null | undefined) => {
+  if (!id) {
+    return null
+  }
+  const trimmed = id.trim()
+  if (!trimmed) {
+    return null
+  }
+  return trimmed.toUpperCase()
+}
+
+const getHotelIdFromCard = (card: HTMLElement) => {
+  return card.getAttribute("data-marsha")
+}
+
+const formatCpp = (cpp?: number) => {
+  if (cpp === undefined || !Number.isFinite(cpp)) {
+    return ""
+  }
+  return `${cpp.toFixed(2)}¢/pt`
+}
+
+const formatCash = (amount?: number, currency?: string) => {
+  if (amount === undefined || !Number.isFinite(amount)) {
+    return ""
+  }
+  if (!currency) {
+    return amount.toFixed(2)
+  }
+  try {
+    return new Intl.NumberFormat(undefined, {
+      style: "currency",
+      currency
+    }).format(amount)
+  } catch {
+    return amount.toFixed(2)
+  }
+}
+
+const formatPoints = (points?: number) => {
+  if (points === undefined || !Number.isFinite(points)) {
+    return ""
+  }
+  return new Intl.NumberFormat().format(points)
+}
+
+const extractNumber = (value: unknown) => {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value
+  }
+
+  if (typeof value === "string") {
+    const parsed = Number.parseFloat(value)
+    return Number.isFinite(parsed) ? parsed : undefined
+  }
+
+  return undefined
+}
+
+const getValueByPath = (value: unknown, path: string[]) => {
+  let current = value
+  for (const key of path) {
+    if (!current || typeof current !== "object") {
+      return undefined
+    }
+    current = (current as Record<string, unknown>)[key]
+  }
+  return current
+}
+
+const getRateValue = (rates: Record<string, unknown>, paths: string[][]) => {
+  for (const path of paths) {
+    const value = extractNumber(getValueByPath(rates, path))
+    if (value !== undefined && Number.isFinite(value)) {
+      return value
+    }
+  }
+  return undefined
+}
+
+const computeCpp = (cash?: number, points?: number) => {
+  if (
+    cash === undefined ||
+    points === undefined ||
+    !Number.isFinite(cash) ||
+    !Number.isFinite(points) ||
+    points <= 0
+  ) {
+    return undefined
+  }
+  return (cash / points) * 100
+}
+
+const buildRatesFromStorage = (raw: unknown) => {
+  if (!raw) {
+    return new Map<string, MarriottRateInfo>()
+  }
+
+  const payload = raw as { hotels?: unknown[] } | unknown[]
+  const hotels = Array.isArray(payload)
+    ? payload
+    : Array.isArray(payload?.hotels)
+      ? payload.hotels
+      : []
+
+  const map = new Map<string, MarriottRateInfo>()
+
+  for (const item of hotels) {
+    if (!item || typeof item !== "object") {
+      continue
+    }
+
+    const record = item as Record<string, unknown>
+    const property = record.property as Record<string, unknown> | undefined
+    const rawId =
+      (property?.marshaCode as string | undefined) ??
+      (property?.marshacode as string | undefined) ??
+      (property?.propertyCode as string | undefined) ??
+      (property?.code as string | undefined)
+    const hotelId = normalizeHotelId(rawId)
+    if (!hotelId) {
+      continue
+    }
+
+    const rates = record.rates as Record<string, unknown> | undefined
+    if (!rates) {
+      continue
+    }
+
+    const cash = getRateValue(rates, [
+      ["cashRate", "amount"],
+      ["cashRate", "amountAfterTax"],
+      ["cash", "amount"],
+      ["lowestCashRate", "amount"],
+      ["lowestCashRate", "amountAfterTax"],
+      ["lowestAvailableRate", "amount"],
+      ["lowestAvailableRate", "amountAfterTax"],
+      ["bestAvailableRate", "amount"],
+      ["bestAvailableRate", "amountAfterTax"],
+      ["lowestRate", "amount"],
+      ["lowestRate", "amountAfterTax"],
+      ["total", "amount"],
+      ["totalAmount"]
+    ])
+
+    const points = getRateValue(rates, [
+      ["pointsRate", "points"],
+      ["pointsRate", "totalPoints"],
+      ["lowestPointsRate", "points"],
+      ["lowestPointsRate", "totalPoints"],
+      ["awardRate", "points"],
+      ["points"]
+    ])
+
+    const currency =
+      (rates.currency as string | undefined) ??
+      (property?.currency as string | undefined) ??
+      (property?.currencyCode as string | undefined)
+
+    map.set(hotelId, {
+      cash,
+      points,
+      currency,
+      cpp: computeCpp(cash, points)
+    })
+  }
+
+  return map
+}
+
+const refreshRatesFromStorage = async () => {
+  if (!chrome?.storage?.local) return
+
+  const result = await chrome.storage.local.get(MARRIOTT_STORAGE_KEY)
+  marriottRatesByHotel = buildRatesFromStorage(result?.[MARRIOTT_STORAGE_KEY])
+  updateExistingPlaceholders()
+}
+
+const refreshValueSettings = async () => {
+  if (!chrome?.storage?.local) return
+
+  const result = await chrome.storage.local.get(MARRIOTT_VALUE_SETTINGS_KEY)
+  marriottValueSettings = normalizeMarriottValueSettings(
+    result?.[MARRIOTT_VALUE_SETTINGS_KEY]
+  )
+  updateExistingPlaceholders()
+}
+
+const ensurePlaceholderStyles = () => {
+  if (document.getElementById(PLACEHOLDER_STYLE_ID)) {
+    return
+  }
+
+  const style = document.createElement("style")
+  style.id = PLACEHOLDER_STYLE_ID
+  style.textContent = `
+    .${PLACEHOLDER_CLASS} {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 8px;
+      font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    }
+    .${PLACEHOLDER_ICON_CLASS} {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+    }
+    .${PLACEHOLDER_ICON_CLASS} .award-viewer-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 18px;
+      height: 18px;
+      border-radius: 999px;
+      border: 1px solid #cbd5e1;
+      color: #475569;
+      background: #fff;
+      font-size: 12px;
+      line-height: 1;
+    }
+    .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip {
+      position: absolute;
+      top: 140%;
+      left: 0;
+      z-index: 20;
+      min-width: 180px;
+      padding: 8px 10px;
+      border-radius: 8px;
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+      font-size: 12px;
+      color: #1f2937;
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(-4px);
+      transition: opacity 120ms ease, transform 120ms ease;
+    }
+    .${PLACEHOLDER_ICON_CLASS}:hover .award-viewer-tooltip {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-title {
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+    .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-grid {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 4px 8px;
+    }
+    .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-label {
+      color: #475569;
+    }
+    .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-value {
+      font-weight: 500;
+      color: #0f172a;
+      text-align: right;
+    }
+    .${PLACEHOLDER_VALUE_CLASS} {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 6px;
+      border: 1px solid #cbd5e1;
+      background: #f5f5f5;
+      border-radius: 4px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 100%;
+    }
+    .${PLACEHOLDER_VALUE_CLASS}.is-good {
+      background: #d1fae5;
+      border-color: #a7f3d0;
+      color: #047857;
+    }
+    .${PLACEHOLDER_VALUE_CLASS}.is-bad {
+      background: #ffe4e6;
+      border-color: #fecdd3;
+      color: #be123c;
+    }
+    .${PLACEHOLDER_VALUE_CLASS}.is-mid {
+      background: #fef3c7;
+      border-color: #fde68a;
+      color: #b45309;
+    }
+    .${PLACEHOLDER_CLASS}.is-loading .award-viewer-skeleton {
+      display: inline-block;
+      width: 56px;
+      height: 12px;
+      border-radius: 6px;
+      background: linear-gradient(90deg, #e5e7eb 25%, #f3f4f6 37%, #e5e7eb 63%);
+      background-size: 400% 100%;
+      animation: award-viewer-skeleton 1.4s ease infinite;
+    }
+    @keyframes award-viewer-skeleton {
+      0% { background-position: 100% 50%; }
+      100% { background-position: 0 50%; }
+    }
+  `
+  document.head?.appendChild(style)
+}
+
+const buildTooltipContent = (info: MarriottRateInfo) => {
+  const fragment = document.createDocumentFragment()
+  const title = document.createElement("div")
+  title.className = "award-viewer-tooltip-title"
+  title.textContent = "Award Viewer"
+  fragment.appendChild(title)
+
+  const grid = document.createElement("div")
+  grid.className = "award-viewer-tooltip-grid"
+
+  const addRow = (label: string, value: string) => {
+    const labelEl = document.createElement("div")
+    labelEl.className = "award-viewer-tooltip-label"
+    labelEl.textContent = label
+
+    const valueEl = document.createElement("div")
+    valueEl.className = "award-viewer-tooltip-value"
+    valueEl.textContent = value
+
+    grid.appendChild(labelEl)
+    grid.appendChild(valueEl)
+  }
+
+  if (info.cash !== undefined) {
+    addRow("Cash", formatCash(info.cash, info.currency))
+  }
+  if (info.points !== undefined) {
+    addRow("Points", `${formatPoints(info.points)} pts`)
+  }
+  if (info.cpp !== undefined) {
+    addRow("Value", formatCpp(info.cpp))
+  }
+
+  if (!grid.childNodes.length) {
+    const empty = document.createElement("div")
+    empty.textContent = "Awaiting Marriott response"
+    fragment.appendChild(empty)
+    return fragment
+  }
+
+  fragment.appendChild(grid)
+  return fragment
+}
+
+const ensurePlaceholderContents = (placeholder: HTMLElement) => {
+  let iconWrapper = placeholder.querySelector<HTMLElement>(
+    `.${PLACEHOLDER_ICON_CLASS}`
+  )
+  if (!iconWrapper) {
+    iconWrapper = document.createElement("span")
+    iconWrapper.className = PLACEHOLDER_ICON_CLASS
+
+    const iconTarget = document.createElement("span")
+    iconTarget.className = "award-viewer-icon"
+    iconWrapper.appendChild(iconTarget)
+
+    const tooltip = document.createElement("span")
+    tooltip.className = "award-viewer-tooltip"
+    tooltip.textContent = "Awaiting Marriott response"
+    iconWrapper.appendChild(tooltip)
+
+    placeholder.appendChild(iconWrapper)
+    const root = createRoot(iconTarget)
+    root.render(React.createElement(CiCircleInfo, { "aria-hidden": "true" }))
+    iconRoots.set(iconTarget, root)
+  }
+
+  let valueEl = placeholder.querySelector<HTMLElement>(
+    `.${PLACEHOLDER_VALUE_CLASS}`
+  )
+  if (!valueEl) {
+    valueEl = document.createElement("span")
+    valueEl.className = PLACEHOLDER_VALUE_CLASS
+    placeholder.appendChild(valueEl)
+  }
+
+  return { iconWrapper, valueEl }
+}
+
+const setSkeleton = (placeholder: HTMLElement) => {
+  const { valueEl } = ensurePlaceholderContents(placeholder)
+  placeholder.classList.add("is-loading")
+  valueEl.textContent = ""
+  const existing = valueEl.querySelector(".award-viewer-skeleton")
+  if (existing) {
+    return
+  }
+  const skeleton = document.createElement("span")
+  skeleton.className = "award-viewer-skeleton"
+  skeleton.setAttribute("aria-hidden", "true")
+  valueEl.appendChild(skeleton)
+}
+
+const updateValueClass = (valueEl: HTMLElement, cpp?: number) => {
+  valueEl.classList.remove("is-good", "is-bad", "is-mid")
+
+  if (cpp === undefined || !Number.isFinite(cpp)) {
+    return
+  }
+
+  if (cpp >= marriottValueSettings.goodValueThreshold) {
+    valueEl.classList.add("is-good")
+    return
+  }
+
+  if (cpp <= marriottValueSettings.badValueThreshold) {
+    valueEl.classList.add("is-bad")
+    return
+  }
+
+  valueEl.classList.add("is-mid")
+}
+
+const updatePlaceholderText = (placeholder: HTMLElement) => {
+  let hotelId = placeholder.dataset.hotelId
+  if (!hotelId) {
+    const card = placeholder.closest<HTMLElement>(".property-card")
+    if (card) {
+      hotelId = getHotelIdFromCard(card) ?? undefined
+      if (hotelId) {
+        placeholder.dataset.hotelId = hotelId
+      }
+    }
+  }
+
+  if (!hotelId) {
+    setSkeleton(placeholder)
+    return
+  }
+
+  const normalizedHotelId = normalizeHotelId(hotelId) ?? hotelId
+  if (normalizedHotelId !== hotelId) {
+    hotelId = normalizedHotelId
+    placeholder.dataset.hotelId = normalizedHotelId
+  }
+
+  const info = marriottRatesByHotel.get(hotelId)
+  const { iconWrapper, valueEl } = ensurePlaceholderContents(placeholder)
+  const tooltip = iconWrapper.querySelector<HTMLElement>(".award-viewer-tooltip")
+
+  updateValueClass(valueEl, info?.cpp)
+
+  if (info?.points !== undefined && info?.cash !== undefined) {
+    placeholder.classList.remove("is-loading")
+    valueEl.textContent = formatCpp(info.cpp)
+    if (tooltip) {
+      tooltip.replaceChildren(buildTooltipContent(info))
+    }
+    return
+  }
+
+  if (info?.points === undefined && info?.cash !== undefined) {
+    placeholder.classList.remove("is-loading")
+    valueEl.classList.remove("is-good", "is-bad", "is-mid")
+    valueEl.textContent = "Reward Nights Unavailable"
+    if (tooltip) {
+      tooltip.replaceChildren(buildTooltipContent(info))
+    }
+    return
+  }
+
+  if (tooltip) {
+    tooltip.textContent = "Awaiting Marriott response"
+  }
+  setSkeleton(placeholder)
+}
+
+const getRateLink = (card: HTMLElement) => {
+  const rateContainer = card.querySelector<HTMLElement>(".rate-container")
+  if (!rateContainer) return null
+  return rateContainer.closest<HTMLAnchorElement>("a")
+}
+
+const ensurePlaceholder = (card: HTMLElement) => {
+  if (card.querySelector(`.${PLACEHOLDER_CLASS}`)) return
+
+  const link = getRateLink(card)
+  if (!link) return
+
+  const container = link.parentElement
+  if (!container) return
+
+  const placeholder = document.createElement("div")
+  placeholder.className = PLACEHOLDER_CLASS
+  const hotelId = getHotelIdFromCard(card)
+  if (hotelId) {
+    placeholder.dataset.hotelId = hotelId
+  }
+  container.insertBefore(placeholder, link.nextSibling)
+  ensurePlaceholderContents(placeholder)
+  updatePlaceholderText(placeholder)
+}
+
+const refreshPlaceholders = () => {
+  ensurePlaceholderStyles()
+  const cards = document.querySelectorAll<HTMLElement>(".property-card")
+  cards.forEach((card) => ensurePlaceholder(card))
+}
+
+const updateExistingPlaceholders = () => {
+  const placeholders = document.querySelectorAll<HTMLElement>(`.${PLACEHOLDER_CLASS}`)
+  placeholders.forEach((placeholder) => updatePlaceholderText(placeholder))
+}
+
+const startPlaceholderObserver = () => {
+  if (!document.body) return
+  refreshPlaceholders()
+  void refreshRatesFromStorage()
+  void refreshValueSettings()
+  const observer = new MutationObserver(() => {
+    refreshPlaceholders()
+  })
+  observer.observe(document.body, { childList: true, subtree: true })
+
+  chrome?.storage?.onChanged?.addListener(() => {
+    void refreshRatesFromStorage()
+    void refreshValueSettings()
+  })
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", startPlaceholderObserver, {
+    once: true
+  })
+} else {
+  startPlaceholderObserver()
+}
 
 chrome.runtime.onMessage.addListener((msg) => {
   if (msg?.type === "MARRIOTT_PAGE_REPLAY") {
