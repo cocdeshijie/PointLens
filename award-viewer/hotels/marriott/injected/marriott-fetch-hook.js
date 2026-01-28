@@ -80,15 +80,20 @@
       body: parsed
     })
 
-    const searchByGeolocation =
-      parsed?.data?.search?.lowestAvailableRates?.searchByGeolocation
-    if (searchByGeolocation) {
+    const edges =
+      parsed?.data?.search?.lowestAvailableRates?.searchByGeolocation?.edges
+    if (Array.isArray(edges)) {
+      const hotels = edges.map((edge) => ({
+        property: edge?.node?.property ?? null,
+        rates: edge?.node?.rates ?? null
+      }))
+
       window.postMessage(
         {
           __AV_MARRIOTT_SAVE__: true,
           payload: {
             savedAt: new Date().toISOString(),
-            searchByGeolocation
+            hotels
           }
         },
         "*"
