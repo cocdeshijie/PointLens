@@ -540,7 +540,11 @@ const buildTooltipContent = (info: MarriottRateInfo) => {
   }
 
   if (info.points !== undefined) {
-    const pointsLabel = formatPoints(info.points)
+    const displayPoints =
+      info.stayNights !== undefined && info.stayNights > 1
+        ? info.points / info.stayNights
+        : info.points
+    const pointsLabel = formatPoints(displayPoints)
     const cppLabel = formatCpp(info.cpp)
     if (pointsLabel) {
       addRow(
