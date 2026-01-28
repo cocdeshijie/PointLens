@@ -97,6 +97,19 @@ const extractNumber = (value: unknown) => {
     return Number.isFinite(parsed) ? parsed : undefined
   }
 
+  if (value && typeof value === "object") {
+    const record = value as { amount?: unknown; decimalPoint?: unknown }
+    const amount = extractNumber(record.amount)
+    if (amount === undefined) {
+      return undefined
+    }
+    const decimalPoint = extractNumber(record.decimalPoint)
+    if (decimalPoint === undefined || !Number.isFinite(decimalPoint)) {
+      return amount
+    }
+    return amount / 10 ** decimalPoint
+  }
+
   return undefined
 }
 
@@ -198,8 +211,11 @@ const buildRatesFromStorage = (raw: unknown) => {
       ["cashRate", "amount"],
       ["cashRate", "amountAfterTax"],
       ["cash", "amount"],
+      ["rateModes", "lowestAverageRate", "amount"],
       ["rateModes", "lowestAverageRate", "amount", "amount"],
+      ["rateModes", "lowestAverageRate", "amountPlusMandatoryFees"],
       ["rateModes", "lowestAverageRate", "amountPlusMandatoryFees", "amount"],
+      ["rateModes", "lowestAverageRate", "totalAmount"],
       ["rateModes", "lowestAverageRate", "totalAmount", "amount"],
       ["lowestCashRate", "amount"],
       ["lowestCashRate", "amountAfterTax"],
@@ -226,6 +242,8 @@ const buildRatesFromStorage = (raw: unknown) => {
     const currency =
       (!Array.isArray(rates) ? (rates.currency as string | undefined) : undefined) ??
       (property?.currency as string | undefined) ??
+      ((property?.basicInformation as Record<string, unknown> | undefined)
+        ?.currency as string | undefined) ??
       (property?.currencyCode as string | undefined)
 
     map.set(hotelId, {
