@@ -95,6 +95,14 @@ function tryEmit(requestId: string) {
 }
 
 export const registerMarriottListeners = () => {
+  chrome.runtime.onMessage.addListener((msg) => {
+    if (msg?.type !== "MARRIOTT_SAVE_CAPTURE") return
+
+    chrome.storage.local.set({
+      "award-viewer:marriott-last-capture": msg.payload
+    })
+  })
+
   chrome.webRequest.onBeforeRequest.addListener(
     (details) => {
       cleanupOld()

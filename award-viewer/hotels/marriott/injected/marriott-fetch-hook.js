@@ -83,17 +83,16 @@
     const searchByGeolocation =
       parsed?.data?.search?.lowestAvailableRates?.searchByGeolocation
     if (searchByGeolocation) {
-      try {
-        localStorage.setItem(
-          "award-viewer:marriott-last-capture",
-          JSON.stringify({
+      window.postMessage(
+        {
+          __AV_MARRIOTT_SAVE__: true,
+          payload: {
             savedAt: new Date().toISOString(),
             searchByGeolocation
-          })
-        )
-      } catch (error) {
-        console.error("[Marriott Replay] failed to save capture", error)
-      }
+          }
+        },
+        "*"
+      )
     }
   }
 

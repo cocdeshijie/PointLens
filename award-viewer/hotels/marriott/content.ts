@@ -23,3 +23,16 @@ chrome.runtime.onMessage.addListener((msg) => {
     )
   }
 })
+
+window.addEventListener("message", (event) => {
+  if (event.source !== window) return
+
+  const data = event.data as Record<string, unknown> | undefined
+
+  if (data?.__AV_MARRIOTT_SAVE__ === true) {
+    chrome.runtime.sendMessage({
+      type: "MARRIOTT_SAVE_CAPTURE",
+      payload: data.payload
+    })
+  }
+})
