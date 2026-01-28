@@ -32,6 +32,7 @@ type CaptureGroup = {
   lastAtMs: number
   status: number
   items: unknown[]
+  itemsByCtyhocn: Map<string, unknown>
 }
 
 const groupsByTab = new Map<number, CaptureGroup>()
@@ -42,8 +43,11 @@ function flushGroup(tabId: number, reason: string) {
 
   const payload = {
     status: group.status,
-    shopMultiPropAvail: group.items,
-    count: group.items.length,
+    shopMultiPropAvail: [
+      ...Array.from(group.itemsByCtyhocn.values()),
+      ...group.items
+    ],
+    count: group.itemsByCtyhocn.size + group.items.length,
     startedAt: new Date(group.startedAtMs).toISOString(),
     lastAt: new Date(group.lastAtMs).toISOString(),
     savedAt: new Date().toISOString(),
@@ -86,13 +90,26 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
 
   // If dates match -> same group, append and save
   if (existing && matchesDates) {
-    existing.items.push(...arr)
+    for (const item of arr) {
+      const ctyhocn =
+        typeof item === "object" && item !== null
+          ? (item as { ctyhocn?: unknown }).ctyhocn
+          : null
+      if (typeof ctyhocn === "string" && ctyhocn.length > 0) {
+        existing.itemsByCtyhocn.set(ctyhocn, item)
+      } else {
+        existing.items.push(item)
+      }
+    }
     existing.lastAtMs = now
     chrome.storage.local.set({
       "hilton-last-capture": {
         status: existing.status,
-        shopMultiPropAvail: existing.items,
-        count: existing.items.length,
+        shopMultiPropAvail: [
+          ...Array.from(existing.itemsByCtyhocn.values()),
+          ...existing.items
+        ],
+        count: existing.itemsByCtyhocn.size + existing.items.length,
         startedAt: new Date(existing.startedAtMs).toISOString(),
         lastAt: new Date(existing.lastAtMs).toISOString(),
         savedAt: new Date().toISOString(),
@@ -113,19 +130,35 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
   const group: CaptureGroup = {
     tabId,
     status,
-    items: [...arr],
+    items: [],
+    itemsByCtyhocn: new Map(),
     arrivalDate,
     departureDate,
     startedAtMs: now,
     lastAtMs: now
   }
 
+  for (const item of arr) {
+    const ctyhocn =
+      typeof item === "object" && item !== null
+        ? (item as { ctyhocn?: unknown }).ctyhocn
+        : null
+    if (typeof ctyhocn === "string" && ctyhocn.length > 0) {
+      group.itemsByCtyhocn.set(ctyhocn, item)
+    } else {
+      group.items.push(item)
+    }
+  }
+
   groupsByTab.set(tabId, group)
   chrome.storage.local.set({
     "hilton-last-capture": {
       status: group.status,
-      shopMultiPropAvail: group.items,
-      count: group.items.length,
+      shopMultiPropAvail: [
+        ...Array.from(group.itemsByCtyhocn.values()),
+        ...group.items
+      ],
+      count: group.itemsByCtyhocn.size + group.items.length,
       startedAt: new Date(group.startedAtMs).toISOString(),
       lastAt: new Date(group.lastAtMs).toISOString(),
       savedAt: new Date().toISOString(),
