@@ -1,13 +1,37 @@
 import type { PlasmoCSConfig } from "plasmo"
+import React from "react"
+import { createRoot } from "react-dom/client"
+import { CiCircleInfo } from "react-icons/ci"
+
+import {
+  DEFAULT_HILTON_VALUE_SETTINGS,
+  HILTON_VALUE_SETTINGS_KEY,
+  normalizeHiltonValueSettings
+} from "./settings"
 
 export const config: PlasmoCSConfig = {
   matches: ["https://www.hilton.com/*"],
   run_at: "document_start"
 }
 
-const PLACEHOLDER_CLASS = "award-viewer-hilton-cpp-placeholder"
+const PLACEHOLDER_CLASS = "award-viewer-hilton-price-placeholder"
+const PLACEHOLDER_ICON_CLASS = "award-viewer-hilton-cpp-icon"
+const PLACEHOLDER_VALUE_CLASS = "award-viewer-hilton-cpp-value"
 const PLACEHOLDER_STYLE_ID = "award-viewer-hilton-placeholder-style"
-const PLACEHOLDER_TEXT = "CPP value placeholder"
+const LOCAL_STORAGE_KEY = "shopMultiPropAvail"
+
+type HiltonRateInfo = {
+  cpp?: number
+  cash?: number
+  points?: number
+  currency?: string
+  ratePlanName?: string
+}
+
+const iconRoots = new WeakMap<HTMLElement, ReturnType<typeof createRoot>>()
+let hiltonRatesByHotel = new Map<string, HiltonRateInfo>()
+let lastLocalStorageSnapshot: string | null = null
+let hiltonValueSettings = DEFAULT_HILTON_VALUE_SETTINGS
 
 function inject(src: string) {
   const script = document.createElement("script")
@@ -20,23 +44,424 @@ function inject(src: string) {
 // Inject page script
 inject(chrome.runtime.getURL("hotels/hilton/injected/hilton-fetch-hook.js"))
 
+const normalizeHotelId = (id: string | null | undefined) => {
+  if (!id) {
+    return null
+  }
+  const trimmed = id.trim()
+  if (!trimmed) {
+    return null
+  }
+  return trimmed.toUpperCase()
+}
+
+const getHotelIdFromCard = (card: HTMLElement) => {
+  const testId = card.getAttribute("data-testid")
+  if (testId?.startsWith("hotel-card-")) {
+    return testId.replace("hotel-card-", "")
+  }
+  return null
+}
+
+const formatCpp = (cpp?: number) => {
+  if (cpp === undefined || !Number.isFinite(cpp)) {
+    return ""
+  }
+  return `${cpp.toFixed(2)}¢/pt`
+}
+
+const formatCash = (amount?: number, currency?: string) => {
+  if (amount === undefined || !Number.isFinite(amount)) {
+    return ""
+  }
+  if (!currency) {
+    return amount.toFixed(2)
+  }
+  try {
+    return new Intl.NumberFormat(undefined, {
+      style: "currency",
+      currency
+    }).format(amount)
+  } catch {
+    return amount.toFixed(2)
+  }
+}
+
+const formatPoints = (points?: number) => {
+  if (points === undefined || !Number.isFinite(points)) {
+    return ""
+  }
+  return new Intl.NumberFormat().format(points)
+}
+
+const extractNumber = (value: unknown) => {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value
+  }
+
+  if (typeof value === "string") {
+    const parsed = Number.parseFloat(value)
+    return Number.isFinite(parsed) ? parsed : undefined
+  }
+
+  return undefined
+}
+
+const buildRatesFromLocalStorage = (raw: string | null) => {
+  if (!raw) {
+    return new Map<string, HiltonRateInfo>()
+  }
+
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(raw)
+  } catch {
+    return new Map<string, HiltonRateInfo>()
+  }
+
+  const items: unknown[] = Array.isArray(parsed)
+    ? parsed
+    : Array.isArray((parsed as { shopMultiPropAvail?: unknown[] })?.shopMultiPropAvail)
+      ? (parsed as { shopMultiPropAvail: unknown[] }).shopMultiPropAvail
+      : parsed && typeof parsed === "object" && "ctyhocn" in parsed
+        ? [parsed]
+        : []
+
+  const map = new Map<string, HiltonRateInfo>()
+
+  for (const item of items) {
+    if (!item || typeof item !== "object") {
+      continue
+    }
+
+    const record = item as Record<string, unknown>
+    const hotelId = normalizeHotelId(record.ctyhocn as string | undefined)
+    if (!hotelId) {
+      continue
+    }
+
+    const summary = record.summary as Record<string, unknown> | undefined
+    const lowest = summary?.lowest as Record<string, unknown> | undefined
+    const hhonors = summary?.hhonors as Record<string, unknown> | undefined
+
+    const cash =
+      extractNumber(lowest?.amountAfterTax) ?? extractNumber(lowest?.rateAmount)
+    const points = extractNumber(hhonors?.dailyRmPointsRate)
+    const currency = record.currencyCode as string | undefined
+    const ratePlanName =
+      (hhonors?.ratePlan as Record<string, unknown> | undefined)?.ratePlanName ??
+      (lowest?.ratePlan as Record<string, unknown> | undefined)?.ratePlanName
+
+    if (!cash || !points) {
+      map.set(hotelId, {
+        cash,
+        points,
+        currency,
+        ratePlanName: ratePlanName as string | undefined
+      })
+      continue
+    }
+
+    const cpp = (cash / points) * 100
+    map.set(hotelId, {
+      cpp,
+      cash,
+      points,
+      currency,
+      ratePlanName: ratePlanName as string | undefined
+    })
+  }
+
+  return map
+}
+
+const refreshRatesFromLocalStorage = () => {
+  const current = window.localStorage.getItem(LOCAL_STORAGE_KEY)
+  if (current === lastLocalStorageSnapshot) {
+    return
+  }
+  lastLocalStorageSnapshot = current
+  hiltonRatesByHotel = buildRatesFromLocalStorage(current)
+  updateExistingPlaceholders()
+}
+
+const refreshValueSettings = async () => {
+  if (!chrome?.storage?.local) {
+    hiltonValueSettings = DEFAULT_HILTON_VALUE_SETTINGS
+    updateExistingPlaceholders()
+    return
+  }
+
+  const stored = await chrome.storage.local.get([HILTON_VALUE_SETTINGS_KEY])
+  hiltonValueSettings = normalizeHiltonValueSettings(
+    stored[HILTON_VALUE_SETTINGS_KEY] as Partial<typeof hiltonValueSettings> | undefined
+  )
+  updateExistingPlaceholders()
+}
+
+const updateValueClass = (valueEl: HTMLElement, cpp?: number) => {
+  valueEl.classList.remove("is-good", "is-bad", "is-mid")
+
+  if (cpp === undefined || !Number.isFinite(cpp)) {
+    return
+  }
+
+  if (cpp >= hiltonValueSettings.goodValueThreshold) {
+    valueEl.classList.add("is-good")
+    return
+  }
+
+  if (cpp <= hiltonValueSettings.badValueThreshold) {
+    valueEl.classList.add("is-bad")
+    return
+  }
+
+  valueEl.classList.add("is-mid")
+}
+
+const setTooltipText = (tooltip: HTMLElement, text: string) => {
+  tooltip.textContent = text
+}
+
 function ensurePlaceholderStyles() {
   if (document.getElementById(PLACEHOLDER_STYLE_ID)) return
   const style = document.createElement("style")
   style.id = PLACEHOLDER_STYLE_ID
   style.textContent = `
     .${PLACEHOLDER_CLASS} {
+      display: inline-flex;
+      align-items: center;
+      justify-content: flex-end;
+      min-height: 16px;
+      min-width: 64px;
       margin-bottom: 0.5rem;
-      padding: 0.35rem 0.5rem;
-      border-radius: 0.5rem;
-      background: rgba(15, 23, 42, 0.06);
-      color: #334155;
-      font-size: 0.75rem;
-      font-weight: 600;
+      margin-left: 8px;
+      gap: 6px;
+      font-size: 14px;
       text-align: right;
+      width: 100%;
+    }
+    .${PLACEHOLDER_ICON_CLASS} {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      color: #6b7280;
+      cursor: default;
+      font-size: 22px;
+      line-height: 1;
+    }
+    .${PLACEHOLDER_ICON_CLASS} .award-viewer-icon {
+      display: inline-flex;
+      align-items: center;
+    }
+    .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip {
+      position: absolute;
+      right: 0;
+      bottom: 100%;
+      transform: translateY(-4px);
+      opacity: 0;
+      pointer-events: none;
+      background: #f5f5f5;
+      color: #111827;
+      border: 1px solid #cbd5e1;
+      font-size: 11px;
+      padding: 8px;
+      border-radius: 4px;
+      white-space: normal;
+      transition: opacity 0.15s ease, transform 0.15s ease;
+      z-index: 9999;
+      box-shadow: 0 4px 12px rgba(15, 23, 42, 0.12);
+      min-width: 320px;
+    }
+    .${PLACEHOLDER_ICON_CLASS}:hover .award-viewer-tooltip {
+      opacity: 1;
+      transform: translateY(-8px);
+    }
+    .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-content {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-grid {
+      display: grid;
+      grid-template-columns: max-content minmax(140px, auto) minmax(140px, auto);
+      column-gap: 12px;
+      row-gap: 2px;
+      align-items: center;
+      justify-content: start;
+    }
+    .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-row {
+      display: contents;
+    }
+    .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-cell {
+      white-space: nowrap;
+    }
+    .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-cell--label {
+      color: #475569;
+    }
+    .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-cell--value {
+      font-weight: 400;
+      color: #0f172a;
+      text-align: left;
+    }
+    .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-cell--high {
+      border-left: 1px solid #e2e8f0;
+      padding-left: 8px;
+    }
+    .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-divider {
+      grid-column: 1 / -1;
+      border-top: 1px solid #e2e8f0;
+      height: 1px;
+    }
+    .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-header .award-viewer-tooltip-cell {
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: #475569;
+    }
+    .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-header .award-viewer-tooltip-cell--label {
+      color: transparent;
+    }
+    .${PLACEHOLDER_VALUE_CLASS} {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 6px;
+      border: 1px solid #cbd5e1;
+      background: #f5f5f5;
+      border-radius: 4px;
+    }
+    .${PLACEHOLDER_VALUE_CLASS}.is-good {
+      background: #d1fae5;
+      border-color: #a7f3d0;
+      color: #047857;
+    }
+    .${PLACEHOLDER_VALUE_CLASS}.is-bad {
+      background: #ffe4e6;
+      border-color: #fecdd3;
+      color: #be123c;
+    }
+    .${PLACEHOLDER_VALUE_CLASS}.is-mid {
+      background: #fef3c7;
+      border-color: #fde68a;
+      color: #b45309;
+    }
+    .${PLACEHOLDER_CLASS}.is-loading .award-viewer-skeleton {
+      display: inline-block;
+      width: 56px;
+      height: 12px;
+      border-radius: 6px;
+      background: linear-gradient(90deg, #e5e7eb 25%, #f3f4f6 37%, #e5e7eb 63%);
+      background-size: 400% 100%;
+      animation: award-viewer-skeleton 1.4s ease infinite;
+    }
+    @keyframes award-viewer-skeleton {
+      0% { background-position: 100% 50%; }
+      100% { background-position: 0 50%; }
     }
   `
   document.head?.appendChild(style)
+}
+
+const ensurePlaceholderContents = (placeholder: HTMLElement) => {
+  let iconWrapper = placeholder.querySelector<HTMLElement>(
+    `.${PLACEHOLDER_ICON_CLASS}`
+  )
+  if (!iconWrapper) {
+    iconWrapper = document.createElement("span")
+    iconWrapper.className = PLACEHOLDER_ICON_CLASS
+
+    const iconTarget = document.createElement("span")
+    iconTarget.className = "award-viewer-icon"
+    iconWrapper.appendChild(iconTarget)
+
+    const tooltip = document.createElement("span")
+    tooltip.className = "award-viewer-tooltip"
+    tooltip.textContent = "Awaiting Hilton response"
+    iconWrapper.appendChild(tooltip)
+
+    placeholder.appendChild(iconWrapper)
+    const root = createRoot(iconTarget)
+    root.render(React.createElement(CiCircleInfo, { "aria-hidden": "true" }))
+    iconRoots.set(iconTarget, root)
+  }
+
+  let valueEl = placeholder.querySelector<HTMLElement>(
+    `.${PLACEHOLDER_VALUE_CLASS}`
+  )
+  if (!valueEl) {
+    valueEl = document.createElement("span")
+    valueEl.className = PLACEHOLDER_VALUE_CLASS
+    placeholder.appendChild(valueEl)
+  }
+
+  return { iconWrapper, valueEl }
+}
+
+const setSkeleton = (placeholder: HTMLElement) => {
+  const { valueEl } = ensurePlaceholderContents(placeholder)
+  placeholder.classList.add("is-loading")
+  valueEl.textContent = ""
+  const existing = valueEl.querySelector(".award-viewer-skeleton")
+  if (existing) {
+    return
+  }
+  const skeleton = document.createElement("span")
+  skeleton.className = "award-viewer-skeleton"
+  skeleton.setAttribute("aria-hidden", "true")
+  valueEl.appendChild(skeleton)
+}
+
+const updatePlaceholderText = (placeholder: HTMLElement) => {
+  let hotelId = placeholder.dataset.hotelId
+  if (!hotelId) {
+    const card = placeholder.closest<HTMLElement>('[data-testid^="hotel-card-"]')
+    if (card) {
+      hotelId = getHotelIdFromCard(card) ?? undefined
+      if (hotelId) {
+        placeholder.dataset.hotelId = hotelId
+      }
+    }
+  }
+
+  if (!hotelId) {
+    setSkeleton(placeholder)
+    return
+  }
+
+  const normalizedHotelId = normalizeHotelId(hotelId) ?? hotelId
+  if (normalizedHotelId !== hotelId) {
+    hotelId = normalizedHotelId
+    placeholder.dataset.hotelId = normalizedHotelId
+  }
+
+  const info = hiltonRatesByHotel.get(hotelId)
+  const { iconWrapper, valueEl } = ensurePlaceholderContents(placeholder)
+  const tooltip = iconWrapper.querySelector<HTMLElement>(".award-viewer-tooltip")
+  const displayCpp = info?.cpp
+
+  updateValueClass(valueEl, displayCpp)
+
+  if (info?.cpp !== undefined && Number.isFinite(info.cpp)) {
+    placeholder.classList.remove("is-loading")
+    valueEl.textContent = formatCpp(displayCpp)
+    if (tooltip) {
+      const cashLabel = formatCash(info.cash, info.currency)
+      const pointsLabel = formatPoints(info.points)
+      const ratePlanLabel = info.ratePlanName ? ` • ${info.ratePlanName}` : ""
+      const detailText =
+        cashLabel && pointsLabel
+          ? `${cashLabel} / ${pointsLabel} points${ratePlanLabel}`
+          : "CPP derived from Hilton rewards"
+      setTooltipText(tooltip, detailText)
+    }
+    return
+  }
+
+  if (tooltip) {
+    setTooltipText(tooltip, "Awaiting Hilton response")
+  }
+  setSkeleton(placeholder)
 }
 
 function getRateButton(card: HTMLElement) {
@@ -59,8 +484,13 @@ function ensurePlaceholder(card: HTMLElement) {
 
   const placeholder = document.createElement("div")
   placeholder.className = PLACEHOLDER_CLASS
-  placeholder.textContent = PLACEHOLDER_TEXT
+  const hotelId = getHotelIdFromCard(card)
+  if (hotelId) {
+    placeholder.dataset.hotelId = hotelId
+  }
   container.insertBefore(placeholder, rateButton)
+  ensurePlaceholderContents(placeholder)
+  updatePlaceholderText(placeholder)
 }
 
 function refreshPlaceholders() {
@@ -71,13 +501,25 @@ function refreshPlaceholders() {
   cards.forEach((card) => ensurePlaceholder(card))
 }
 
+const updateExistingPlaceholders = () => {
+  const placeholders = document.querySelectorAll<HTMLElement>(`.${PLACEHOLDER_CLASS}`)
+  placeholders.forEach((placeholder) => updatePlaceholderText(placeholder))
+}
+
 function startPlaceholderObserver() {
   if (!document.body) return
   refreshPlaceholders()
+  refreshRatesFromLocalStorage()
+  void refreshValueSettings()
   const observer = new MutationObserver(() => {
     refreshPlaceholders()
   })
   observer.observe(document.body, { childList: true, subtree: true })
+
+  window.setInterval(refreshRatesFromLocalStorage, 1500)
+  chrome?.storage?.onChanged?.addListener(() => {
+    void refreshValueSettings()
+  })
 }
 
 if (document.readyState === "loading") {
