@@ -190,6 +190,7 @@ const buildRatesFromStorage = (raw: unknown) => {
     const record = item as Record<string, unknown>
     const property = record.property as Record<string, unknown> | undefined
     const rawId =
+      (property?.id as string | undefined) ??
       (property?.marshaCode as string | undefined) ??
       (property?.marshacode as string | undefined) ??
       (property?.propertyCode as string | undefined) ??
