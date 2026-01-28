@@ -121,6 +121,27 @@ const getRateValue = (rates: Record<string, unknown>, paths: string[][]) => {
   return undefined
 }
 
+const getRateValueFromCollection = (
+  rates: Record<string, unknown> | Array<Record<string, unknown>> | undefined,
+  paths: string[][]
+) => {
+  if (!rates) {
+    return undefined
+  }
+
+  if (Array.isArray(rates)) {
+    for (const rate of rates) {
+      const value = getRateValue(rate, paths)
+      if (value !== undefined && Number.isFinite(value)) {
+        return value
+      }
+    }
+    return undefined
+  }
+
+  return getRateValue(rates, paths)
+}
+
 const computeCpp = (cash?: number, points?: number) => {
   if (
     cash === undefined ||
@@ -165,15 +186,21 @@ const buildRatesFromStorage = (raw: unknown) => {
       continue
     }
 
-    const rates = record.rates as Record<string, unknown> | undefined
+    const rates = record.rates as
+      | Record<string, unknown>
+      | Array<Record<string, unknown>>
+      | undefined
     if (!rates) {
       continue
     }
 
-    const cash = getRateValue(rates, [
+    const cash = getRateValueFromCollection(rates, [
       ["cashRate", "amount"],
       ["cashRate", "amountAfterTax"],
       ["cash", "amount"],
+      ["rateModes", "lowestAverageRate", "amount", "amount"],
+      ["rateModes", "lowestAverageRate", "amountPlusMandatoryFees", "amount"],
+      ["rateModes", "lowestAverageRate", "totalAmount", "amount"],
       ["lowestCashRate", "amount"],
       ["lowestCashRate", "amountAfterTax"],
       ["lowestAvailableRate", "amount"],
@@ -186,9 +213,10 @@ const buildRatesFromStorage = (raw: unknown) => {
       ["totalAmount"]
     ])
 
-    const points = getRateValue(rates, [
+    const points = getRateValueFromCollection(rates, [
       ["pointsRate", "points"],
       ["pointsRate", "totalPoints"],
+      ["rateModes", "pointsPerUnit", "points"],
       ["lowestPointsRate", "points"],
       ["lowestPointsRate", "totalPoints"],
       ["awardRate", "points"],
@@ -196,7 +224,7 @@ const buildRatesFromStorage = (raw: unknown) => {
     ])
 
     const currency =
-      (rates.currency as string | undefined) ??
+      (!Array.isArray(rates) ? (rates.currency as string | undefined) : undefined) ??
       (property?.currency as string | undefined) ??
       (property?.currencyCode as string | undefined)
 
