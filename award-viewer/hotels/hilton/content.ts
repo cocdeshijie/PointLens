@@ -5,9 +5,7 @@ export const config: PlasmoCSConfig = {
   run_at: "document_start"
 }
 
-const MESSAGE_FLAG = "__AV_HILTON__"
-
-const injectScript = (src: string) => {
+function inject(src: string) {
   const script = document.createElement("script")
   script.src = src
   script.async = false
@@ -15,22 +13,36 @@ const injectScript = (src: string) => {
   script.onload = () => script.remove()
 }
 
-injectScript(
-  chrome.runtime.getURL("hotels/hilton/injected/hilton-fetch-hook.js")
-)
+// Inject page script
+inject(chrome.runtime.getURL("hotels/hilton/injected/hilton-fetch-hook.js"))
 
-window.addEventListener("message", (event) => {
-  if (event.source !== window) {
-    return
+// Bridge messages
+chrome.runtime.onMessage.addListener((msg) => {
+  if (msg?.type === "HILTON_CAPTURE_PRINT") {
+    window.postMessage(
+      { __AV_HILTON_PRINT__: true, payload: msg.payload },
+      "*"
+    )
   }
+
+  if (msg?.type === "HILTON_PAGE_REPLAY") {
+    window.postMessage(
+      { __AV_HILTON_DO_REPLAY__: true, payload: msg.payload },
+      "*"
+    )
+  }
+})
+
+// Page -> background
+window.addEventListener("message", (event) => {
+  if (event.source !== window) return
 
   const data = event.data as Record<string, unknown> | undefined
-  if (!data || data[MESSAGE_FLAG] !== true) {
-    return
-  }
 
-  chrome.runtime.sendMessage({
-    type: "hilton-gql-capture",
-    payload: data.payload
-  })
+  if (data?.__AV_HILTON_SAVE__ === true) {
+    chrome.runtime.sendMessage({
+      type: "HILTON_SAVE_CAPTURE",
+      payload: data.payload
+    })
+  }
 })
