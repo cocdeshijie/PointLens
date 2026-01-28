@@ -287,17 +287,18 @@ const buildTooltipContent = (info: HiltonRateInfo, showCpp: boolean) => {
   grid.className = "award-viewer-tooltip-grid"
 
   const headerRow = document.createElement("div")
-  headerRow.className = "award-viewer-tooltip-row award-viewer-tooltip-header"
+  headerRow.className = "award-viewer-tooltip-row"
   const headerLabel = document.createElement("div")
   headerLabel.className = "award-viewer-tooltip-cell award-viewer-tooltip-cell--label"
-  headerLabel.textContent = "Lowest"
+  headerLabel.textContent = "Lowest cash"
   const headerValue = document.createElement("div")
   headerValue.className = "award-viewer-tooltip-cell award-viewer-tooltip-cell--value"
-  headerValue.textContent = "Price"
+  headerValue.textContent = "Base"
   headerRow.appendChild(headerLabel)
   headerRow.appendChild(headerValue)
   grid.appendChild(headerRow)
 
+  const lowestCash = info.amountAfterTax ?? info.rateAmount ?? info.cash
   const priceLabel = formatUsdAmount(info.rateAmount ?? info.cash)
   const totalLabel = formatUsdAmount(info.amountAfterTax ?? info.cash)
   const feeValue =
@@ -326,11 +327,15 @@ const buildTooltipContent = (info: HiltonRateInfo, showCpp: boolean) => {
   grid.appendChild(divider)
 
   const pointsLabel = formatPoints(info.points)
-  const cppLabel = showCpp ? formatCpp(info.cpp) : ""
+  const premiumCpp =
+    !showCpp && lowestCash !== undefined && Number.isFinite(lowestCash) && info.points
+      ? (lowestCash / info.points) * 100
+      : undefined
+  const cppLabel = showCpp ? formatCpp(info.cpp) : formatCpp(premiumCpp)
   if (pointsLabel) {
     const pointLabelText = isPremiumReward(info.ratePlanName)
       ? "Premium Room Reward"
-      : "Points"
+      : "Standard Room Award"
     grid.appendChild(
       buildTooltipCell(
         pointLabelText,
@@ -424,13 +429,6 @@ function ensurePlaceholderStyles() {
       grid-column: 1 / -1;
       border-top: 1px solid #e2e8f0;
       height: 1px;
-    }
-    .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-header .award-viewer-tooltip-cell {
-      font-size: 10px;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
-      color: #475569;
     }
     .${PLACEHOLDER_VALUE_CLASS} {
       display: inline-flex;
