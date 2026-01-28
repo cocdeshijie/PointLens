@@ -1,16 +1,6 @@
 ;(function () {
   const REPLAY_MARKER_HEADER = "x-av-replay"
 
-  function ensureClusterRateType(types, value) {
-    if (!Array.isArray(types)) return
-    const exists = types.some(
-      (entry) => entry?.type === "CLUSTER" && entry?.value === value
-    )
-    if (!exists) {
-      types.push({ type: "CLUSTER", value })
-    }
-  }
-
   function patchBodyForClusters(bodyText) {
     let obj
     try {
@@ -25,13 +15,23 @@
 
     const options = obj.variables.search.options
     const rateRequestTypes = Array.isArray(options.rateRequestTypes)
-      ? [...options.rateRequestTypes]
+      ? options.rateRequestTypes
       : []
 
-    ensureClusterRateType(rateRequestTypes, "E0G")
-    ensureClusterRateType(rateRequestTypes, "MRW")
+    const isDefaultRequest =
+      rateRequestTypes.length === 2 &&
+      rateRequestTypes.some((entry) => entry?.type === "STANDARD") &&
+      rateRequestTypes.some(
+        (entry) => entry?.type === "CLUSTER" && entry?.value === "E0P"
+      )
 
-    options.rateRequestTypes = rateRequestTypes
+    if (isDefaultRequest) {
+      options.rateRequestTypes = [
+        { type: "CLUSTER", value: "MRW" },
+        { type: "STANDARD", value: "" },
+        { type: "CLUSTER", value: "P17" }
+      ]
+    }
 
     return JSON.stringify(obj)
   }
