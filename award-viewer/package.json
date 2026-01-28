@@ -27,7 +27,8 @@
   "manifest": {
     "permissions": [
       "storage",
-      "webRequest"
+      "webRequest",
+      "tabs"
     ],
     "host_permissions": [
       "https://*/*"
