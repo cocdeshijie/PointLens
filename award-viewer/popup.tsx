@@ -3,6 +3,7 @@ import { FiChevronRight, FiGlobe } from "react-icons/fi"
 
 import HiltonPopup from "./hotels/hilton/Popup"
 import IhgPopup from "./hotels/ihg/Popup"
+import MarriottPopup from "./hotels/marriott/Popup"
 
 const POPUP_MIN_WIDTH = 380
 const POPUP_MIN_HEIGHT = 560
@@ -18,6 +19,12 @@ const SUPPORTED_SITES = [
     label: "Hilton",
     domain: "hilton.com",
     icon: "H"
+  },
+  {
+    id: "marriott",
+    label: "Marriott",
+    domain: "marriott.com",
+    icon: "M"
   }
 ] as const
 
@@ -148,6 +155,19 @@ function IndexPopup() {
               />
             ) : selectedSiteConfig.id === "hilton" ? (
               <HiltonPopup
+                onBack={
+                  () => {
+                    setSelectedSite(null)
+                    setForceHome(true)
+                  }
+                }
+                site={{
+                  name: selectedSiteConfig.label,
+                  domain: selectedSiteConfig.domain
+                }}
+              />
+            ) : selectedSiteConfig.id === "marriott" ? (
+              <MarriottPopup
                 onBack={
                   () => {
                     setSelectedSite(null)
