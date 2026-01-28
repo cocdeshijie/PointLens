@@ -28,6 +28,7 @@ type HiltonRateInfo = {
   amountAfterTax?: number
   currency?: string
   ratePlanName?: string
+  rewardStatus?: "available" | "unavailable"
 }
 
 const iconRoots = new WeakMap<HTMLElement, ReturnType<typeof createRoot>>()
@@ -156,6 +157,8 @@ const buildRatesFromStorage = (raw: unknown) => {
     const summary = record.summary as Record<string, unknown> | undefined
     const lowest = summary?.lowest as Record<string, unknown> | undefined
     const hhonors = summary?.hhonors as Record<string, unknown> | undefined
+    const rewardStatus =
+      hhonors === null || hhonors === undefined ? "unavailable" : "available"
 
     const amountAfterTax = extractNumber(lowest?.amountAfterTax)
     const rateAmount = extractNumber(lowest?.rateAmount)
@@ -173,7 +176,8 @@ const buildRatesFromStorage = (raw: unknown) => {
         rateAmount,
         amountAfterTax,
         currency,
-        ratePlanName: ratePlanName as string | undefined
+        ratePlanName: ratePlanName as string | undefined,
+        rewardStatus
       })
       continue
     }
@@ -186,7 +190,8 @@ const buildRatesFromStorage = (raw: unknown) => {
       rateAmount,
       amountAfterTax,
       currency,
-      ratePlanName: ratePlanName as string | undefined
+      ratePlanName: ratePlanName as string | undefined,
+      rewardStatus
     })
   }
 
@@ -431,6 +436,10 @@ function ensurePlaceholderStyles() {
       border: 1px solid #cbd5e1;
       background: #f5f5f5;
       border-radius: 4px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 100%;
     }
     .${PLACEHOLDER_VALUE_CLASS}.is-good {
       background: #d1fae5;
@@ -544,6 +553,16 @@ const updatePlaceholderText = (placeholder: HTMLElement) => {
 
   updateValueClass(valueEl, displayCpp)
 
+  if (info?.rewardStatus === "unavailable") {
+    placeholder.classList.remove("is-loading")
+    valueEl.classList.remove("is-good", "is-bad", "is-mid")
+    valueEl.textContent = "No Reward Available"
+    if (tooltip) {
+      setTooltipText(tooltip, "No Reward Available")
+    }
+    return
+  }
+
   if (showCpp && info?.cpp !== undefined && Number.isFinite(info.cpp)) {
     placeholder.classList.remove("is-loading")
     valueEl.textContent = formatCpp(displayCpp)
@@ -558,7 +577,7 @@ const updatePlaceholderText = (placeholder: HTMLElement) => {
     valueEl.classList.remove("is-good", "is-bad", "is-mid")
     const pointsText = formatPoints(info.points)
     if (isPremiumReward(info?.ratePlanName)) {
-      valueEl.textContent = `Premium Room Reward: ${pointsText} pts`
+      valueEl.textContent = `Premium: ${pointsText} pts`
     } else {
       valueEl.textContent = `${pointsText} pts`
     }
