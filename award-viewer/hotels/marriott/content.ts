@@ -23,6 +23,9 @@ const PLACEHOLDER_STYLE_ID = "award-viewer-marriott-placeholder-style"
 type MarriottRateInfo = {
   cpp?: number
   cash?: number
+  cashBase?: number
+  cashFees?: number
+  cashTotal?: number
   points?: number
   currency?: string
 }
@@ -240,18 +243,48 @@ const buildRatesFromStorage = (raw: unknown) => {
       ["points"]
     ])
 
+    const standardRate = Array.isArray(rates)
+      ? rates.find(
+          (rate) =>
+            (rate?.rateCategory as Record<string, unknown> | undefined)?.code ===
+            "StandardRates"
+        )
+      : undefined
+    const standardRateModes = (standardRate?.rateModes ??
+      undefined) as Record<string, unknown> | undefined
+    const standardLowestAverageRate = (standardRateModes?.lowestAverageRate ??
+      undefined) as Record<string, unknown> | undefined
+
+    const cashBase = extractNumber(standardLowestAverageRate?.amount)
+    const cashFees = (() => {
+      const fees = extractNumber(standardLowestAverageRate?.fees)
+      const taxes = extractNumber(standardLowestAverageRate?.taxes)
+      if (fees === undefined && taxes === undefined) {
+        return undefined
+      }
+      return (fees ?? 0) + (taxes ?? 0)
+    })()
+    const cashTotal = extractNumber(standardLowestAverageRate?.totalAmount)
+
     const currency =
+      (standardLowestAverageRate?.amount as Record<string, unknown> | undefined)
+        ?.currency ??
       (!Array.isArray(rates) ? (rates.currency as string | undefined) : undefined) ??
       (property?.currency as string | undefined) ??
       ((property?.basicInformation as Record<string, unknown> | undefined)
         ?.currency as string | undefined) ??
       (property?.currencyCode as string | undefined)
 
+    const cashForCpp = cashTotal ?? cash ?? cashBase
+
     map.set(hotelId, {
-      cash,
+      cash: cashForCpp,
+      cashBase,
+      cashFees,
+      cashTotal,
       points,
       currency,
-      cpp: computeCpp(cash, points)
+      cpp: computeCpp(cashForCpp, points)
     })
   }
 
@@ -419,6 +452,7 @@ const ensurePlaceholderStyles = () => {
 
 const buildTooltipContent = (info: MarriottRateInfo) => {
   const wrapper = document.createElement("div")
+  wrapper.className = "award-viewer-tooltip-content"
   const grid = document.createElement("div")
   grid.className = "award-viewer-tooltip-grid"
 
@@ -439,14 +473,62 @@ const buildTooltipContent = (info: MarriottRateInfo) => {
     grid.appendChild(row)
   }
 
-  if (info.cash !== undefined) {
-    addRow("Cash", formatCash(info.cash, info.currency))
+  const hasCashContent =
+    info.cashBase !== undefined ||
+    info.cashFees !== undefined ||
+    info.cashTotal !== undefined ||
+    info.cash !== undefined
+  const hasPointsContent = info.points !== undefined
+
+  if (!hasCashContent && !hasPointsContent) {
+    wrapper.textContent = "Awaiting Marriott response"
+    return wrapper
   }
+
+  if (hasCashContent) {
+    const headerRow = document.createElement("div")
+    headerRow.className = "award-viewer-tooltip-row"
+    const headerLabel = document.createElement("div")
+    headerLabel.className = "award-viewer-tooltip-cell award-viewer-tooltip-cell--label"
+    headerLabel.textContent = "Lowest cash"
+    const headerValue = document.createElement("div")
+    headerValue.className = "award-viewer-tooltip-cell award-viewer-tooltip-cell--value"
+    headerValue.textContent = "Price per night"
+    headerRow.appendChild(headerLabel)
+    headerRow.appendChild(headerValue)
+    grid.appendChild(headerRow)
+  }
+
+  const baseLabel = formatCash(info.cashBase, info.currency)
+  const feesLabel = formatCash(info.cashFees, info.currency)
+  const totalLabel = formatCash(info.cashTotal ?? info.cash, info.currency)
+
+  if (baseLabel) {
+    addRow("Base", baseLabel)
+  }
+  if (info.cashFees !== undefined) {
+    addRow("Fees", feesLabel)
+  }
+  if (totalLabel) {
+    addRow("Total", totalLabel)
+  }
+
+  const hasCashRow = baseLabel || totalLabel || info.cashFees !== undefined
+  if (hasCashRow && hasPointsContent) {
+    const divider = document.createElement("div")
+    divider.className = "award-viewer-tooltip-divider"
+    grid.appendChild(divider)
+  }
+
   if (info.points !== undefined) {
-    addRow("Points", `${formatPoints(info.points)} pts`)
-  }
-  if (info.cpp !== undefined) {
-    addRow("Value", formatCpp(info.cpp))
+    const pointsLabel = formatPoints(info.points)
+    const cppLabel = formatCpp(info.cpp)
+    if (pointsLabel) {
+      addRow(
+        "Standard Room Award",
+        cppLabel ? `${pointsLabel} (${cppLabel})` : `${pointsLabel} pts`
+      )
+    }
   }
 
   if (!grid.childNodes.length) {
