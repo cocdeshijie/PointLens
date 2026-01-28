@@ -289,6 +289,10 @@ const buildRatesFromStorage = (raw: unknown) => {
       (property?.currencyCode as string | undefined)
 
     const cashForCpp = cashTotal ?? cash ?? cashBase
+    const cppPoints =
+      stayNights !== undefined && stayNights > 1 && points !== undefined
+        ? points / stayNights
+        : points
 
     map.set(hotelId, {
       cash: cashForCpp,
@@ -298,7 +302,7 @@ const buildRatesFromStorage = (raw: unknown) => {
       stayNights,
       points,
       currency,
-      cpp: computeCpp(cashForCpp, points)
+      cpp: computeCpp(cashForCpp, cppPoints)
     })
   }
 
