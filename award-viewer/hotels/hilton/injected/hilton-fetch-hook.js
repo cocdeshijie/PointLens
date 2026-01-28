@@ -66,7 +66,7 @@
     return JSON.stringify(obj)
   }
 
-  function maybeSave(status, body) {
+  function maybeSave(status, body, meta) {
     if (status !== 200) return
 
     const arr = body?.data?.shopMultiPropAvail
@@ -77,13 +77,30 @@
         __AV_HILTON_SAVE__: true,
         payload: {
           status,
-          shopMultiPropAvail: arr
+          shopMultiPropAvail: arr,
+          meta
         }
       },
       "*"
     )
 
     console.log("[Hilton] Sent capture to extension storage")
+  }
+
+  function extractDates(bodyText) {
+    try {
+      const parsed = JSON.parse(bodyText)
+      const input = parsed?.variables?.input
+      return {
+        arrivalDate: input?.arrivalDate,
+        departureDate: input?.departureDate
+      }
+    } catch {
+      return {
+        arrivalDate: undefined,
+        departureDate: undefined
+      }
+    }
   }
 
   async function doReplay(replayUrl, bodyText, label) {
@@ -111,7 +128,8 @@
       body: parsed
     })
 
-    maybeSave(res.status, parsed)
+    const meta = extractDates(bodyText)
+    maybeSave(res.status, parsed, meta)
   }
 
   window.addEventListener("message", (event) => {

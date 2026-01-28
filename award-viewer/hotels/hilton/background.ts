@@ -21,29 +21,24 @@ const ALLOW_ORIGINAL_OPNAMES = new Set([
 const REPLAY_MARKER_HEADER = "x-av-replay"
 
 // ----------------------------
-// Grouped save state (per tab)
+// Grouped save state (per tab + dates)
 // ----------------------------
 
 type CaptureGroup = {
   tabId: number
+  arrivalDate?: string
+  departureDate?: string
   startedAtMs: number
   lastAtMs: number
   status: number
   items: unknown[]
-  flushTimer?: number
 }
 
-const GROUP_WINDOW_MS = 1000
 const groupsByTab = new Map<number, CaptureGroup>()
 
 function flushGroup(tabId: number, reason: string) {
   const group = groupsByTab.get(tabId)
   if (!group) return
-
-  if (group.flushTimer) {
-    clearTimeout(group.flushTimer)
-    group.flushTimer = undefined
-  }
 
   const payload = {
     status: group.status,
@@ -53,6 +48,8 @@ function flushGroup(tabId: number, reason: string) {
     lastAt: new Date(group.lastAtMs).toISOString(),
     savedAt: new Date().toISOString(),
     tabId,
+    arrivalDate: group.arrivalDate,
+    departureDate: group.departureDate,
     reason
   }
 
@@ -65,18 +62,6 @@ function flushGroup(tabId: number, reason: string) {
   groupsByTab.delete(tabId)
 }
 
-function scheduleFlush(tabId: number) {
-  const group = groupsByTab.get(tabId)
-  if (!group) return
-
-  if (group.flushTimer) clearTimeout(group.flushTimer)
-
-  // wait slightly longer than window so we don't flush mid-burst
-  group.flushTimer = setTimeout(() => {
-    flushGroup(tabId, "idle-timeout")
-  }, GROUP_WINDOW_MS + 100) as unknown as number
-}
-
 chrome.runtime.onMessage.addListener((msg, sender) => {
   if (msg?.type !== "HILTON_SAVE_CAPTURE") return
 
@@ -85,6 +70,8 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
 
   const status = msg?.payload?.status
   const arr = msg?.payload?.shopMultiPropAvail
+  const arrivalDate = msg?.payload?.meta?.arrivalDate
+  const departureDate = msg?.payload?.meta?.departureDate
 
   // Only care about status 200 + array
   if (status !== 200) return
@@ -93,29 +80,61 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
   const now = Date.now()
   const existing = groupsByTab.get(tabId)
 
-  // If within 1s -> same group, append
-  if (existing && now - existing.lastAtMs <= GROUP_WINDOW_MS) {
+  const matchesDates =
+    existing?.arrivalDate === arrivalDate &&
+    existing?.departureDate === departureDate
+
+  // If dates match -> same group, append and save
+  if (existing && matchesDates) {
     existing.items.push(...arr)
     existing.lastAtMs = now
-    scheduleFlush(tabId)
+    chrome.storage.local.set({
+      "hilton-last-capture": {
+        status: existing.status,
+        shopMultiPropAvail: existing.items,
+        count: existing.items.length,
+        startedAt: new Date(existing.startedAtMs).toISOString(),
+        lastAt: new Date(existing.lastAtMs).toISOString(),
+        savedAt: new Date().toISOString(),
+        tabId,
+        arrivalDate: existing.arrivalDate,
+        departureDate: existing.departureDate,
+        reason: "date-match"
+      }
+    })
     return
   }
 
   // Otherwise flush old group (if any) and start a new one
   if (existing) {
-    flushGroup(tabId, "new-burst")
+    flushGroup(tabId, "date-change")
   }
 
   const group: CaptureGroup = {
     tabId,
     status,
     items: [...arr],
+    arrivalDate,
+    departureDate,
     startedAtMs: now,
     lastAtMs: now
   }
 
   groupsByTab.set(tabId, group)
-  scheduleFlush(tabId)
+  chrome.storage.local.set({
+    "hilton-last-capture": {
+      status: group.status,
+      shopMultiPropAvail: group.items,
+      count: group.items.length,
+      startedAt: new Date(group.startedAtMs).toISOString(),
+      lastAt: new Date(group.lastAtMs).toISOString(),
+      savedAt: new Date().toISOString(),
+      tabId,
+      arrivalDate: group.arrivalDate,
+      departureDate: group.departureDate,
+      reason: "new-group"
+    }
+  })
 })
 
 // ----------------------------
