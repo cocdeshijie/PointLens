@@ -18,7 +18,7 @@ const PLACEHOLDER_CLASS = "award-viewer-hilton-price-placeholder"
 const PLACEHOLDER_ICON_CLASS = "award-viewer-hilton-cpp-icon"
 const PLACEHOLDER_VALUE_CLASS = "award-viewer-hilton-cpp-value"
 const PLACEHOLDER_STYLE_ID = "award-viewer-hilton-placeholder-style"
-const LOCAL_STORAGE_KEY = "shopMultiPropAvail"
+const HILTON_STORAGE_KEY = "hilton-last-capture"
 
 type HiltonRateInfo = {
   cpp?: number
@@ -30,7 +30,6 @@ type HiltonRateInfo = {
 
 const iconRoots = new WeakMap<HTMLElement, ReturnType<typeof createRoot>>()
 let hiltonRatesByHotel = new Map<string, HiltonRateInfo>()
-let lastLocalStorageSnapshot: string | null = null
 let hiltonValueSettings = DEFAULT_HILTON_VALUE_SETTINGS
 
 function inject(src: string) {
@@ -107,17 +106,15 @@ const extractNumber = (value: unknown) => {
   return undefined
 }
 
-const buildRatesFromLocalStorage = (raw: string | null) => {
+const buildRatesFromStorage = (raw: unknown) => {
   if (!raw) {
     return new Map<string, HiltonRateInfo>()
   }
 
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(raw)
-  } catch {
-    return new Map<string, HiltonRateInfo>()
-  }
+  const parsed = raw as
+    | { shopMultiPropAvail?: unknown[] }
+    | unknown[]
+    | Record<string, unknown>
 
   const items: unknown[] = Array.isArray(parsed)
     ? parsed
@@ -175,13 +172,17 @@ const buildRatesFromLocalStorage = (raw: string | null) => {
   return map
 }
 
-const refreshRatesFromLocalStorage = () => {
-  const current = window.localStorage.getItem(LOCAL_STORAGE_KEY)
-  if (current === lastLocalStorageSnapshot) {
+const refreshRatesFromStorage = async () => {
+  if (!chrome?.storage?.local) {
     return
   }
-  lastLocalStorageSnapshot = current
-  hiltonRatesByHotel = buildRatesFromLocalStorage(current)
+
+  const stored = await chrome.storage.local.get([HILTON_STORAGE_KEY])
+  const payload = stored[HILTON_STORAGE_KEY] as
+    | { shopMultiPropAvail?: unknown[] }
+    | undefined
+
+  hiltonRatesByHotel = buildRatesFromStorage(payload)
   updateExistingPlaceholders()
 }
 
@@ -509,15 +510,15 @@ const updateExistingPlaceholders = () => {
 function startPlaceholderObserver() {
   if (!document.body) return
   refreshPlaceholders()
-  refreshRatesFromLocalStorage()
+  void refreshRatesFromStorage()
   void refreshValueSettings()
   const observer = new MutationObserver(() => {
     refreshPlaceholders()
   })
   observer.observe(document.body, { childList: true, subtree: true })
 
-  window.setInterval(refreshRatesFromLocalStorage, 1500)
   chrome?.storage?.onChanged?.addListener(() => {
+    void refreshRatesFromStorage()
     void refreshValueSettings()
   })
 }
