@@ -6,8 +6,8 @@ export type HiltonValueSettings = {
 }
 
 export const DEFAULT_HILTON_VALUE_SETTINGS: HiltonValueSettings = {
-  goodValueThreshold: 0.7,
-  badValueThreshold: 0.5
+  goodValueThreshold: 0.6,
+  badValueThreshold: 0.45
 }
 
 const coerceNumber = (value: unknown, fallback: number) => {
