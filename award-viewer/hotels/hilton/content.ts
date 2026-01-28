@@ -29,6 +29,7 @@ type HiltonRateInfo = {
   currency?: string
   ratePlanName?: string
   rewardStatus?: "available" | "unavailable"
+  stayNights?: number
 }
 
 const iconRoots = new WeakMap<HTMLElement, ReturnType<typeof createRoot>>()
@@ -224,7 +225,8 @@ const buildRatesFromStorage = (raw: unknown) => {
         amountAfterTax: normalizedAmountAfterTax,
         currency,
         ratePlanName: ratePlanName as string | undefined,
-        rewardStatus
+        rewardStatus,
+        stayNights
       })
       continue
     }
@@ -238,7 +240,8 @@ const buildRatesFromStorage = (raw: unknown) => {
       amountAfterTax: normalizedAmountAfterTax,
       currency,
       ratePlanName: ratePlanName as string | undefined,
-      rewardStatus
+      rewardStatus,
+      stayNights
     })
   }
 
@@ -328,7 +331,8 @@ const buildTooltipContent = (info: HiltonRateInfo, showCpp: boolean) => {
   headerLabel.textContent = "Lowest cash"
   const headerValue = document.createElement("div")
   headerValue.className = "award-viewer-tooltip-cell award-viewer-tooltip-cell--value"
-  headerValue.textContent = "Price"
+  headerValue.textContent =
+    info.stayNights !== undefined && info.stayNights > 1 ? "Price per night" : "Price"
   headerRow.appendChild(headerLabel)
   headerRow.appendChild(headerValue)
   grid.appendChild(headerRow)
