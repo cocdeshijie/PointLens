@@ -135,20 +135,51 @@ const extractNumber = (value: unknown) => {
   return undefined
 }
 
+const computeStayNights = (arrivalDate?: string, departureDate?: string) => {
+  if (!arrivalDate || !departureDate) {
+    return undefined
+  }
+
+  const arrivalTime = Date.parse(arrivalDate)
+  const departureTime = Date.parse(departureDate)
+
+  if (!Number.isFinite(arrivalTime) || !Number.isFinite(departureTime)) {
+    return undefined
+  }
+
+  const diffMs = departureTime - arrivalTime
+  const nights = Math.round(diffMs / (1000 * 60 * 60 * 24))
+
+  return nights > 0 ? nights : undefined
+}
+
 const buildRatesFromStorage = (raw: unknown) => {
   if (!raw) {
     return new Map<string, HiltonRateInfo>()
   }
 
   const parsed = raw as
-    | { shopMultiPropAvail?: unknown[] }
+    | { shopMultiPropAvail?: unknown[]; arrivalDate?: unknown; departureDate?: unknown }
     | unknown[]
     | Record<string, unknown>
 
+  const payload =
+    parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as {
+          shopMultiPropAvail?: unknown[]
+          arrivalDate?: unknown
+          departureDate?: unknown
+        })
+      : undefined
+  const stayNights = computeStayNights(
+    typeof payload?.arrivalDate === "string" ? payload.arrivalDate : undefined,
+    typeof payload?.departureDate === "string" ? payload.departureDate : undefined
+  )
+
   const items: unknown[] = Array.isArray(parsed)
     ? parsed
-    : Array.isArray((parsed as { shopMultiPropAvail?: unknown[] })?.shopMultiPropAvail)
-      ? (parsed as { shopMultiPropAvail: unknown[] }).shopMultiPropAvail
+    : Array.isArray(payload?.shopMultiPropAvail)
+      ? payload.shopMultiPropAvail
       : parsed && typeof parsed === "object" && "ctyhocn" in parsed
         ? [parsed]
         : []
@@ -173,8 +204,12 @@ const buildRatesFromStorage = (raw: unknown) => {
       hhonors === null || hhonors === undefined ? "unavailable" : "available"
 
     const amountAfterTax = extractNumber(lowest?.amountAfterTax)
+    const normalizedAmountAfterTax =
+      amountAfterTax !== undefined && stayNights && stayNights > 1
+        ? amountAfterTax / stayNights
+        : amountAfterTax
     const rateAmount = extractNumber(lowest?.rateAmount)
-    const cash = amountAfterTax ?? rateAmount
+    const cash = normalizedAmountAfterTax ?? rateAmount
     const points = extractNumber(hhonors?.dailyRmPointsRate)
     const currency = record.currencyCode as string | undefined
     const ratePlanName =
@@ -186,7 +221,7 @@ const buildRatesFromStorage = (raw: unknown) => {
         cash,
         points,
         rateAmount,
-        amountAfterTax,
+        amountAfterTax: normalizedAmountAfterTax,
         currency,
         ratePlanName: ratePlanName as string | undefined,
         rewardStatus
@@ -200,7 +235,7 @@ const buildRatesFromStorage = (raw: unknown) => {
       cash,
       points,
       rateAmount,
-      amountAfterTax,
+      amountAfterTax: normalizedAmountAfterTax,
       currency,
       ratePlanName: ratePlanName as string | undefined,
       rewardStatus
@@ -217,7 +252,7 @@ const refreshRatesFromStorage = async () => {
 
   const stored = await chrome.storage.local.get([HILTON_STORAGE_KEY])
   const payload = stored[HILTON_STORAGE_KEY] as
-    | { shopMultiPropAvail?: unknown[] }
+    | { shopMultiPropAvail?: unknown[]; arrivalDate?: unknown; departureDate?: unknown }
     | undefined
 
   hiltonRatesByHotel = buildRatesFromStorage(payload)
