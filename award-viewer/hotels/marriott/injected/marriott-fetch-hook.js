@@ -80,20 +80,15 @@
       body: parsed
     })
 
-    const edges = parsed?.data?.search?.lowestAvailableRates?.searchByGeolocation
-      ?.edges
-    if (Array.isArray(edges)) {
-      const simplified = edges.map((edge) => ({
-        property: edge?.node?.property ?? null,
-        rates: edge?.node?.rates ?? null
-      }))
+    const searchByGeolocation =
+      parsed?.data?.search?.lowestAvailableRates?.searchByGeolocation
+    if (searchByGeolocation) {
       try {
         localStorage.setItem(
           "award-viewer:marriott-last-capture",
           JSON.stringify({
             savedAt: new Date().toISOString(),
-            count: simplified.length,
-            edges: simplified
+            searchByGeolocation
           })
         )
       } catch (error) {
