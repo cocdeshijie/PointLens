@@ -36,10 +36,12 @@
     "web_accessible_resources": [
       {
         "resources": [
-          "hotels/hilton/injected/hilton-fetch-hook.js"
+          "hotels/hilton/injected/hilton-fetch-hook.js",
+          "hotels/marriott/injected/marriott-fetch-hook.js"
         ],
         "matches": [
-          "https://www.hilton.com/*"
+          "https://www.hilton.com/*",
+          "https://www.marriott.com/*"
         ]
       }
     ]
