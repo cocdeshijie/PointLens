@@ -76,7 +76,8 @@ function requestPageReplay(p: Pending) {
     payload: {
       url: p.url,
       bodyText,
-      operationName: p.operationName
+      operationName: p.operationName,
+      headers: p.headers
     }
   })
 }

@@ -36,15 +36,33 @@
     return JSON.stringify(obj)
   }
 
-  async function doReplay(replayUrl, bodyText, label) {
+  function buildReplayHeaders(originalHeaders) {
+    const headers = {}
+    const ignored = new Set(["content-length", "host"])
+
+    if (originalHeaders && typeof originalHeaders === "object") {
+      for (const [key, value] of Object.entries(originalHeaders)) {
+        if (!key) continue
+        const normalizedKey = key.toLowerCase()
+        if (ignored.has(normalizedKey)) continue
+        if (typeof value === "string" && value.length > 0) {
+          headers[key] = value
+        }
+      }
+    }
+
+    headers["content-type"] = "application/json"
+    headers[REPLAY_MARKER_HEADER] = "1"
+
+    return headers
+  }
+
+  async function doReplay(replayUrl, bodyText, label, originalHeaders) {
     const patchedBody = patchBodyForClusters(bodyText)
     const res = await fetch(replayUrl, {
       method: "POST",
       credentials: "include",
-      headers: {
-        "content-type": "application/json",
-        [REPLAY_MARKER_HEADER]: "1"
-      },
+      headers: buildReplayHeaders(originalHeaders),
       body: patchedBody
     })
 
@@ -69,12 +87,12 @@
     const data = event.data
 
     if (data?.__AV_MARRIOTT_DO_REPLAY__) {
-      const { url, bodyText } = data.payload || {}
+      const { url, bodyText, headers } = data.payload || {}
       if (!url || !bodyText) return
 
       ;(async () => {
         try {
-          await doReplay(url, bodyText, "cluster-replay")
+          await doReplay(url, bodyText, "cluster-replay", headers)
         } catch (error) {
           console.error("[Marriott Replay] failed", error)
         }
