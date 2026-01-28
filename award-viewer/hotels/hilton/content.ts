@@ -95,6 +95,20 @@ const formatPoints = (points?: number) => {
   return new Intl.NumberFormat().format(points)
 }
 
+const isStandardReward = (ratePlanName?: string) => {
+  if (!ratePlanName) {
+    return false
+  }
+  return ratePlanName.toLowerCase().includes("standard room reward")
+}
+
+const isPremiumReward = (ratePlanName?: string) => {
+  if (!ratePlanName) {
+    return false
+  }
+  return ratePlanName.toLowerCase().includes("premium room reward")
+}
+
 const extractNumber = (value: unknown) => {
   if (typeof value === "number" && Number.isFinite(value)) {
     return value
@@ -248,7 +262,7 @@ const buildTooltipCell = (label: string, value: string) => {
   return row
 }
 
-const buildTooltipContent = (info: HiltonRateInfo) => {
+const buildTooltipContent = (info: HiltonRateInfo, showCpp: boolean) => {
   const wrapper = document.createElement("div")
   wrapper.className = "award-viewer-tooltip-content"
 
@@ -296,10 +310,16 @@ const buildTooltipContent = (info: HiltonRateInfo) => {
   grid.appendChild(divider)
 
   const pointsLabel = formatPoints(info.points)
-  const cppLabel = formatCpp(info.cpp)
+  const cppLabel = showCpp ? formatCpp(info.cpp) : ""
   if (pointsLabel) {
+    const pointLabelText = isPremiumReward(info.ratePlanName)
+      ? "Premium Room Reward"
+      : "Points"
     grid.appendChild(
-      buildTooltipCell("Points", cppLabel ? `${pointsLabel} (${cppLabel})` : pointsLabel)
+      buildTooltipCell(
+        pointLabelText,
+        cppLabel ? `${pointsLabel} (${cppLabel})` : `${pointsLabel} pts`
+      )
     )
   }
 
@@ -349,13 +369,14 @@ function ensurePlaceholderStyles() {
       color: #111827;
       border: 1px solid #cbd5e1;
       font-size: 11px;
-      padding: 8px;
+      padding: 6px;
       border-radius: 4px;
       white-space: normal;
       transition: opacity 0.15s ease, transform 0.15s ease;
       z-index: 9999;
       box-shadow: 0 4px 12px rgba(15, 23, 42, 0.12);
-      min-width: 320px;
+      min-width: 240px;
+      max-width: 280px;
     }
     .${PLACEHOLDER_ICON_CLASS}:hover .award-viewer-tooltip {
       opacity: 1;
@@ -378,7 +399,7 @@ function ensurePlaceholderStyles() {
       display: contents;
     }
     .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-cell {
-      white-space: nowrap;
+      white-space: normal;
     }
     .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-cell--label {
       color: #475569;
@@ -518,15 +539,31 @@ const updatePlaceholderText = (placeholder: HTMLElement) => {
   const info = hiltonRatesByHotel.get(hotelId)
   const { iconWrapper, valueEl } = ensurePlaceholderContents(placeholder)
   const tooltip = iconWrapper.querySelector<HTMLElement>(".award-viewer-tooltip")
-  const displayCpp = info?.cpp
+  const showCpp = isStandardReward(info?.ratePlanName)
+  const displayCpp = showCpp ? info?.cpp : undefined
 
   updateValueClass(valueEl, displayCpp)
 
-  if (info?.cpp !== undefined && Number.isFinite(info.cpp)) {
+  if (showCpp && info?.cpp !== undefined && Number.isFinite(info.cpp)) {
     placeholder.classList.remove("is-loading")
     valueEl.textContent = formatCpp(displayCpp)
     if (tooltip) {
-      tooltip.replaceChildren(buildTooltipContent(info))
+      tooltip.replaceChildren(buildTooltipContent(info, true))
+    }
+    return
+  }
+
+  if (info?.points !== undefined && Number.isFinite(info.points)) {
+    placeholder.classList.remove("is-loading")
+    valueEl.classList.remove("is-good", "is-bad", "is-mid")
+    const pointsText = formatPoints(info.points)
+    if (isPremiumReward(info?.ratePlanName)) {
+      valueEl.textContent = `Premium Room Reward: ${pointsText} pts`
+    } else {
+      valueEl.textContent = `${pointsText} pts`
+    }
+    if (tooltip) {
+      tooltip.replaceChildren(buildTooltipContent(info, false))
     }
     return
   }
