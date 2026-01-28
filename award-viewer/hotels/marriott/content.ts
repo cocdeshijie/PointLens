@@ -28,6 +28,7 @@ type MarriottRateInfo = {
   cashTotal?: number
   points?: number
   currency?: string
+  stayNights?: number
 }
 
 const iconRoots = new WeakMap<HTMLElement, ReturnType<typeof createRoot>>()
@@ -265,6 +266,18 @@ const buildRatesFromStorage = (raw: unknown) => {
       return (fees ?? 0) + (taxes ?? 0)
     })()
     const cashTotal = extractNumber(standardLowestAverageRate?.totalAmount)
+    const stayNights = (() => {
+      if (standardRate?.lengthOfStay !== undefined) {
+        return extractNumber(standardRate.lengthOfStay)
+      }
+      if (!Array.isArray(rates)) {
+        return extractNumber((rates as Record<string, unknown>).lengthOfStay)
+      }
+      const rateWithStay = rates.find(
+        (rate) => extractNumber(rate?.lengthOfStay) !== undefined
+      )
+      return rateWithStay ? extractNumber(rateWithStay.lengthOfStay) : undefined
+    })()
 
     const currency =
       (standardLowestAverageRate?.amount as Record<string, unknown> | undefined)
@@ -282,6 +295,7 @@ const buildRatesFromStorage = (raw: unknown) => {
       cashBase,
       cashFees,
       cashTotal,
+      stayNights,
       points,
       currency,
       cpp: computeCpp(cashForCpp, points)
@@ -493,7 +507,8 @@ const buildTooltipContent = (info: MarriottRateInfo) => {
     headerLabel.textContent = "Lowest cash"
     const headerValue = document.createElement("div")
     headerValue.className = "award-viewer-tooltip-cell award-viewer-tooltip-cell--value"
-    headerValue.textContent = "Price per night"
+    headerValue.textContent =
+      info.stayNights !== undefined && info.stayNights > 1 ? "Price per night" : "Price"
     headerRow.appendChild(headerLabel)
     headerRow.appendChild(headerValue)
     grid.appendChild(headerRow)
@@ -525,8 +540,8 @@ const buildTooltipContent = (info: MarriottRateInfo) => {
     const cppLabel = formatCpp(info.cpp)
     if (pointsLabel) {
       addRow(
-        "Standard Room Award",
-        cppLabel ? `${pointsLabel} (${cppLabel})` : `${pointsLabel} pts`
+        "Points",
+        cppLabel ? `${pointsLabel} pts (${cppLabel})` : `${pointsLabel} pts`
       )
     }
   }
