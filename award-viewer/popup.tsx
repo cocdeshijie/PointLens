@@ -67,7 +67,7 @@ function IndexPopup() {
     void checkActiveTab()
   }, [])
 
-  const siteToShow = forceHome ? null : activeSite ?? selectedSite
+  const siteToShow = forceHome ? null : selectedSite ?? activeSite
   const selectedSiteConfig =
     siteToShow === null
       ? null
