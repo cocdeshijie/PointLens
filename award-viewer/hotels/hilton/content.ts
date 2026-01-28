@@ -24,6 +24,8 @@ type HiltonRateInfo = {
   cpp?: number
   cash?: number
   points?: number
+  rateAmount?: number
+  amountAfterTax?: number
   currency?: string
   ratePlanName?: string
 }
@@ -141,8 +143,9 @@ const buildRatesFromStorage = (raw: unknown) => {
     const lowest = summary?.lowest as Record<string, unknown> | undefined
     const hhonors = summary?.hhonors as Record<string, unknown> | undefined
 
-    const cash =
-      extractNumber(lowest?.amountAfterTax) ?? extractNumber(lowest?.rateAmount)
+    const amountAfterTax = extractNumber(lowest?.amountAfterTax)
+    const rateAmount = extractNumber(lowest?.rateAmount)
+    const cash = amountAfterTax ?? rateAmount
     const points = extractNumber(hhonors?.dailyRmPointsRate)
     const currency = record.currencyCode as string | undefined
     const ratePlanName =
@@ -153,6 +156,8 @@ const buildRatesFromStorage = (raw: unknown) => {
       map.set(hotelId, {
         cash,
         points,
+        rateAmount,
+        amountAfterTax,
         currency,
         ratePlanName: ratePlanName as string | undefined
       })
@@ -164,6 +169,8 @@ const buildRatesFromStorage = (raw: unknown) => {
       cpp,
       cash,
       points,
+      rateAmount,
+      amountAfterTax,
       currency,
       ratePlanName: ratePlanName as string | undefined
     })
@@ -222,6 +229,82 @@ const updateValueClass = (valueEl: HTMLElement, cpp?: number) => {
 
 const setTooltipText = (tooltip: HTMLElement, text: string) => {
   tooltip.textContent = text
+}
+
+const buildTooltipCell = (label: string, value: string) => {
+  const row = document.createElement("div")
+  row.className = "award-viewer-tooltip-row"
+
+  const labelCell = document.createElement("div")
+  labelCell.className = "award-viewer-tooltip-cell award-viewer-tooltip-cell--label"
+  labelCell.textContent = label
+
+  const valueCell = document.createElement("div")
+  valueCell.className = "award-viewer-tooltip-cell award-viewer-tooltip-cell--value"
+  valueCell.textContent = value
+
+  row.appendChild(labelCell)
+  row.appendChild(valueCell)
+  return row
+}
+
+const buildTooltipContent = (info: HiltonRateInfo) => {
+  const wrapper = document.createElement("div")
+  wrapper.className = "award-viewer-tooltip-content"
+
+  const header = document.createElement("div")
+  header.className =
+    "award-viewer-tooltip-grid award-viewer-tooltip-row award-viewer-tooltip-header"
+  const headerLabel = document.createElement("div")
+  headerLabel.className = "award-viewer-tooltip-cell award-viewer-tooltip-cell--label"
+  headerLabel.textContent = "Lowest"
+  const headerValue = document.createElement("div")
+  headerValue.className = "award-viewer-tooltip-cell award-viewer-tooltip-cell--value"
+  headerValue.textContent = "Price"
+  header.appendChild(headerLabel)
+  header.appendChild(headerValue)
+  wrapper.appendChild(header)
+
+  const grid = document.createElement("div")
+  grid.className = "award-viewer-tooltip-grid"
+
+  const priceLabel = formatCash(info.rateAmount ?? info.cash, info.currency)
+  const totalLabel = formatCash(info.amountAfterTax ?? info.cash, info.currency)
+  const feeValue =
+    info.rateAmount !== undefined &&
+    info.amountAfterTax !== undefined &&
+    Number.isFinite(info.rateAmount) &&
+    Number.isFinite(info.amountAfterTax)
+      ? Math.max(info.amountAfterTax - info.rateAmount, 0)
+      : undefined
+  const feeLabel = formatCash(feeValue, info.currency)
+
+  if (priceLabel) {
+    grid.appendChild(buildTooltipCell("Price", priceLabel))
+  }
+
+  if (feeValue !== undefined) {
+    grid.appendChild(buildTooltipCell("Fees", feeLabel))
+  }
+
+  if (totalLabel) {
+    grid.appendChild(buildTooltipCell("Total", totalLabel))
+  }
+
+  const divider = document.createElement("div")
+  divider.className = "award-viewer-tooltip-divider"
+  grid.appendChild(divider)
+
+  const pointsLabel = formatPoints(info.points)
+  const cppLabel = formatCpp(info.cpp)
+  if (pointsLabel) {
+    grid.appendChild(
+      buildTooltipCell("Points", cppLabel ? `${pointsLabel} (${cppLabel})` : pointsLabel)
+    )
+  }
+
+  wrapper.appendChild(grid)
+  return wrapper
 }
 
 function ensurePlaceholderStyles() {
@@ -285,7 +368,7 @@ function ensurePlaceholderStyles() {
     }
     .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-grid {
       display: grid;
-      grid-template-columns: max-content minmax(140px, auto) minmax(140px, auto);
+      grid-template-columns: max-content minmax(160px, auto);
       column-gap: 12px;
       row-gap: 2px;
       align-items: center;
@@ -304,10 +387,6 @@ function ensurePlaceholderStyles() {
       font-weight: 400;
       color: #0f172a;
       text-align: left;
-    }
-    .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-cell--high {
-      border-left: 1px solid #e2e8f0;
-      padding-left: 8px;
     }
     .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-divider {
       grid-column: 1 / -1;
@@ -447,14 +526,7 @@ const updatePlaceholderText = (placeholder: HTMLElement) => {
     placeholder.classList.remove("is-loading")
     valueEl.textContent = formatCpp(displayCpp)
     if (tooltip) {
-      const cashLabel = formatCash(info.cash, info.currency)
-      const pointsLabel = formatPoints(info.points)
-      const ratePlanLabel = info.ratePlanName ? ` • ${info.ratePlanName}` : ""
-      const detailText =
-        cashLabel && pointsLabel
-          ? `${cashLabel} / ${pointsLabel} points${ratePlanLabel}`
-          : "CPP derived from Hilton rewards"
-      setTooltipText(tooltip, detailText)
+      tooltip.replaceChildren(buildTooltipContent(info))
     }
     return
   }
