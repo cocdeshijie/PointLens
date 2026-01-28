@@ -293,7 +293,7 @@ const buildTooltipContent = (info: HiltonRateInfo, showCpp: boolean) => {
   headerLabel.textContent = "Lowest cash"
   const headerValue = document.createElement("div")
   headerValue.className = "award-viewer-tooltip-cell award-viewer-tooltip-cell--value"
-  headerValue.textContent = "Base"
+  headerValue.textContent = "Price"
   headerRow.appendChild(headerLabel)
   headerRow.appendChild(headerValue)
   grid.appendChild(headerRow)
@@ -311,7 +311,7 @@ const buildTooltipContent = (info: HiltonRateInfo, showCpp: boolean) => {
   const feeLabel = formatUsdAmount(feeValue)
 
   if (priceLabel) {
-    grid.appendChild(buildTooltipCell("Price", priceLabel))
+    grid.appendChild(buildTooltipCell("Base", priceLabel))
   }
 
   if (feeValue !== undefined) {
