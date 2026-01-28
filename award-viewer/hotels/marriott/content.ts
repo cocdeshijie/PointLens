@@ -292,6 +292,15 @@ const ensurePlaceholderStyles = () => {
       font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
       overflow: visible;
     }
+    .${PLACEHOLDER_CLASS} {
+      position: relative;
+      z-index: 3;
+    }
+    .price-container,
+    .price-sub-section,
+    .property-card-price-component {
+      overflow: visible;
+    }
     .${PLACEHOLDER_ICON_CLASS} {
       position: relative;
       display: inline-flex;
