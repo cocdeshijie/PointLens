@@ -290,11 +290,13 @@ const ensurePlaceholderStyles = () => {
       gap: 8px;
       margin-top: 8px;
       font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+      overflow: visible;
     }
     .${PLACEHOLDER_ICON_CLASS} {
       position: relative;
       display: inline-flex;
       align-items: center;
+      z-index: 2;
     }
     .${PLACEHOLDER_ICON_CLASS} .award-viewer-icon {
       display: inline-flex;
@@ -323,12 +325,15 @@ const ensurePlaceholderStyles = () => {
       font-size: 12px;
       color: #1f2937;
       opacity: 0;
+      visibility: hidden;
       pointer-events: none;
       transform: translateY(-4px);
       transition: opacity 120ms ease, transform 120ms ease;
     }
-    .${PLACEHOLDER_ICON_CLASS}:hover .award-viewer-tooltip {
+    .${PLACEHOLDER_ICON_CLASS}:hover .award-viewer-tooltip,
+    .${PLACEHOLDER_ICON_CLASS}:focus-within .award-viewer-tooltip {
       opacity: 1;
+      visibility: visible;
       transform: translateY(0);
     }
     .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-title {
