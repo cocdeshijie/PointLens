@@ -96,6 +96,18 @@ const formatPoints = (points?: number) => {
   return new Intl.NumberFormat().format(points)
 }
 
+const formatUsdAmount = (amount?: number) => {
+  if (amount === undefined || !Number.isFinite(amount)) {
+    return ""
+  }
+  return new Intl.NumberFormat(undefined, {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  }).format(amount)
+}
+
 const isStandardReward = (ratePlanName?: string) => {
   if (!ratePlanName) {
     return false
@@ -271,12 +283,17 @@ const buildTooltipContent = (info: HiltonRateInfo, showCpp: boolean) => {
   const wrapper = document.createElement("div")
   wrapper.className = "award-viewer-tooltip-content"
 
+  const title = document.createElement("div")
+  title.className = "award-viewer-tooltip-title"
+  title.textContent = "Lowest"
+  wrapper.appendChild(title)
+
   const header = document.createElement("div")
   header.className =
     "award-viewer-tooltip-grid award-viewer-tooltip-row award-viewer-tooltip-header"
   const headerLabel = document.createElement("div")
   headerLabel.className = "award-viewer-tooltip-cell award-viewer-tooltip-cell--label"
-  headerLabel.textContent = "Lowest"
+  headerLabel.textContent = ""
   const headerValue = document.createElement("div")
   headerValue.className = "award-viewer-tooltip-cell award-viewer-tooltip-cell--value"
   headerValue.textContent = "Price"
@@ -287,8 +304,8 @@ const buildTooltipContent = (info: HiltonRateInfo, showCpp: boolean) => {
   const grid = document.createElement("div")
   grid.className = "award-viewer-tooltip-grid"
 
-  const priceLabel = formatCash(info.rateAmount ?? info.cash, info.currency)
-  const totalLabel = formatCash(info.amountAfterTax ?? info.cash, info.currency)
+  const priceLabel = formatUsdAmount(info.rateAmount ?? info.cash)
+  const totalLabel = formatUsdAmount(info.amountAfterTax ?? info.cash)
   const feeValue =
     info.rateAmount !== undefined &&
     info.amountAfterTax !== undefined &&
@@ -296,7 +313,7 @@ const buildTooltipContent = (info: HiltonRateInfo, showCpp: boolean) => {
     Number.isFinite(info.amountAfterTax)
       ? Math.max(info.amountAfterTax - info.rateAmount, 0)
       : undefined
-  const feeLabel = formatCash(feeValue, info.currency)
+  const feeLabel = formatUsdAmount(feeValue)
 
   if (priceLabel) {
     grid.appendChild(buildTooltipCell("Price", priceLabel))
@@ -390,7 +407,7 @@ function ensurePlaceholderStyles() {
     .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-content {
       display: flex;
       flex-direction: column;
-      gap: 8px;
+      gap: 6px;
     }
     .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-grid {
       display: grid;
@@ -428,6 +445,13 @@ function ensurePlaceholderStyles() {
     }
     .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-header .award-viewer-tooltip-cell--label {
       color: transparent;
+    }
+    .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-title {
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: #475569;
     }
     .${PLACEHOLDER_VALUE_CLASS} {
       display: inline-flex;
