@@ -4,6 +4,7 @@ type Pending = {
   tabId: number
   bodyText?: string
   bodyJson?: unknown
+  headers?: Record<string, string>
   operationName?: string | null
   ts: number
 }
@@ -43,6 +44,21 @@ function bytesToText(
   }
 }
 
+function normalizeHeaders(
+  hs?: chrome.webRequest.HttpHeader[]
+): { headers: Record<string, string> } {
+  const out: Record<string, string> = {}
+
+  for (const h of hs ?? []) {
+    if (!h?.name) continue
+    const name = h.name
+    const value = (h.value ?? "").toString()
+    out[name] = value
+  }
+
+  return { headers: out }
+}
+
 function hasReplayMarker(hs?: chrome.webRequest.HttpHeader[]): boolean {
   for (const h of hs ?? []) {
     if (!h?.name) continue
@@ -70,6 +86,7 @@ function tryEmit(requestId: string) {
   if (!p) return
 
   if (p.operationName !== WANT_OP) return
+  if (!p.headers) return
   if (!p.bodyJson && !p.bodyText) return
 
   requestPageReplay(p)
@@ -138,6 +155,9 @@ export const registerMarriottListeners = () => {
         pending.delete(details.requestId)
         return
       }
+
+      const { headers } = normalizeHeaders(details.requestHeaders)
+      request.headers = headers
 
       tryEmit(details.requestId)
     },
