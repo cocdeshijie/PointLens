@@ -303,8 +303,9 @@ const ensurePlaceholderStyles = () => {
     }
     .price-container,
     .price-sub-section,
-    .property-card-price-component {
-      overflow: visible;
+    .property-card-price-component,
+    .la-dUdY .price-sub-section {
+      overflow: visible !important;
     }
     .${PLACEHOLDER_ICON_CLASS} {
       position: relative;
