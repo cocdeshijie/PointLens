@@ -334,8 +334,8 @@ const buildRatesFromStorage = (raw: unknown) => {
     })()
 
     const currency =
-      (standardLowestAverageRate?.amount as Record<string, unknown> | undefined)
-        ?.currency ??
+      ((standardLowestAverageRate?.amount as Record<string, unknown> | undefined)
+        ?.currency as string | undefined) ??
       (!Array.isArray(rates) ? (rates.currency as string | undefined) : undefined) ??
       (property?.currency as string | undefined) ??
       ((property?.basicInformation as Record<string, unknown> | undefined)
@@ -502,6 +502,94 @@ const formatPointsK = (points?: number) => {
   return String(Math.round(points))
 }
 
+// The info tooltip is CSS-anchored above-right of its icon, which clips off the
+// top/side of the viewport for cards near an edge (list + map sidebar). Position
+// it as a viewport-fixed box on hover: centered over the icon, flipped below when
+// there's no room above, and clamped inside the viewport horizontally.
+// One shared tooltip lives directly under <body> so it escapes the transformed /
+// overflow:hidden ancestors of the InfoWindow and modal (a position:fixed
+// descendant of a transformed element is positioned relative to THAT element,
+// not the viewport — which mis-placed the tooltip in the popups). On hover we
+// clone the icon's stored content into it and position it against the viewport.
+let sharedTooltip: HTMLElement | null = null
+// The icon the tooltip currently belongs to. Hide is driven by the real pointer
+// POSITION (mousemove vs the icon's rect), NOT by mouseout/mouseleave events —
+// the popups re-render the badge under the cursor, which fires spurious
+// mouseout/mouseover and made the tooltip flicker. Position-based hide ignores
+// DOM churn and only reacts to genuine pointer movement.
+let activeTipIcon: HTMLElement | null = null
+const hideSharedTooltip = () => {
+  if (sharedTooltip) sharedTooltip.style.opacity = "0"
+  activeTipIcon = null
+}
+const positionSharedTooltip = (icon: HTMLElement) => {
+  const tip = getSharedTooltip()
+  const ir = icon.getBoundingClientRect()
+  const tw = tip.offsetWidth || 260
+  const th = tip.offsetHeight || 120
+  const m = 8
+  let left = ir.left + ir.width / 2 - tw / 2
+  left = Math.max(m, Math.min(left, window.innerWidth - tw - m))
+  let top = ir.top - th - m
+  if (top < m) top = ir.bottom + m // flip below when no room above
+  if (top + th > window.innerHeight - m) {
+    top = Math.max(m, window.innerHeight - th - m)
+  }
+  tip.style.left = `${left}px`
+  tip.style.top = `${top}px`
+}
+const getSharedTooltip = () => {
+  if (sharedTooltip && sharedTooltip.isConnected) return sharedTooltip
+  sharedTooltip = document.createElement("div")
+  sharedTooltip.className = "award-viewer-tooltip award-viewer-shared-tooltip"
+  document.body.appendChild(sharedTooltip)
+  document.addEventListener(
+    "mousemove",
+    (e) => {
+      if (!activeTipIcon) return
+      const r = activeTipIcon.getBoundingClientRect()
+      if (r.width === 0 && r.height === 0) {
+        hideSharedTooltip() // icon gone
+        return
+      }
+      const pad = 6
+      const inside =
+        e.clientX >= r.left - pad &&
+        e.clientX <= r.right + pad &&
+        e.clientY >= r.top - pad &&
+        e.clientY <= r.bottom + pad
+      if (!inside) hideSharedTooltip()
+    },
+    true
+  )
+  window.addEventListener("scroll", hideSharedTooltip, true)
+  return sharedTooltip
+}
+
+const attachSmartTooltip = (iconWrapper: HTMLElement) => {
+  if (iconWrapper.dataset.avSmartTip) return
+  const source = iconWrapper.querySelector<HTMLElement>(".award-viewer-tooltip")
+  if (!source) return
+  iconWrapper.dataset.avSmartTip = "1"
+
+  const show = () => {
+    const tip = getSharedTooltip()
+    // Only (re)fill + reset when switching to a different icon — re-showing the
+    // SAME icon must not reset opacity (that restarts the fade and flickers).
+    if (activeTipIcon !== iconWrapper) {
+      activeTipIcon = iconWrapper
+      tip.replaceChildren(
+        ...Array.from(source.childNodes).map((n) => n.cloneNode(true))
+      )
+    }
+    positionSharedTooltip(iconWrapper)
+    tip.style.opacity = "1"
+  }
+  iconWrapper.addEventListener("mouseenter", show)
+  iconWrapper.addEventListener("focusin", show)
+  iconWrapper.addEventListener("focusout", hideSharedTooltip)
+}
+
 // The detail "info" button (hover -> cash/points breakdown), reused from the
 // list placeholder so it sits to the LEFT of the badge.
 const buildInfoIcon = (info: MarriottRateInfo) => {
@@ -517,6 +605,7 @@ const buildInfoIcon = (info: MarriottRateInfo) => {
   const root = createRoot(iconTarget)
   root.render(React.createElement(CiCircleInfo, { "aria-hidden": "true" }))
   iconRoots.set(iconTarget, root)
+  attachSmartTooltip(iconWrapper)
   return iconWrapper
 }
 
@@ -548,14 +637,19 @@ const buildCppBadgeContents = (info: MarriottRateInfo, hasReward: boolean) => {
   return frag
 }
 
-// Create / update / remove a CPP badge inside `host`, inserted before `before`.
+// Create / update / move / remove a CPP badge. `scope` is searched for an
+// existing badge (so a single badge is tracked even if its anchor moves), `host`
+// + `before` are the desired position, `key` (hotel id) is in the signature so a
+// reused popup/modal doesn't keep a previous hotel's badge when content swaps.
 const renderCppBadge = (
+  scope: ParentNode,
   host: HTMLElement,
   before: Node | null,
   info: MarriottRateInfo | undefined,
-  compact: boolean
+  compact: boolean,
+  key?: string
 ) => {
-  let badge = host.querySelector<HTMLElement>(`:scope > .${DETAIL_CPP_CLASS}`)
+  let badge = scope.querySelector<HTMLElement>(`.${DETAIL_CPP_CLASS}`)
   const hasReward =
     !!info && info.points !== undefined && info.cash !== undefined
   const cashOnly =
@@ -567,8 +661,17 @@ const renderCppBadge = (
   }
 
   const tier = hasReward ? pinValueTier(info.cpp) || "is-mid" : "is-none"
-  const sig = `${hasReward ? info.cpp?.toFixed(2) : "none"}|${tier}|${compact ? "c" : "f"}`
-  if (badge && badge.dataset.av === sig) return
+  const sig = `${key ?? ""}|${hasReward ? info.cpp?.toFixed(2) : "none"}|${tier}|${compact ? "c" : "f"}`
+  if (badge && badge.dataset.av === sig) {
+    // Content already correct — just make sure it's at the desired position
+    // (moving a node doesn't rebuild its React icon, so no churn).
+    if (badge.parentElement !== host || badge.nextSibling !== before) {
+      try {
+        host.insertBefore(badge, before)
+      } catch {}
+    }
+    return
+  }
 
   badge?.remove()
   badge = document.createElement("div")
@@ -580,52 +683,84 @@ const renderCppBadge = (
   host.insertBefore(badge, before)
 }
 
-// 1st-click "selected" preview card: replace the hover-based list placeholder
-// (suppressed via CSS inside .map-view-selected) with a small static CPP badge
-// next to the price.
-const updateSelectedCard = () => {
-  const card = document.querySelector<HTMLElement>(
-    ".property-card-container.map-view-selected"
+// Place the badge directly BELOW the destination/resort fee notice when the
+// surface has one; otherwise fall back to `fallback`. The fee block uses a
+// different class per surface — `.mandatory-fee-section[-list-view]` on cards /
+// InfoWindow, `.custom-info-list` in the detail modal — and the modal's variant
+// nests a (hidden) breakdown tooltip, so matching by text-length is unreliable.
+// Match the known fee containers, confirm the fee wording, and require it to be
+// visible and outside our own badge / a hover tooltip.
+const FEE_TEXT_RE = /destination fee|resort fee|mandatory fee|includes\s+\d/i
+const FEE_SELECTOR =
+  ".mandatory-fee-section-list-view, .mandatory-fee-section, .custom-info-list"
+const feeAnchor = (
+  scope: ParentNode,
+  fallbackHost: HTMLElement,
+  fallbackBefore: Node | null
+): { host: HTMLElement; before: Node | null } => {
+  const fee = [...scope.querySelectorAll<HTMLElement>(FEE_SELECTOR)].find(
+    (e) =>
+      e.offsetParent !== null &&
+      e.parentElement &&
+      FEE_TEXT_RE.test(e.textContent || "") &&
+      !e.closest(".award-viewer-tooltip") &&
+      !e.closest(`.${DETAIL_CPP_CLASS}`)
   )
-  if (!card) return
-  const propCard = card.querySelector<HTMLElement>(".property-card[data-marsha]")
-  const marsha = propCard
-    ? normalizeHotelId(propCard.getAttribute("data-marsha"))
-    : null
-  const info = marsha ? marriottRatesByHotel.get(marsha) : undefined
-
-  const rate = card.querySelector<HTMLElement>(".rate-container")
-  const link = rate?.closest<HTMLElement>("a") ?? rate
-  const host = link?.parentElement
-  if (!host || !link) return
-  renderCppBadge(host, link.nextSibling, info, true)
+  if (fee?.parentElement) {
+    return { host: fee.parentElement, before: fee.nextSibling }
+  }
+  return { host: fallbackHost, before: fallbackBefore }
 }
 
 const updateDetailModal = () => {
   const rateContainer = document.querySelector<HTMLElement>(".hqv-rate-container")
-  if (!rateContainer) return
-  const host = rateContainer.parentElement
-  if (!host) return
+  if (!rateContainer || !rateContainer.parentElement) return
 
-  const root: ParentNode =
+  const scope: Element =
     rateContainer.closest("[class*='hqv-modal']") ??
     rateContainer.closest("[role='dialog']") ??
-    document
-  const marsha = marshaFromModal(root)
+    rateContainer.parentElement
+  const marsha = marshaFromModal(scope)
   const info = marsha ? marriottRatesByHotel.get(marsha) : undefined
-  renderCppBadge(host, rateContainer.nextSibling, info, false)
+  const { host, before } = feeAnchor(
+    scope,
+    rateContainer.parentElement,
+    rateContainer.nextSibling
+  )
+  renderCppBadge(scope, host, before, info, false, marsha ?? undefined)
 }
 
-let mapPinScheduled = false
-const scheduleMapPins = () => {
-  if (mapPinScheduled) {
+// 1st-click "small popup" = Google Maps InfoWindow (.gm-style-iw) holding a
+// HotelCard. Embed a compact CPP badge BELOW the fee notice. Hotel id comes from
+// the card's propertyCode / /hotels/travel/ link (no data-marsha on the IW).
+const updateInfoWindow = () => {
+  const iw = document.querySelector<HTMLElement>(".gm-style-iw")
+  if (!iw) return
+  const marsha = marshaFromModal(iw)
+  const info = marsha ? marriottRatesByHotel.get(marsha) : undefined
+  const fallbackHost =
+    iw.querySelector<HTMLElement>(".hotel-card-text-section") ??
+    iw.querySelector<HTMLElement>(".HotelCard__bottom-section") ??
+    iw
+  const { host, before } = feeAnchor(iw, fallbackHost, null)
+  renderCppBadge(iw, host, before, info, true, marsha ?? undefined)
+}
+
+// All DOM-driven work is coalesced into a single rAF instead of running on every
+// MutationObserver callback. On the map (Google Maps mutates the DOM constantly)
+// this collapses hundreds of redundant passes per second into at most one per
+// frame — placeholders, pins, and the two popups are all refreshed together.
+let updateScheduled = false
+const scheduleUpdate = () => {
+  if (updateScheduled) {
     return
   }
-  mapPinScheduled = true
+  updateScheduled = true
   requestAnimationFrame(() => {
-    mapPinScheduled = false
+    updateScheduled = false
+    refreshPlaceholders()
     updateMapPins()
-    updateSelectedCard()
+    updateInfoWindow()
     updateDetailModal()
   })
 }
@@ -638,7 +773,7 @@ const refreshRatesFromStorage = async () => {
   marriottRatesByHotel = built.map
   marriottHotelOrder = built.order
   updateExistingPlaceholders()
-  scheduleMapPins()
+  scheduleUpdate()
 }
 
 const refreshValueSettings = async () => {
@@ -649,7 +784,7 @@ const refreshValueSettings = async () => {
     result?.[MARRIOTT_VALUE_SETTINGS_KEY]
   )
   updateExistingPlaceholders()
-  scheduleMapPins()
+  scheduleUpdate()
 }
 
 const ensurePlaceholderStyles = () => {
@@ -697,11 +832,13 @@ const ensurePlaceholderStyles = () => {
       display: inline-flex;
       align-items: center;
     }
-    .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip {
-      position: absolute;
-      right: 0;
-      bottom: 100%;
-      transform: translateY(-4px);
+    /* Tooltip styles are UN-scoped (not nested under the icon) because the
+       tooltip is moved to <body> on hover — see attachSmartTooltip — so it
+       escapes the transformed/overflow ancestors of the InfoWindow and modal
+       (position:fixed resolves to the viewport only when no ancestor is
+       transformed). Visibility + position are set by JS, not :hover. */
+    .award-viewer-tooltip {
+      position: fixed;
       opacity: 0;
       pointer-events: none;
       background: #f5f5f5;
@@ -711,18 +848,17 @@ const ensurePlaceholderStyles = () => {
       padding: 6px;
       border-radius: 4px;
       white-space: normal;
-      transition: opacity 0.15s ease, transform 0.15s ease;
-      z-index: 9999;
-      box-shadow: 0 4px 12px rgba(15, 23, 42, 0.12);
+      transition: opacity 0.12s ease;
+      z-index: 2147483647;
+      box-shadow: 0 4px 12px rgba(15, 23, 42, 0.18);
       min-width: 240px;
       max-width: 280px;
     }
-    .${PLACEHOLDER_ICON_CLASS}:hover .award-viewer-tooltip,
-    .${PLACEHOLDER_ICON_CLASS}:focus-within .award-viewer-tooltip {
-      opacity: 1;
-      transform: translateY(-8px);
+    /* In-icon tooltips are content storage only (cloned into the shared one). */
+    .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip {
+      display: none;
     }
-    .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-grid {
+    .award-viewer-tooltip-grid {
       display: grid;
       grid-template-columns: max-content minmax(160px, auto);
       column-gap: 12px;
@@ -730,21 +866,15 @@ const ensurePlaceholderStyles = () => {
       align-items: center;
       justify-content: start;
     }
-    .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-row {
-      display: contents;
-    }
-    .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-cell {
-      white-space: normal;
-    }
-    .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-cell--label {
-      color: #475569;
-    }
-    .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-cell--value {
+    .award-viewer-tooltip-row { display: contents; }
+    .award-viewer-tooltip-cell { white-space: normal; }
+    .award-viewer-tooltip-cell--label { color: #475569; }
+    .award-viewer-tooltip-cell--value {
       font-weight: 400;
       color: #0f172a;
       text-align: left;
     }
-    .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-divider {
+    .award-viewer-tooltip-divider {
       grid-column: 1 / -1;
       border-top: 1px solid #e2e8f0;
       height: 1px;
@@ -850,11 +980,6 @@ const ensurePlaceholderStyles = () => {
     .award-viewer-marriott-cpp-compact .av-cpp { font-size: 12px; }
     .award-viewer-marriott-cpp-compact .av-sub { font-size: 12px; }
     .award-viewer-marriott-cpp-compact .av-sub::before { margin-right: 6px; }
-    /* Selected preview card uses our static badge above, so suppress the
-       hover-based list placeholder there (no hover in the small popup). */
-    .property-card-container.map-view-selected .${PLACEHOLDER_CLASS} {
-      display: none !important;
-    }
   `
   document.head?.appendChild(style)
 }
@@ -975,6 +1100,7 @@ const ensurePlaceholderContents = (placeholder: HTMLElement) => {
     const root = createRoot(iconTarget)
     root.render(React.createElement(CiCircleInfo, { "aria-hidden": "true" }))
     iconRoots.set(iconTarget, root)
+    attachSmartTooltip(iconWrapper)
   }
 
   let valueEl = placeholder.querySelector<HTMLElement>(
@@ -1054,7 +1180,14 @@ const updatePlaceholderText = (placeholder: HTMLElement) => {
 
   if (info?.points !== undefined && info?.cash !== undefined) {
     placeholder.classList.remove("is-loading")
-    valueEl.textContent = formatCpp(info.cpp)
+    iconWrapper.style.removeProperty("display")
+    const ptsPerNight =
+      info.stayNights !== undefined &&
+      info.stayNights > 1 &&
+      info.points !== undefined
+        ? info.points / info.stayNights
+        : info.points
+    valueEl.textContent = `${formatCpp(info.cpp)} · ${formatPointsK(ptsPerNight)} pts`
     if (tooltip) {
       tooltip.replaceChildren(buildTooltipContent(info))
     }
@@ -1063,6 +1196,7 @@ const updatePlaceholderText = (placeholder: HTMLElement) => {
 
   if (info?.points === undefined && info?.cash !== undefined) {
     placeholder.classList.remove("is-loading")
+    iconWrapper.style.removeProperty("display")
     valueEl.classList.remove("is-good", "is-bad", "is-mid")
     valueEl.textContent = "Reward Nights Unavailable"
     if (tooltip) {
@@ -1071,6 +1205,10 @@ const updatePlaceholderText = (placeholder: HTMLElement) => {
     return
   }
 
+  // No data yet for this hotel: hide the info icon entirely so its hover tooltip
+  // ("Awaiting Marriott response") can't float over the page; just show the
+  // loading skeleton until data arrives.
+  iconWrapper.style.display = "none"
   if (tooltip) {
     tooltip.textContent = "Awaiting Marriott response"
   }
@@ -1083,24 +1221,43 @@ const getRateLink = (card: HTMLElement) => {
   return rateContainer.closest<HTMLAnchorElement>("a")
 }
 
-const ensurePlaceholder = (card: HTMLElement) => {
-  if (card.querySelector(`.${PLACEHOLDER_CLASS}`)) return
+// The card fee notice: `.mandatory-fee-section-list-view` in the map sidebar,
+// plain `.mandatory-fee-section` in list-only mode — match both, visible, with
+// fee wording, outside a hover tooltip.
+const cardFeeNotice = (card: HTMLElement) =>
+  [...card.querySelectorAll<HTMLElement>("[class*='mandatory-fee-section']")].find(
+    (e) =>
+      e.offsetParent !== null &&
+      FEE_TEXT_RE.test(e.textContent || "") &&
+      !e.closest(".award-viewer-tooltip")
+  )
 
+const ensurePlaceholder = (card: HTMLElement) => {
   const link = getRateLink(card)
   if (!link) return
 
-  const container = link.parentElement
-  if (!container) return
-
-  const placeholder = document.createElement("div")
-  placeholder.className = PLACEHOLDER_CLASS
-  const hotelId = getHotelIdFromCard(card)
-  if (hotelId) {
-    placeholder.dataset.hotelId = hotelId
+  let placeholder = card.querySelector<HTMLElement>(`.${PLACEHOLDER_CLASS}`)
+  if (!placeholder) {
+    placeholder = document.createElement("div")
+    placeholder.className = PLACEHOLDER_CLASS
+    const hotelId = getHotelIdFromCard(card)
+    if (hotelId) {
+      placeholder.dataset.hotelId = hotelId
+    }
+    const container = link.parentElement
+    if (!container) return
+    container.insertBefore(placeholder, link.nextSibling)
+    ensurePlaceholderContents(placeholder)
+    updatePlaceholderText(placeholder)
   }
-  container.insertBefore(placeholder, link.nextSibling)
-  ensurePlaceholderContents(placeholder)
-  updatePlaceholderText(placeholder)
+
+  // Keep the badge directly BELOW the fee notice. The fee can load AFTER the
+  // placeholder is first inserted (and its class differs per view), so re-check
+  // each pass — idempotent: moves only when not already right after the fee.
+  const fee = cardFeeNotice(card)
+  if (fee && fee.nextElementSibling !== placeholder) {
+    fee.after(placeholder)
+  }
 }
 
 const refreshPlaceholders = () => {
@@ -1119,10 +1276,7 @@ const startPlaceholderObserver = () => {
   refreshPlaceholders()
   void refreshRatesFromStorage()
   void refreshValueSettings()
-  const observer = new MutationObserver(() => {
-    refreshPlaceholders()
-    scheduleMapPins()
-  })
+  const observer = new MutationObserver(scheduleUpdate)
   observer.observe(document.body, { childList: true, subtree: true })
 
   chrome?.storage?.onChanged?.addListener(() => {
