@@ -17,6 +17,7 @@ export const config: PlasmoCSConfig = {
 const PLACEHOLDER_CLASS = "award-viewer-hilton-price-placeholder"
 const PLACEHOLDER_ICON_CLASS = "award-viewer-hilton-cpp-icon"
 const PLACEHOLDER_VALUE_CLASS = "award-viewer-hilton-cpp-value"
+const DIALOG_CPP_CLASS = "award-viewer-hilton-dialog-cpp"
 const PLACEHOLDER_STYLE_ID = "award-viewer-hilton-placeholder-style"
 const HILTON_STORAGE_KEY = "hilton-last-capture"
 
@@ -34,7 +35,13 @@ type HiltonRateInfo = {
 
 const iconRoots = new WeakMap<HTMLElement, ReturnType<typeof createRoot>>()
 let hiltonRatesByHotel = new Map<string, HiltonRateInfo>()
+// Comprehensive rates shared by the map overlay (hotelSummaryOptions), used as a
+// fallback when Hilton's own shopMultiPropAvail capture is missing a hotel.
+let overlayRatesByHotel = new Map<string, HiltonRateInfo>()
 let hiltonValueSettings = DEFAULT_HILTON_VALUE_SETTINGS
+
+const getRateInfo = (hotelId: string): HiltonRateInfo | undefined =>
+  hiltonRatesByHotel.get(hotelId) ?? overlayRatesByHotel.get(hotelId)
 
 function inject(src: string) {
   const script = document.createElement("script")
@@ -44,8 +51,9 @@ function inject(src: string) {
   script.onload = () => script.remove()
 }
 
-// Inject page script
+// Inject page scripts
 inject(chrome.runtime.getURL("hotels/hilton/injected/hilton-fetch-hook.js"))
+inject(chrome.runtime.getURL("hotels/hilton/injected/hilton-map-overlay.js"))
 
 const normalizeHotelId = (id: string | null | undefined) => {
   if (!id) {
@@ -106,6 +114,19 @@ const formatUsdAmount = (amount?: number) => {
     currency: "USD",
     minimumFractionDigits: 2,
     maximumFractionDigits: 2
+  }).format(amount)
+}
+
+// Compact whole-dollar USD for the inline list value (e.g. "$246"). Hilton
+// fetches all amounts in USD, so the fixed currency is safe.
+const formatUsdRounded = (amount?: number) => {
+  if (amount === undefined || !Number.isFinite(amount)) {
+    return ""
+  }
+  return new Intl.NumberFormat(undefined, {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0
   }).format(amount)
 }
 
@@ -260,12 +281,45 @@ const refreshRatesFromStorage = async () => {
 
   hiltonRatesByHotel = buildRatesFromStorage(payload)
   updateExistingPlaceholders()
+  refreshDialogPlaceholder()
+  sendAuthoritativeRates()
+}
+
+// Push Hilton's own shopMultiPropAvail-derived rates to the map overlay so its
+// badges show the same after-tax total + CPP as the list cards (hotelSummaryOptions,
+// the overlay's own source, only has the pre-tax lead rate).
+const sendAuthoritativeRates = () => {
+  const rates: Array<{
+    id: string
+    cpp?: number
+    cash?: number
+    points?: number
+    rewardStatus?: "available" | "unavailable"
+  }> = []
+  for (const [id, info] of hiltonRatesByHotel) {
+    rates.push({
+      id,
+      cpp: info.cpp,
+      cash: info.amountAfterTax ?? info.cash,
+      points: info.points,
+      rewardStatus: info.rewardStatus
+    })
+  }
+  window.postMessage({ __AV_HILTON_AUTH_RATES__: true, rates }, "*")
+}
+
+const sendMapSettings = () => {
+  window.postMessage(
+    { __AV_HILTON_MAP_SETTINGS__: true, settings: hiltonValueSettings },
+    "*"
+  )
 }
 
 const refreshValueSettings = async () => {
   if (!chrome?.storage?.local) {
     hiltonValueSettings = DEFAULT_HILTON_VALUE_SETTINGS
     updateExistingPlaceholders()
+    sendMapSettings()
     return
   }
 
@@ -274,6 +328,7 @@ const refreshValueSettings = async () => {
     stored[HILTON_VALUE_SETTINGS_KEY] as Partial<typeof hiltonValueSettings> | undefined
   )
   updateExistingPlaceholders()
+  sendMapSettings()
 }
 
 const updateValueClass = (valueEl: HTMLElement, cpp?: number) => {
@@ -509,6 +564,20 @@ function ensurePlaceholderStyles() {
       0% { background-position: 100% 50%; }
       100% { background-position: 0 50%; }
     }
+    .${DIALOG_CPP_CLASS} {
+      position: fixed;
+      z-index: 2147483646;
+      width: auto;
+      min-width: 0;
+      margin: 0;
+      padding: 6px 10px;
+      gap: 6px;
+      background: #ffffff;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      box-shadow: 0 6px 20px rgba(15, 23, 42, 0.18);
+      pointer-events: auto;
+    }
   `
   document.head?.appendChild(style)
 }
@@ -585,7 +654,7 @@ const updatePlaceholderText = (placeholder: HTMLElement) => {
     placeholder.dataset.hotelId = normalizedHotelId
   }
 
-  const info = hiltonRatesByHotel.get(hotelId)
+  const info = getRateInfo(hotelId)
   const { iconWrapper, valueEl } = ensurePlaceholderContents(placeholder)
   const tooltip = iconWrapper.querySelector<HTMLElement>(".award-viewer-tooltip")
   const showCpp = isStandardReward(info?.ratePlanName)
@@ -605,7 +674,12 @@ const updatePlaceholderText = (placeholder: HTMLElement) => {
 
   if (showCpp && info?.cpp !== undefined && Number.isFinite(info.cpp)) {
     placeholder.classList.remove("is-loading")
-    valueEl.textContent = formatCpp(displayCpp)
+    const total = info?.amountAfterTax ?? info?.cash
+    const totalSuffix =
+      total !== undefined && Number.isFinite(total)
+        ? ` (${formatUsdAmount(total)})`
+        : ""
+    valueEl.textContent = `${formatCpp(displayCpp)}${totalSuffix}`
     if (tooltip) {
       tooltip.replaceChildren(buildTooltipContent(info, true))
     }
@@ -675,13 +749,133 @@ const updateExistingPlaceholders = () => {
   placeholders.forEach((placeholder) => updatePlaceholderText(placeholder))
 }
 
+// The pin-click window is a [role=dialog] holding the hotel detail. Add the same
+// CPP placeholder to it, keyed by the ctyhocn in its /hotels/<ctyhocn>- link.
+const findHotelDialog = (): HTMLElement | null => {
+  const dialogs = document.querySelectorAll<HTMLElement>('[role="dialog"]')
+  for (const dialog of dialogs) {
+    if (
+      dialog.getBoundingClientRect().width > 250 &&
+      dialog.querySelector('a[href*="/hotels/"]')
+    ) {
+      return dialog
+    }
+  }
+  return null
+}
+
+const extractDialogCtyhocn = (dialog: HTMLElement): string | null => {
+  const link = dialog.querySelector<HTMLAnchorElement>('a[href*="/hotels/"]')
+  const href = link?.getAttribute("href") ?? ""
+  const match = /\/hotels\/([a-z0-9]{5,7})-/i.exec(href)
+  return match ? match[1].toUpperCase() : null
+}
+
+// Injecting INTO Hilton's React-managed pin dialog corrupts it (React unmounts
+// on reconciliation). Instead we render the CPP as a fixed chip appended to
+// <body> — outside the dialog's React tree — positioned over the dialog and
+// removed when it closes. React never sees the node, so the dialog stays intact.
+let dialogCppEl: HTMLDivElement | null = null
+let dialogRepositionBound = false
+
+const removeDialogCpp = () => {
+  if (dialogCppEl) {
+    dialogCppEl.remove()
+    dialogCppEl = null
+  }
+}
+
+// Anchor the chip to the dialog's price/CTA row so it reads next to the rate,
+// not floating in a corner. "View Rates"/room CTA is always present and stable;
+// fall back to the first $-amount, then the dialog itself.
+const findDialogPriceAnchor = (dialog: HTMLElement): HTMLElement | null => {
+  const cta = Array.from(
+    dialog.querySelectorAll<HTMLElement>("a, button")
+  ).find((b) => /view rates|choose room|select room/i.test(b.textContent || ""))
+  if (cta) return cta
+  const price = Array.from(
+    dialog.querySelectorAll<HTMLElement>("span, div, p, strong")
+  ).find(
+    (e) =>
+      e.children.length === 0 &&
+      /^\$[\d,]+(\.\d{2})?$/.test((e.textContent || "").trim())
+  )
+  return price ?? null
+}
+
+const positionDialogCpp = () => {
+  if (!dialogCppEl) return
+  const dialog = findHotelDialog()
+  if (!dialog) {
+    removeDialogCpp()
+    return
+  }
+  const anchor = findDialogPriceAnchor(dialog)
+  const dr = dialog.getBoundingClientRect()
+  const a = (anchor ?? dialog).getBoundingClientRect()
+  const chipH = dialogCppEl.offsetHeight || 38
+  const chipW = dialogCppEl.offsetWidth || 184
+  // Sit just below the price/"View Rates" row (the empty bottom strip of the
+  // dialog), so it doesn't hover over the room content above. If there's no room
+  // below, fall back to above.
+  let top = a.bottom + 8
+  if (top + chipH > window.innerHeight - 8) top = a.top - chipH - 8
+  top = Math.min(Math.max(top, 8), window.innerHeight - chipH - 8)
+  let left = anchor ? a.left : dr.left + 12
+  left = Math.min(Math.max(left, dr.left + 8), dr.right - chipW - 8)
+  left = Math.min(Math.max(left, 8), window.innerWidth - chipW - 8)
+  dialogCppEl.style.top = `${top}px`
+  dialogCppEl.style.left = `${left}px`
+}
+
+const refreshDialogPlaceholder = () => {
+  try {
+    const dialog = findHotelDialog()
+    if (!dialog) {
+      removeDialogCpp()
+      return
+    }
+    const ctyhocn = extractDialogCtyhocn(dialog)
+    if (!ctyhocn) {
+      removeDialogCpp()
+      return
+    }
+
+    ensurePlaceholderStyles()
+    if (!dialogCppEl) {
+      dialogCppEl = document.createElement("div")
+      dialogCppEl.className = `${PLACEHOLDER_CLASS} ${DIALOG_CPP_CLASS}`
+      ensurePlaceholderContents(dialogCppEl)
+      document.body.appendChild(dialogCppEl)
+      if (!dialogRepositionBound) {
+        window.addEventListener("scroll", positionDialogCpp, true)
+        window.addEventListener("resize", positionDialogCpp)
+        dialogRepositionBound = true
+      }
+    }
+    dialogCppEl.dataset.hotelId = ctyhocn
+    updatePlaceholderText(dialogCppEl)
+    positionDialogCpp()
+  } catch {}
+}
+
 function startPlaceholderObserver() {
   if (!document.body) return
   refreshPlaceholders()
+  refreshDialogPlaceholder()
   void refreshRatesFromStorage()
   void refreshValueSettings()
+  // The map overlay churns hundreds of marker nodes; coalesce mutations so we
+  // don't re-scan the DOM on every one (that was making the page laggy).
+  let scanScheduled = false
   const observer = new MutationObserver(() => {
-    refreshPlaceholders()
+    if (scanScheduled) return
+    scanScheduled = true
+    setTimeout(() => {
+      scanScheduled = false
+      refreshPlaceholders()
+      refreshDialogPlaceholder()
+    }, 250)
   })
   observer.observe(document.body, { childList: true, subtree: true })
 
@@ -716,7 +910,40 @@ chrome.runtime.onMessage.addListener((msg) => {
   }
 })
 
-// Page -> background
+type OverlayRate = {
+  id?: unknown
+  points?: unknown
+  cash?: unknown
+  cpp?: unknown
+  hasReward?: unknown
+}
+
+const ingestOverlayRates = (rates: OverlayRate[]) => {
+  const map = new Map<string, HiltonRateInfo>()
+  for (const r of rates) {
+    const id = normalizeHotelId(typeof r.id === "string" ? r.id : undefined)
+    if (!id) continue
+    const points = typeof r.points === "number" ? r.points : undefined
+    const cash = typeof r.cash === "number" ? r.cash : undefined
+    const cpp = typeof r.cpp === "number" ? r.cpp : undefined
+    const hasReward = r.hasReward === true
+    map.set(id, {
+      cpp,
+      cash,
+      points,
+      rateAmount: cash,
+      currency: "USD",
+      // Marks it as a standard reward so the CPP value renders.
+      ratePlanName: "Standard Room Reward",
+      rewardStatus: hasReward ? "available" : "unavailable"
+    })
+  }
+  overlayRatesByHotel = map
+  updateExistingPlaceholders()
+  refreshDialogPlaceholder()
+}
+
+// Page -> background / overlay -> content
 window.addEventListener("message", (event) => {
   if (event.source !== window) return
 
@@ -727,5 +954,9 @@ window.addEventListener("message", (event) => {
       type: "HILTON_SAVE_CAPTURE",
       payload: data.payload
     })
+  }
+
+  if (data?.__AV_HILTON_RATES__ === true && Array.isArray(data.rates)) {
+    ingestOverlayRates(data.rates as OverlayRate[])
   }
 })

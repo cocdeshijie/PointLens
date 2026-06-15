@@ -18,19 +18,27 @@
       ? options.rateRequestTypes
       : []
 
-    const isDefaultRequest =
-      rateRequestTypes.length === 2 &&
-      rateRequestTypes.some((entry) => entry?.type === "STANDARD") &&
-      rateRequestTypes.some(
-        (entry) => entry?.type === "CLUSTER" && entry?.value === "E0P"
+    // We want BOTH the reward clusters (MRW/P17 — carry the redemption points)
+    // and STANDARD (cash) in every replay so we can compute CPP. Marriott's
+    // native request shape has drifted over time (it used to send
+    // STANDARD + CLUSTER E0P; it now sends STANDARD only), so don't gate on a
+    // specific incoming shape — just force the reward shape unless it's already
+    // exactly that (idempotent, avoids re-patching our own replay).
+    const REWARD_SHAPE = [
+      { type: "CLUSTER", value: "MRW" },
+      { type: "STANDARD", value: "" },
+      { type: "CLUSTER", value: "P17" }
+    ]
+    const alreadyReward =
+      rateRequestTypes.length === REWARD_SHAPE.length &&
+      REWARD_SHAPE.every((want) =>
+        rateRequestTypes.some(
+          (entry) => entry?.type === want.type && entry?.value === want.value
+        )
       )
 
-    if (isDefaultRequest) {
-      options.rateRequestTypes = [
-        { type: "CLUSTER", value: "MRW" },
-        { type: "STANDARD", value: "" },
-        { type: "CLUSTER", value: "P17" }
-      ]
+    if (!alreadyReward) {
+      options.rateRequestTypes = REWARD_SHAPE
     }
 
     return JSON.stringify(obj)

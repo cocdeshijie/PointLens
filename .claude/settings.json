@@ -1,0 +1,22 @@
+{
+  "env": {
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+  },
+  "permissions": {
+    "allow": [
+      "Bash(python3 scripts/browser.py:*)",
+      "Bash(source .venv/bin/activate*)",
+      "Bash(pip install*)",
+      "Bash(playwright install*)",
+      "Bash(curl:*)",
+      "Bash(dig:*)",
+      "Bash(whois:*)",
+      "Bash(openssl:*)",
+      "Bash(httpx:*)",
+      "Bash(jq:*)",
+      "Bash(npx prettier*)",
+      "Bash(npx js-beautify*)",
+      "Bash(npx source-map-cli*)"
+    ]
+  }
+}

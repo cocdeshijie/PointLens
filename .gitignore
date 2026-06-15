@@ -9,3 +9,35 @@ yarn-error.log*
 .pnp.js
 
 .vscode/*
+# ===== exploration harness (copied from ProxyExplore) =====
+# --- Python ---
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# --- exploration lab runtime ---
+# Persistent browser profiles carry live auth — never commit.
+sessions/*/state/
+# Raw per-run captures are large and not meant to be shared.
+sessions/*/*/
+# `latest` symlink at sessions/<slug>/latest points into the excluded
+# capture dir — useless without its target, so drop it too.
+sessions/*/latest
+
+# --- editors / OS ---
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+
+# --- logs ---
+*.log
+
+# build artifact
+award-viewer/tsconfig.tsbuildinfo

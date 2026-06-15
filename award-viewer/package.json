@@ -37,6 +37,7 @@
       {
         "resources": [
           "hotels/hilton/injected/hilton-fetch-hook.js",
+          "hotels/hilton/injected/hilton-map-overlay.js",
           "hotels/marriott/injected/marriott-fetch-hook.js"
         ],
         "matches": [

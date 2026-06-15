@@ -85,6 +85,11 @@ type IhgConversionRequest = {
   requestedAt?: string
 }
 
+type IhgPointsCash = {
+  points?: number
+  cash?: number
+}
+
 type IhgRateInfo = {
   cashAmount?: number
   points?: number
@@ -95,6 +100,9 @@ type IhgRateInfo = {
   highestCash?: IhgCashCost
   lowestPoints?: number
   highestPoints?: number
+  lowestPointsAndCash?: IhgPointsCash
+  highestPointsAndCash?: IhgPointsCash
+  rewardNightAvailable?: boolean
   currency?: string
 }
 
@@ -103,6 +111,53 @@ let ihgRateErrorsByHotel = new Map<string, string>()
 let ihgLastRateError: string | null = null
 let ihgLastRateSource: string | null = null
 let ihgShowPointsWithCpp = false
+
+type IhgStayDetails = {
+  status: "loading" | "ok" | "none" | "error"
+  nights?: number
+  totalPoints?: number
+  originalTotalPoints?: number
+  savedPoints?: number
+  freeNightCount?: number
+  benefitReason?: string | null
+}
+// Full-stay reward totals incl. "every 4th reward night free" — fetched lazily
+// per hotel (on tooltip hover) since the search-results summary lacks them.
+const ihgRateDetailsByHotel = new Map<string, IhgStayDetails>()
+let ihgSearchNights = 0
+let ihgRateDetailsSignature: string | null = null
+
+// Map-marker support: IHG map pins carry no hotel id, only a price — cash
+// ("212 USD", = baseAmount + fees) or points ("28K PTS"). We join on that to the
+// hotel's CPP. Two lookups so both cash- and points-mode maps work. Value is
+// null when two hotels share a price (ambiguous → skip).
+const MAP_CPP_CLASS = "award-viewer-map-cpp"
+// Pin value: CPP (number) | "none" (hotel has no reward nights) | null (two
+// hotels share the price → ambiguous, skip).
+type IhgMapValue = number | "none"
+const ihgMapCppByCash = new Map<number, IhgMapValue | null>()
+const ihgMapCppByPoints = new Map<number, IhgMapValue | null>() // keyed by exact points
+// Same price keys -> hotel mnemonic, to resolve the pin-click details dialog
+// (which exposes no hotel id, only the "156 USD" price). null = ambiguous.
+const ihgHotelIdByCash = new Map<number, string | null>()
+const ihgHotelIdByPoints = new Map<number, string | null>()
+let ihgMapUpdateScheduled = false
+
+const computeNights = (bodyText?: string | null) => {
+  if (!bodyText) {
+    return 0
+  }
+  try {
+    const parsed = JSON.parse(bodyText) as { startDate?: unknown; endDate?: unknown }
+    if (typeof parsed.startDate === "string" && typeof parsed.endDate === "string") {
+      const ms = Date.parse(parsed.endDate) - Date.parse(parsed.startDate)
+      return ms > 0 ? Math.round(ms / 86_400_000) : 0
+    }
+  } catch {
+    return 0
+  }
+  return 0
+}
 const iconRoots = new WeakMap<HTMLElement, ReturnType<typeof createRoot>>()
 const currencyRates = new Map<string, number>()
 const inflightCurrencyRates = new Map<string, Promise<number | null>>()
@@ -111,6 +166,7 @@ let ihgValueSettings = DEFAULT_IHG_VALUE_SETTINGS
 type IhgCashCost = {
   baseAmount?: number
   excludedFeeSubTotal?: number
+  feeOnlySubTotal?: number
   amountAfterTax?: number
   basePlusExcludedFeesAmount?: number
 }
@@ -274,7 +330,8 @@ const getHotelIdFromElement = (element: Element): string | null => {
     }
   }
 
-  return null
+  // Last resort: the pin-click details dialog has no id — join by price.
+  return resolveHotelIdByPrice(element)
 }
 
 const formatCpp = (cpp?: number) => {
@@ -297,6 +354,26 @@ const formatCppSuffix = (cpp?: number) => {
 
 const formatPointsWithCpp = (points?: number, cpp?: number) => {
   return `${formatPoints(points)}${formatCppSuffix(cpp)}`
+}
+
+// Compact points for the tight map pin, matching IHG's own "21.5K" style.
+const formatPointsCompact = (points?: number) => {
+  if (points === undefined || points <= 0) {
+    return ""
+  }
+  if (points >= 1000) {
+    const k = points / 1000
+    const text = Number.isInteger(k) ? String(k) : k.toFixed(2).replace(/\.?0+$/, "")
+    return `${text}K pts`
+  }
+  return `${points} pts`
+}
+
+const formatPointsCash = (value?: IhgPointsCash, currency?: string) => {
+  if (!value || (value.points === undefined && value.cash === undefined)) {
+    return "—"
+  }
+  return `${formatPoints(value.points)} + ${formatCurrencyValue(value.cash, currency)}`
 }
 
 const formatCurrencyValue = (amount?: number, currency?: string) => {
@@ -385,7 +462,7 @@ const buildTooltipDividerRow = () => {
 const setTooltipDetails = (
   tooltip: HTMLElement,
   info: IhgRateInfo,
-  options?: { pointsLabel?: string }
+  options?: { pointsLabel?: string; stay?: IhgStayDetails }
 ) => {
   const content = document.createElement("div")
   content.className = "award-viewer-tooltip-content"
@@ -442,8 +519,84 @@ const setTooltipDetails = (
         )
     )
   )
+  if (info.lowestPointsAndCash || info.highestPointsAndCash) {
+    grid.appendChild(
+      buildTooltipRow(
+        "Pts + Cash",
+        formatPointsCash(info.lowestPointsAndCash, info.currency),
+        formatPointsCash(info.highestPointsAndCash, info.currency)
+      )
+    )
+  }
+
+  // Full-stay reward total (incl. 4th-night-free) when available.
+  const stay = options?.stay
+  if (stay && stay.status !== "none" && stay.status !== "error") {
+    grid.appendChild(buildTooltipDividerRow())
+    const stayLabel = stay.nights ? `Stay (${stay.nights}N)` : "Stay total"
+    if (stay.status === "loading") {
+      grid.appendChild(buildTooltipRow(stayLabel, "…", ""))
+    } else if (stay.status === "ok" && stay.totalPoints !== undefined) {
+      const discounted =
+        stay.originalTotalPoints !== undefined && stay.originalTotalPoints > stay.totalPoints
+      grid.appendChild(
+        buildTooltipRow(
+          stayLabel,
+          formatPoints(stay.totalPoints),
+          discounted ? `was ${formatPoints(stay.originalTotalPoints)}` : ""
+        )
+      )
+    }
+  }
+
   content.appendChild(grid)
+
+  if (info.rewardNightAvailable === false) {
+    const note = document.createElement("div")
+    note.className = "award-viewer-tooltip-note"
+    note.textContent = "No award nights available"
+    content.appendChild(note)
+  }
+  if (stay && stay.status === "ok" && (stay.freeNightCount ?? 0) > 0 && stay.savedPoints) {
+    const benefit = document.createElement("div")
+    benefit.className = "award-viewer-tooltip-benefit"
+    const nights = stay.freeNightCount === 1 ? "4th night free" : `${stay.freeNightCount} free nights`
+    benefit.textContent = `★ ${nights} — saved ${formatPoints(stay.savedPoints)}`
+    content.appendChild(benefit)
+  }
   tooltip.replaceChildren(content)
+}
+
+const maybeFetchRateDetails = async (placeholder: HTMLElement) => {
+  if (ihgSearchNights < 4) {
+    return // 4th-night-free only applies to stays of 4+ nights
+  }
+  const hotelId = placeholder.dataset.hotelId
+  if (!hotelId || ihgRateDetailsByHotel.has(hotelId)) {
+    return // already fetched or in flight
+  }
+  if (!chrome?.runtime?.sendMessage) {
+    return
+  }
+  ihgRateDetailsByHotel.set(hotelId, { status: "loading" })
+  updatePlaceholderText(placeholder)
+  let result: IhgStayDetails | undefined
+  try {
+    result = (await chrome.runtime.sendMessage({
+      type: "ihg-rate-details",
+      hotelMnemonic: hotelId
+    })) as IhgStayDetails | undefined
+  } catch {
+    result = undefined
+  }
+  if (result && (result.status === "ok" || result.status === "none")) {
+    ihgRateDetailsByHotel.set(hotelId, result)
+  } else {
+    // Transient failure (no response / HTTP error) — drop it so a later hover
+    // or refresh retries instead of caching a permanent blank.
+    ihgRateDetailsByHotel.delete(hotelId)
+  }
+  updatePlaceholderText(placeholder)
 }
 
 const ensurePlaceholderContents = (placeholder: HTMLElement) => {
@@ -467,6 +620,11 @@ const ensurePlaceholderContents = (placeholder: HTMLElement) => {
     const root = createRoot(iconTarget)
     root.render(React.createElement(CiCircleInfo, { "aria-hidden": "true" }))
     iconRoots.set(iconTarget, root)
+    // Hovering to read the tooltip lazily pulls the full-stay reward total
+    // (incl. 4th-night-free) for 4+ night stays.
+    iconWrapper.addEventListener("mouseenter", () => {
+      void maybeFetchRateDetails(placeholder)
+    })
   }
 
   let valueEl = placeholder.querySelector<HTMLElement>(
@@ -519,6 +677,17 @@ const updatePlaceholderText = (placeholder: HTMLElement) => {
     placeholder.dataset.hotelId = normalizedHotelId
   }
 
+  // In the pin-detail dialog the user opened one hotel deliberately — fetch the
+  // 4th-night-free total eagerly instead of waiting on a hover that may race.
+  // (maybeFetchRateDetails self-guards: fetches once, only for 4+ night stays.)
+  if (
+    placeholder.closest(
+      "app-hotel-details-info-card, .p-dialog-content, .ui-dialog-content"
+    )
+  ) {
+    void maybeFetchRateDetails(placeholder)
+  }
+
   const info = ihgRatesByHotel.get(hotelId)
   const { iconWrapper, valueEl } = ensurePlaceholderContents(placeholder)
   const tooltip = iconWrapper.querySelector<HTMLElement>(".award-viewer-tooltip")
@@ -554,7 +723,7 @@ const updatePlaceholderText = (placeholder: HTMLElement) => {
     const pointsSuffix = pointsValue ? ` (${pointsValue})` : ""
     valueEl.textContent = `${formatCpp(displayCpp)}${pointsSuffix}${usdSuffix}`
     if (tooltip) {
-      setTooltipDetails(tooltip, info)
+      setTooltipDetails(tooltip, info, { stay: ihgRateDetailsByHotel.get(hotelId) })
     }
     return
   }
@@ -563,7 +732,10 @@ const updatePlaceholderText = (placeholder: HTMLElement) => {
     placeholder.classList.remove("is-loading")
     valueEl.textContent = "Reward Nights Unavailable"
     if (tooltip) {
-      setTooltipDetails(tooltip, info, { pointsLabel: "Unavailable" })
+      setTooltipDetails(tooltip, info, {
+        pointsLabel: "Unavailable",
+        stay: ihgRateDetailsByHotel.get(hotelId)
+      })
     }
     return
   }
@@ -572,6 +744,201 @@ const updatePlaceholderText = (placeholder: HTMLElement) => {
     setTooltipText(tooltip, errorMessage)
   }
   setSkeleton(placeholder)
+}
+
+// Rebuild the price -> CPP join tables from the parsed per-hotel rates. A
+// second write of a different CPP for the same key marks it ambiguous (null).
+// Insert into a price-keyed map, marking the key ambiguous (null) if a second
+// hotel with a different value collides on the same price.
+const addByPrice = <T>(map: Map<number, T | null>, key: number, value: T) => {
+  if (!map.has(key)) {
+    map.set(key, value)
+  } else if (map.get(key) !== value) {
+    map.set(key, null)
+  }
+}
+
+const rebuildMapCppLookup = () => {
+  ihgMapCppByCash.clear()
+  ihgMapCppByPoints.clear()
+  ihgHotelIdByCash.clear()
+  ihgHotelIdByPoints.clear()
+  // Mark "no rewards" only when the dataset actually carries reward info (at
+  // least one hotel has points). Otherwise it's a cash-only response and points
+  // are simply unknown — labelling every pin "No rewards" would be wrong.
+  let anyRewards = false
+  const noneKeys: number[] = []
+  for (const [hotelId, info] of ihgRatesByHotel.entries()) {
+    const cpp = info.cppLow ?? info.cpp
+    const hasCpp = cpp !== undefined && Number.isFinite(cpp)
+    const points = info.lowestPoints ?? info.points
+    const hasRewards = points !== undefined && points > 0
+    if (hasRewards) {
+      anyRewards = true
+    }
+    const base = info.lowestCash?.baseAmount
+    if (base !== undefined) {
+      const cashKey = Math.round(base + (info.lowestCash?.feeOnlySubTotal ?? 0))
+      addByPrice(ihgHotelIdByCash, cashKey, hotelId)
+      if (hasCpp) {
+        addByPrice(ihgMapCppByCash, cashKey, cpp as number)
+      } else if (!hasRewards) {
+        noneKeys.push(cashKey) // a no-reward hotel; confirm later via anyRewards
+      }
+    }
+    if (hasCpp && hasRewards) {
+      const ptsKey = Math.round(points as number)
+      addByPrice(ihgMapCppByPoints, ptsKey, cpp as number)
+      addByPrice(ihgHotelIdByPoints, ptsKey, hotelId)
+    }
+  }
+  if (anyRewards) {
+    for (const cashKey of noneKeys) {
+      addByPrice(ihgMapCppByCash, cashKey, "none")
+    }
+  }
+}
+
+// The pin-click details dialog (app-hotel-details-info-card) carries no hotel
+// id — only a displayed "156 USD" / "21.5K PTS" price. Resolve the mnemonic by
+// joining that price back to a hotel (skip when ambiguous).
+const resolveHotelIdByPrice = (element: Element): string | null => {
+  // Scope to the OUTER dialog content: the price sits in .right-column
+  // (app-hotel-details-info-card) but the hotel-detail link lives in the
+  // sibling .left-column, so the inner card alone wouldn't see the link.
+  const dialog = element.closest(".ui-dialog-content, .p-dialog-content")
+  if (!dialog) {
+    return null
+  }
+  // 1) Unambiguous: the hotel-detail link path carries the mnemonic
+  //    (/hotels/<cc>/<lang>/<city>/<mnemonic>/hoteldetail). Preferred — it
+  //    survives price collisions (two hotels at the same "from" price).
+  const href =
+    dialog.querySelector("a[href*='hoteldetail']")?.getAttribute("href") ?? ""
+  const linkMatch = /\/([a-z0-9]{5,6})\/hoteldetail/i.exec(href)
+  if (linkMatch) {
+    const id = normalizeHotelId(linkMatch[1])
+    if (id) {
+      return id
+    }
+  }
+  // 2) Fallback: join by displayed price (ambiguous prices return null).
+  const priceEl =
+    dialog.querySelector(".price") ??
+    dialog.querySelector("app-hotel-cash") ??
+    dialog.querySelector("app-hotel-price")
+  const parsed = parseMarkerValue(priceEl?.textContent)
+  if (!parsed) {
+    return null
+  }
+  const id = parsed.isPoints
+    ? ihgHotelIdByPoints.get(Math.round(parsed.value))
+    : ihgHotelIdByCash.get(Math.round(parsed.value))
+  return id ?? null
+}
+
+// Parse a marker's price text -> { value, isPoints }. Handles "212 USD",
+// "28K PTS", "1,234 USD", "50.5K".
+const parseMarkerValue = (
+  text: string | null | undefined
+): { value: number; isPoints: boolean } | undefined => {
+  if (!text) {
+    return undefined
+  }
+  const isPoints = /pts|points/i.test(text) || /\d\s*K\b/i.test(text)
+  const match = /([\d.,]+)\s*([KkMm])?/.exec(text)
+  if (!match) {
+    return undefined
+  }
+  let value = Number(match[1].replace(/,/g, ""))
+  if (!Number.isFinite(value)) {
+    return undefined
+  }
+  const suffix = (match[2] || "").toUpperCase()
+  if (suffix === "K") {
+    value *= 1000
+  } else if (suffix === "M") {
+    value *= 1_000_000
+  }
+  return { value, isPoints }
+}
+
+const updateMapMarkers = () => {
+  // Iterate the price box (.item-text) directly — it exists in both the white
+  // (.marker-container) and the brand-colored hover (.marker-container--xx)
+  // bubble, both under .map-marker-container. The CPP label lives inside it.
+  const boxes = document.querySelectorAll<HTMLElement>(".map-marker-container .item-text")
+  boxes.forEach((box) => {
+    // Read the price from IHG's .amount span, never from our own label.
+    const amountEl = box.querySelector<HTMLElement>(".amount") ?? box
+    const parsed = parseMarkerValue(amountEl.textContent)
+    let label = box.querySelector<HTMLElement>(`:scope > .${MAP_CPP_CLASS}`)
+    const value = parsed
+      ? parsed.isPoints
+        ? ihgMapCppByPoints.get(Math.round(parsed.value))
+        : ihgMapCppByCash.get(Math.round(parsed.value))
+      : undefined
+    if (value === undefined || value === null) {
+      label?.remove() // unknown price or ambiguous (shared price)
+      return
+    }
+    const noRewards = value === "none"
+    const cppText = noRewards ? "No rewards" : formatCpp(value)
+    // In CASH mode the marker shows only the cash price, so add the points line
+    // above the ¢/pt. (In points mode the marker already shows points.)
+    let ptsText = ""
+    if (!noRewards && parsed && !parsed.isPoints) {
+      const mnem = ihgHotelIdByCash.get(Math.round(parsed.value))
+      const pInfo = mnem ? ihgRatesByHotel.get(mnem) : undefined
+      ptsText = formatPointsCompact(pInfo?.lowestPoints ?? pInfo?.points)
+    }
+    if (!label) {
+      label = document.createElement("span")
+      label.className = MAP_CPP_CLASS
+      box.appendChild(label)
+    }
+    label.classList.toggle(`${MAP_CPP_CLASS}--none`, noRewards)
+    const sig = `${ptsText}|${cppText}`
+    if (label.dataset.av !== sig) {
+      label.dataset.av = sig
+      label.replaceChildren()
+      if (ptsText) {
+        const ptsEl = document.createElement("span")
+        ptsEl.className = "av-pts"
+        ptsEl.textContent = ptsText
+        label.appendChild(ptsEl)
+      }
+      const cppEl = document.createElement("span")
+      cppEl.className = "av-cpp"
+      cppEl.textContent = cppText
+      label.appendChild(cppEl)
+    }
+  })
+}
+
+const scheduleMapUpdate = () => {
+  if (ihgMapUpdateScheduled) {
+    return
+  }
+  ihgMapUpdateScheduled = true
+  requestAnimationFrame(() => {
+    ihgMapUpdateScheduled = false
+    updateMapMarkers()
+  })
+}
+
+// The pin-click dialog renders its price asynchronously ("From" -> "156 USD"),
+// so re-resolve placeholders once it settles.
+let ihgPlaceholderRefreshScheduled = false
+const schedulePlaceholderRefresh = () => {
+  if (ihgPlaceholderRefreshScheduled) {
+    return
+  }
+  ihgPlaceholderRefreshScheduled = true
+  requestAnimationFrame(() => {
+    ihgPlaceholderRefreshScheduled = false
+    updateExistingPlaceholders()
+  })
 }
 
 const ensurePlaceholder = (priceElement: Element) => {
@@ -852,9 +1219,32 @@ const normalizeCashCost = (value: unknown): IhgCashCost | undefined => {
 
   const record = value as Record<string, unknown>
   const baseAmount = extractNumber(record.baseAmount)
-  const excludedFeeSubTotal = extractNumber(record.excludedFeeSubTotal)
   const amountAfterTax = extractNumber(record.amountAfterTax)
   const basePlusExcludedFeesAmount = extractNumber(record.basePlusExcludedFeesAmount)
+
+  // Fees/taxes on top of the base rate. The offers response no longer carries a
+  // single `excludedFeeSubTotal`; it itemizes `feeTaxSubTotals[]` and rolls the
+  // total into `amountAfterTax`. Derive the add-on so the tooltip "Fees" row
+  // (Base + Fees = Total) reconciles.
+  const excludedFeeSubTotal =
+    extractNumber(record.excludedFeeSubTotal) ??
+    (amountAfterTax !== undefined && baseAmount !== undefined
+      ? Math.max(0, amountAfterTax - baseAmount)
+      : undefined)
+
+  // Resort/mandatory FEES only (excludes taxes) — `baseAmount + feeOnlySubTotal`
+  // is the pre-tax "from" price IHG prints on its map markers, our join key for
+  // labelling map pins.
+  const feeTaxSubTotals = Array.isArray(record.feeTaxSubTotals)
+    ? (record.feeTaxSubTotals as Array<Record<string, unknown>>)
+    : []
+  const feeOnlySubTotal = feeTaxSubTotals.length
+    ? feeTaxSubTotals.reduce(
+        (sum, entry) =>
+          entry.otaCodeType === "FEE" ? sum + (extractNumber(entry.amount) ?? 0) : sum,
+        0
+      )
+    : undefined
 
   if (
     baseAmount === undefined &&
@@ -868,6 +1258,7 @@ const normalizeCashCost = (value: unknown): IhgCashCost | undefined => {
   return {
     baseAmount,
     excludedFeeSubTotal,
+    feeOnlySubTotal,
     amountAfterTax,
     basePlusExcludedFeesAmount
   }
@@ -914,6 +1305,24 @@ const getPointsCostByPath = (
     const parsed = extractNumber(raw)
     if (parsed !== undefined) {
       return parsed
+    }
+  }
+  return undefined
+}
+
+const getPointsCashByPath = (
+  hotel: Record<string, unknown>,
+  paths: string[][]
+): IhgPointsCash | undefined => {
+  for (const path of paths) {
+    const raw = getValueByPath(hotel, path)
+    if (raw && typeof raw === "object") {
+      const record = raw as Record<string, unknown>
+      const points = extractNumber(record.points ?? record.originalPoints)
+      const cash = extractNumber(record.cash ?? record.originalCash)
+      if (points !== undefined || cash !== undefined) {
+        return { points, cash }
+      }
     }
   }
   return undefined
@@ -990,6 +1399,18 @@ const parseRateMap = (responseBodyText: string | null) => {
     ["summary", "highestPointsOnlyCost"],
     ["highestPointsOnlyCost"]
   ]
+  const lowestPointsAndCashPaths = [
+    ["summary", "rateRanges", "lowestPointsAndCashCost"],
+    ["rateRanges", "lowestPointsAndCashCost"],
+    ["summary", "lowestPointsAndCashCost"],
+    ["lowestPointsAndCashCost"]
+  ]
+  const highestPointsAndCashPaths = [
+    ["summary", "rateRanges", "highestPointsAndCashCost"],
+    ["rateRanges", "highestPointsAndCashCost"],
+    ["summary", "highestPointsAndCashCost"],
+    ["highestPointsAndCashCost"]
+  ]
 
   hotels.forEach((hotel) => {
     if (!hotel || typeof hotel !== "object") {
@@ -1010,6 +1431,12 @@ const parseRateMap = (responseBodyText: string | null) => {
     const highestCash = getCashCostByPath(record, highestCashPaths)
     const lowestPoints = getPointsCostByPath(record, lowestPointsPaths)
     const highestPoints = getPointsCostByPath(record, highestPointsPaths)
+    const lowestPointsAndCash = getPointsCashByPath(record, lowestPointsAndCashPaths)
+    const highestPointsAndCash = getPointsCashByPath(record, highestPointsAndCashPaths)
+    const rewardNightAvailable =
+      typeof record.rewardNightAvailable === "boolean"
+        ? record.rewardNightAvailable
+        : undefined
     const cashAmount = getRateValue(record, cashPaths)
     const points = getRateValue(record, pointsPaths)
     const lowestCashTotal = getCashTotal(lowestCash)
@@ -1071,6 +1498,9 @@ const parseRateMap = (responseBodyText: string | null) => {
         highestCash,
         lowestPoints,
         highestPoints,
+        lowestPointsAndCash,
+        highestPointsAndCash,
+        rewardNightAvailable,
         currency: propertyCurrency
       })
     })
@@ -1377,6 +1807,14 @@ const refreshRatesFromStorage = async () => {
     lastRequest?.bookingType ?? detectBookingType(lastRequest?.bodyText ?? null)
   ihgShowPointsWithCpp = lastBookingType !== "points"
 
+  // Track stay length + invalidate per-hotel rateDetails when the search changes.
+  ihgSearchNights = computeNights(lastRequest?.bodyText)
+  const rateDetailsSignature = extractSearchSignature(lastRequest?.bodyText ?? null)
+  if (rateDetailsSignature !== ihgRateDetailsSignature) {
+    ihgRateDetailsSignature = rateDetailsSignature
+    ihgRateDetailsByHotel.clear()
+  }
+
   const hotelIdElements = document.querySelectorAll(
     "app-hotel-card-list-view[id], .hotel-card-list-view-container[id], [data-testid='hotel-card'][id]"
   )
@@ -1394,7 +1832,9 @@ const refreshRatesFromStorage = async () => {
     ihgRateErrorsByHotel = new Map<string, string>()
     ihgLastRateError = selected.error ?? "Awaiting points response"
     ihgLastRateSource = selected.source
+    rebuildMapCppLookup()
     updateExistingPlaceholders()
+    scheduleMapUpdate()
     return
   }
 
@@ -1411,7 +1851,9 @@ const refreshRatesFromStorage = async () => {
   ihgRateErrorsByHotel = parsed.errorsByHotel
   ihgLastRateError = selected.error ?? parsed.error
   ihgLastRateSource = selected.source
+  rebuildMapCppLookup()
   updateExistingPlaceholders()
+  scheduleMapUpdate()
 }
 
 const refreshValueSettings = async () => {
@@ -1481,6 +1923,15 @@ const observePriceCards = () => {
         opacity: 1;
         transform: translateY(-8px);
       }
+      /* In the pin-detail dialog, .right-column is position:sticky → a stacking
+         context that traps our tooltip below the image gallery (z-index:9999 is
+         scoped inside it). While the CPP icon is hovered, lift the whole column
+         above the gallery so the tooltip is fully visible. */
+      .p-dialog-content .right-column:has(.${PLACEHOLDER_ICON_CLASS}:hover),
+      .ui-dialog-content .right-column:has(.${PLACEHOLDER_ICON_CLASS}:hover),
+      app-hotel-details-info-card .right-column:has(.${PLACEHOLDER_ICON_CLASS}:hover) {
+        z-index: 1000;
+      }
       .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-content {
         display: flex;
         flex-direction: column;
@@ -1527,6 +1978,18 @@ const observePriceCards = () => {
       .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-header .award-viewer-tooltip-cell--label {
         color: transparent;
       }
+      .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-note {
+        margin-top: 4px;
+        font-size: 10px;
+        font-weight: 600;
+        color: #b91c1c;
+      }
+      .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-benefit {
+        margin-top: 4px;
+        font-size: 10px;
+        font-weight: 600;
+        color: #047857;
+      }
       .${PLACEHOLDER_VALUE_CLASS} {
         display: inline-flex;
         align-items: center;
@@ -1563,6 +2026,39 @@ const observePriceCards = () => {
         0% { background-position: 100% 50%; }
         100% { background-position: 0 50%; }
       }
+      /* The pin's price box (.item-text) is a flex ROW, which would shove our
+         label to the right. Stack it UNDER the price — scoped to labelled pins
+         only via :has() so untouched pins are unaffected. */
+      .item-text:has(> .${MAP_CPP_CLASS}) {
+        flex-direction: column !important;
+        justify-content: center;
+        align-items: center;
+      }
+      .${MAP_CPP_CLASS} {
+        display: block;
+        font-size: 9px;
+        font-weight: 800;
+        line-height: 1.05;
+        text-align: center;
+        color: #047857;            /* green, readable on the white bubble */
+        white-space: nowrap;
+      }
+      .${MAP_CPP_CLASS} > span { display: block; }
+      .${MAP_CPP_CLASS} .av-pts { font-weight: 600; }   /* points line */
+      .${MAP_CPP_CLASS} .av-cpp { font-weight: 800; }   /* ¢/pt line */
+      .${MAP_CPP_CLASS}--none {
+        color: #9ca3af;            /* muted grey: hotel has no reward nights */
+        font-weight: 600;
+      }
+      /* On hover / list-card highlight the bubble swaps to the brand color with
+         white text (a .marker-container--xx brand container or .brand-highlight
+         ancestor). Match it so the CPP stays legible. */
+      .brand-highlight .${MAP_CPP_CLASS},
+      [class*="marker-container--"] .${MAP_CPP_CLASS} {
+        color: #ffffff;
+      }
+      .map-marker-container,
+      .map-marker-container .item-text { overflow: visible; }
     `
     document.head.appendChild(style)
   }
@@ -1583,6 +2079,25 @@ const observePriceCards = () => {
         }
 
         updatePlaceholders(node)
+
+        // Details dialog price loads late and has no hotel id (resolved by
+        // price) — re-resolve placeholders when price nodes settle.
+        if (
+          node.matches?.("app-hotel-price, app-hotel-cash, .price") ||
+          node.querySelector?.("app-hotel-price")
+        ) {
+          schedulePlaceholderRefresh()
+        }
+
+        // Map pins are highly dynamic: they get added on pan and the bubble is
+        // re-rendered (white <-> brand container) on hover/select, which drops
+        // our label. Re-run on any marker-ish mutation (debounced via rAF).
+        if (
+          node.matches?.("[class*='marker'], .item-text, .amount") ||
+          node.querySelector?.("[class*='marker'], .map-marker")
+        ) {
+          scheduleMapUpdate()
+        }
       })
     }
   })
