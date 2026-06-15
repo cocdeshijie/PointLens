@@ -35,14 +35,10 @@ const MIN_BODY = {
     { productCode: "SR", startDate: "2026-02-09", endDate: "2026-02-10" }
   ],
   rates: {
-    ratePlanCodes: [
-      { internal: "IVAN1" },
-      { internal: "IVAN3" },
-      { internal: "IVAN5" },
-      { internal: "IVAN6" },
-      { internal: "IVAN7" },
-      { internal: "IVANI" }
-    ]
+    // IHG's live search requests only the consolidated reward plan `IVANI`,
+    // which returns the full points / points+cash response on its own. The
+    // older IVAN1/3/5/6/7 codes are redundant (confirmed 2026-06 capture).
+    ratePlanCodes: [{ internal: "IVANI" }]
   }
 }
 
@@ -546,3 +542,129 @@ const runBackgroundRequest = async (
 
   backgroundSent.delete(requestId)
 }
+
+// ---- Reward-night detail (4th-night-free) -------------------------------
+//
+// The search-results `summary` endpoint returns per-night rate ranges, so the
+// IHG One Rewards "every 4th reward night free" benefit (points-only, applied
+// when a cardmember is logged in) never appears there — it's a full-STAY total
+// that lives in the per-hotel `rateDetails` response under
+// `hotels[].rateDetails.offers[IVANI].rewardNights.pointsOnly`. We fetch that
+// lazily, per hotel, reusing the live request headers (incl. X-IHG-SSO-TOKEN)
+// captured from the page so the member benefit is applied.
+
+const IHG_RATEDETAILS_URL =
+  "https://apis.ihg.com/availability/v3/hotels/offers?fieldset=rateDetails,rateDetails.policies,rateDetails.bonusRates,rateDetails.upsells,alternatePayments"
+
+type IhgStayDetails = {
+  status: "ok" | "none" | "error"
+  nights?: number
+  totalPoints?: number
+  originalTotalPoints?: number
+  savedPoints?: number
+  freeNightCount?: number
+  benefitReason?: string | null
+  error?: string
+}
+
+// hotelMnemonic + search signature -> result (avoid refetching the heavy call)
+const rateDetailsCache = new Map<string, IhgStayDetails>()
+
+const buildRateDetailsBody = (baseBodyText: string | null, hotelMnemonic: string) => {
+  let base: Record<string, unknown> = {}
+  try {
+    base = baseBodyText ? (JSON.parse(baseBodyText) as Record<string, unknown>) : {}
+  } catch {
+    base = {}
+  }
+  return {
+    ...base,
+    hotelMnemonics: [hotelMnemonic],
+    geoLocation: null,
+    rates: { ratePlanCodes: [{ internal: "IVANI" }] }
+  }
+}
+
+const parseRewardNights = (responseBodyText: string): IhgStayDetails => {
+  const parsed = JSON.parse(responseBodyText) as Record<string, unknown>
+  const hotels = (parsed.hotels as Array<Record<string, unknown>> | undefined) ?? []
+  const offers =
+    ((hotels[0]?.rateDetails as Record<string, unknown> | undefined)?.offers as
+      | Array<Record<string, unknown>>
+      | undefined) ?? []
+  const offer =
+    offers.find((o) => o.ratePlanCode === "IVANI" && o.rewardNights) ??
+    offers.find((o) => o.rewardNights)
+  const reward = offer?.rewardNights as Record<string, unknown> | undefined
+  const pointsOnly = reward?.pointsOnly as Record<string, unknown> | undefined
+  if (!pointsOnly) {
+    return { status: "none" }
+  }
+  const daily = (pointsOnly.daily as Array<Record<string, unknown>> | undefined) ?? []
+  const freeNightCount = daily.filter((d) => Number(d.points) === 0).length
+  const totalPoints = Number(pointsOnly.totalPoints)
+  const originalTotalPoints = Number(pointsOnly.originalTotalPoints)
+  return {
+    status: "ok",
+    nights: daily.length,
+    totalPoints: Number.isFinite(totalPoints) ? totalPoints : undefined,
+    originalTotalPoints: Number.isFinite(originalTotalPoints) ? originalTotalPoints : undefined,
+    savedPoints:
+      Number.isFinite(originalTotalPoints) && Number.isFinite(totalPoints)
+        ? originalTotalPoints - totalPoints
+        : undefined,
+    freeNightCount,
+    benefitReason:
+      typeof reward?.displayBenefitReason === "string"
+        ? (reward.displayBenefitReason as string)
+        : null
+  }
+}
+
+const runRateDetailsRequest = async (hotelMnemonic: string): Promise<IhgStayDetails> => {
+  const stored = await chrome.storage.local.get(IHG_STORAGE_KEY)
+  const last = stored[IHG_STORAGE_KEY] as
+    | { bodyText?: string | null; requestHeaders?: chrome.webRequest.HttpHeader[]; bookingType?: string }
+    | undefined
+  const sig = extractSearchSignature(last?.bodyText ?? null)
+  const cacheKey = `${hotelMnemonic}|${sig ?? ""}`
+  const cached = rateDetailsCache.get(cacheKey)
+  if (cached) {
+    return cached
+  }
+
+  const body = buildRateDetailsBody(last?.bodyText ?? null, hotelMnemonic)
+  const headers = {
+    ...MIN_HEADERS,
+    ...toHeaderRecord(last?.requestHeaders),
+    "content-type": "application/json; charset=UTF-8"
+  }
+  try {
+    const response = await fetch(IHG_RATEDETAILS_URL, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(body),
+      credentials: "include"
+    })
+    const text = await response.text()
+    const result = response.ok ? parseRewardNights(text) : { status: "error" as const, error: `HTTP ${response.status}` }
+    rateDetailsCache.set(cacheKey, result)
+    return result
+  } catch (error) {
+    const result: IhgStayDetails = {
+      status: "error",
+      error: error instanceof Error ? error.message : "rateDetails request failed"
+    }
+    return result
+  }
+}
+
+chrome.runtime.onMessage.addListener(
+  (message: { type?: string; hotelMnemonic?: string }, _sender, sendResponse) => {
+    if (message?.type !== "ihg-rate-details" || !message.hotelMnemonic) {
+      return undefined
+    }
+    runRateDetailsRequest(message.hotelMnemonic).then(sendResponse)
+    return true // async sendResponse
+  }
+)

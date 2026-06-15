@@ -70,14 +70,10 @@ type IhgConversionRequest = {
 
 type TabKey = "detected" | "sent" | "conversion"
 
-const MIN_BODY_RATE_PLAN_CODES = [
-  { internal: "IVAN1" },
-  { internal: "IVAN3" },
-  { internal: "IVAN5" },
-  { internal: "IVAN6" },
-  { internal: "IVAN7" },
-  { internal: "IVANI" }
-]
+// IHG's live search requests only the consolidated reward plan `IVANI`, which
+// returns the full points / points+cash response on its own. The older
+// IVAN1/3/5/6/7 codes are redundant (confirmed 2026-06 capture).
+const MIN_BODY_RATE_PLAN_CODES = [{ internal: "IVANI" }]
 
 const MIN_BODY_TEMPLATE = {
   radius: 30,
