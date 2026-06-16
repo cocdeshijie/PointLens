@@ -231,7 +231,13 @@ const buildRatesFromStorage = (raw: unknown) => {
         ? amountAfterTax / stayNights
         : amountAfterTax
     const rateAmount = extractNumber(lowest?.rateAmount)
-    const cash = normalizedAmountAfterTax ?? rateAmount
+    // Cash basis for CPP + the badge total, per the user's setting (default
+    // after-tax). `rateAmount` is the pre-tax room rate; `normalizedAmountAfterTax`
+    // is the taxes-included per-night total.
+    const cash =
+      hiltonValueSettings.taxBasis === "pretax"
+        ? rateAmount ?? normalizedAmountAfterTax
+        : normalizedAmountAfterTax ?? rateAmount
     const points = extractNumber(hhonors?.dailyRmPointsRate)
     const currency = record.currencyCode as string | undefined
     const ratePlanName =
@@ -300,7 +306,7 @@ const sendAuthoritativeRates = () => {
     rates.push({
       id,
       cpp: info.cpp,
-      cash: info.amountAfterTax ?? info.cash,
+      cash: info.cash ?? info.amountAfterTax,
       points: info.points,
       rewardStatus: info.rewardStatus
     })
@@ -327,7 +333,9 @@ const refreshValueSettings = async () => {
   hiltonValueSettings = normalizeHiltonValueSettings(
     stored[HILTON_VALUE_SETTINGS_KEY] as Partial<typeof hiltonValueSettings> | undefined
   )
-  updateExistingPlaceholders()
+  // Rebuild rates so CPP + the badge total reflect the (possibly changed) tax
+  // basis; this also re-pushes authoritative rates to the map overlay.
+  await refreshRatesFromStorage()
   sendMapSettings()
 }
 
@@ -674,7 +682,7 @@ const updatePlaceholderText = (placeholder: HTMLElement) => {
 
   if (showCpp && info?.cpp !== undefined && Number.isFinite(info.cpp)) {
     placeholder.classList.remove("is-loading")
-    const total = info?.amountAfterTax ?? info?.cash
+    const total = info?.cash ?? info?.amountAfterTax
     const totalSuffix =
       total !== undefined && Number.isFinite(total)
         ? ` (${formatUsdAmount(total)})`

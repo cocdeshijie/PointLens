@@ -3,16 +3,25 @@ export const HILTON_VALUE_SETTINGS_KEY = "award-viewer:hilton-value-settings"
 export type HiltonValueSettings = {
   goodValueThreshold: number
   badValueThreshold: number
+  // Which cash figure to value points against / show on badges.
+  taxBasis: "pretax" | "aftertax"
 }
 
 export const DEFAULT_HILTON_VALUE_SETTINGS: HiltonValueSettings = {
   goodValueThreshold: 0.6,
-  badValueThreshold: 0.45
+  badValueThreshold: 0.45,
+  taxBasis: "aftertax"
 }
 
 const coerceNumber = (value: unknown, fallback: number) => {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback
 }
+
+const coerceTaxBasis = (
+  value: unknown,
+  fallback: "pretax" | "aftertax"
+): "pretax" | "aftertax" =>
+  value === "pretax" || value === "aftertax" ? value : fallback
 
 export const normalizeHiltonValueSettings = (
   value?: Partial<HiltonValueSettings> | null
@@ -25,6 +34,10 @@ export const normalizeHiltonValueSettings = (
     badValueThreshold: coerceNumber(
       value?.badValueThreshold,
       DEFAULT_HILTON_VALUE_SETTINGS.badValueThreshold
+    ),
+    taxBasis: coerceTaxBasis(
+      value?.taxBasis,
+      DEFAULT_HILTON_VALUE_SETTINGS.taxBasis
     )
   }
 }

@@ -106,10 +106,23 @@ const isBookable = (info: HyattRateInfo) =>
   info.points !== undefined &&
   info.points > 0
 
+// The cash figure CPP + badges are computed from, per the user's tax-basis
+// setting (default after-tax). Falls back to the pre-tax rate when an after-tax
+// figure isn't present.
+const basisCash = (info: HyattRateInfo) =>
+  hyattValueSettings.taxBasis === "pretax"
+    ? info.rate
+    : info.rateAfterTax ?? info.rate
+
+// The basis cash converted to USD — every cash figure we print on a badge is
+// USD-normalized (the page's own prices stay local; only our overlay is USD).
+const basisCashUsd = (info: HyattRateInfo) =>
+  toUsd(basisCash(info), info.currency)
+
 const recomputeCpp = () => {
   for (const info of hyattRatesByHotel.values()) {
     info.cpp = isBookable(info)
-      ? computeCpp(toUsd(info.rate, info.currency), info.points)
+      ? computeCpp(toUsd(basisCash(info), info.currency), info.points)
       : undefined
   }
 }
@@ -130,7 +143,7 @@ const mergeRates = (rates: Record<string, unknown> | undefined) => {
       status: typeof r.status === "string" ? r.status : undefined
     }
     info.cpp = isBookable(info)
-      ? computeCpp(toUsd(info.rate, info.currency), info.points)
+      ? computeCpp(toUsd(basisCash(info), info.currency), info.points)
       : undefined
     hyattRatesByHotel.set(id, info)
   }
@@ -204,10 +217,19 @@ const isPointsView = () => {
 }
 
 // The value we append next to CPP: cash in points-view, points in cash-view.
+// Abbreviated form for compact surfaces (map pin, selection popover):
+// "$394" / "12k pts".
 const secondaryText = (info: HyattRateInfo) =>
   isPointsView()
-    ? formatCashCompact(info.rate, info.currency)
+    ? formatCashCompact(basisCashUsd(info), "USD")
     : `${formatPointsK(info.points)} pts`
+
+// Full form for the roomy list card: 2-decimal cash ("$394.38") and the full
+// points value ("12,000 pts").
+const secondaryTextFull = (info: HyattRateInfo) =>
+  isPointsView()
+    ? formatCash(basisCashUsd(info), "USD")
+    : `${formatPoints(info.points)} pts`
 
 const valueTier = (cpp?: number) => {
   if (cpp === undefined || !Number.isFinite(cpp)) return ""
@@ -314,8 +336,10 @@ const buildTooltipContent = (info: HyattRateInfo) => {
     return wrapper
   }
 
-  const cashLabel = formatCash(info.rate, info.currency)
-  const taxLabel = formatCash(info.rateAfterTax, info.currency)
+  // USD-normalized so our overlay is consistent regardless of the property's
+  // display currency.
+  const cashLabel = formatCash(toUsd(info.rate, info.currency), "USD")
+  const taxLabel = formatCash(toUsd(info.rateAfterTax, info.currency), "USD")
   if (cashLabel) addRow("Cash/night", cashLabel)
   if (info.rateAfterTax !== undefined && taxLabel) addRow("After tax", taxLabel)
 
@@ -411,7 +435,7 @@ const updatePlaceholderText = (placeholder: HTMLElement) => {
     placeholder.classList.remove("is-loading")
     iconWrapper.style.removeProperty("display")
     updateValueClass(valueEl, info.cpp)
-    valueEl.textContent = `${formatCpp(info.cpp)} · ${secondaryText(info)}`
+    valueEl.textContent = `${formatCpp(info.cpp)} · ${secondaryTextFull(info)}`
     if (tooltip) tooltip.replaceChildren(buildTooltipContent(info))
     return
   }
@@ -502,7 +526,7 @@ const updateMapPins = () => {
     // Lead with the complementary value to the native pin: cash when the pin
     // shows points (points-view), points when the pin shows cash (cash-view).
     const leadText = isPointsView()
-      ? formatCashCompact(info.rate, info.currency)
+      ? formatCashCompact(basisCashUsd(info), "USD")
       : formatPointsK(info.points)
     const cppText = info.cpp !== undefined ? `${info.cpp.toFixed(2)}¢` : ""
     const text = cppText ? `${leadText} · ${cppText}` : leadText
@@ -583,6 +607,7 @@ const refreshValueSettings = async () => {
   hyattValueSettings = normalizeHyattValueSettings(
     result?.[HYATT_VALUE_SETTINGS_KEY]
   )
+  recomputeCpp() // tax-basis may have changed → CPP must be recomputed
   scheduleUpdate()
 }
 

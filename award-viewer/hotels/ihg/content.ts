@@ -1278,9 +1278,18 @@ const getCashCostByPath = (
   return undefined
 }
 
+// Cash figure CPP + the badge total are computed from, per the user's tax-basis
+// setting (default after-tax). Pre-tax = the room base + mandatory fees only
+// (what IHG prints on its markers); after-tax = the taxes-included total.
 const getCashTotal = (cost?: IhgCashCost) => {
   if (!cost) {
     return undefined
+  }
+  if (ihgValueSettings.taxBasis === "pretax") {
+    if (cost.baseAmount !== undefined) {
+      return cost.baseAmount + (cost.feeOnlySubTotal ?? 0)
+    }
+    return cost.basePlusExcludedFeesAmount ?? cost.amountAfterTax
   }
   return (
     cost.amountAfterTax ??
@@ -1867,7 +1876,8 @@ const refreshValueSettings = async () => {
   ihgValueSettings = normalizeIhgValueSettings(
     stored[IHG_VALUE_SETTINGS_KEY] as Partial<typeof ihgValueSettings> | undefined
   )
-  updateExistingPlaceholders()
+  // Rebuild rates so CPP + the badge total reflect the (possibly changed) tax basis.
+  await refreshRatesFromStorage()
 }
 
 const observePriceCards = () => {
@@ -2123,7 +2133,8 @@ if (chrome?.storage?.onChanged) {
           | Partial<typeof ihgValueSettings>
           | undefined
       )
-      updateExistingPlaceholders()
+      // Rebuild rates so CPP + the badge total reflect the new tax basis.
+      void refreshRatesFromStorage()
     }
   })
 }
