@@ -2,6 +2,7 @@ import { useEffect, useState } from "react"
 import { FiChevronRight, FiGlobe } from "react-icons/fi"
 
 import HiltonPopup from "./hotels/hilton/Popup"
+import HyattPopup from "./hotels/hyatt/Popup"
 import IhgPopup from "./hotels/ihg/Popup"
 import MarriottPopup from "./hotels/marriott/Popup"
 
@@ -25,6 +26,12 @@ const SUPPORTED_SITES = [
     label: "Marriott",
     domain: "marriott.com",
     icon: "M"
+  },
+  {
+    id: "hyatt",
+    label: "Hyatt",
+    domain: "hyatt.com",
+    icon: "Y"
   }
 ] as const
 
@@ -168,6 +175,19 @@ function IndexPopup() {
               />
             ) : selectedSiteConfig.id === "marriott" ? (
               <MarriottPopup
+                onBack={
+                  () => {
+                    setSelectedSite(null)
+                    setForceHome(true)
+                  }
+                }
+                site={{
+                  name: selectedSiteConfig.label,
+                  domain: selectedSiteConfig.domain
+                }}
+              />
+            ) : selectedSiteConfig.id === "hyatt" ? (
+              <HyattPopup
                 onBack={
                   () => {
                     setSelectedSite(null)
