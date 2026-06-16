@@ -1,3 +1,4 @@
+import appIcon from "data-base64:~assets/icon.png"
 import hiltonIcon from "data-base64:~assets/hilton.png"
 import hyattIcon from "data-base64:~assets/hyatt.png"
 import ihgIcon from "data-base64:~assets/ihg.png"
@@ -196,9 +197,7 @@ function IndexPopup() {
   return (
     <div style={s.shell}>
       <header style={s.header}>
-        <div style={s.logo} aria-hidden="true">
-          ¢
-        </div>
+        <img src={appIcon} alt="" width={34} height={34} style={s.logo} />
         <div style={{ minWidth: 0 }}>
           <div style={s.brand}>Point Lens</div>
           <div style={s.tagline}>Points value, at a glance</div>
@@ -276,13 +275,7 @@ const makeStyles = (p: Palette): Record<string, React.CSSProperties> => ({
     height: 34,
     borderRadius: 10,
     flexShrink: 0,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    fontWeight: 800,
-    fontSize: 18,
-    color: "#ffffff",
-    background: "linear-gradient(135deg, #4f46e5, #7c3aed)",
+    display: "block",
     boxShadow: "0 6px 14px rgba(79, 70, 229, 0.28)"
   },
   brand: { fontSize: 15, fontWeight: 800, color: p.text, lineHeight: 1.2 },
