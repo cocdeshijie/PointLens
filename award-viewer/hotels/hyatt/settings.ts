@@ -1,16 +1,18 @@
-export const MARRIOTT_VALUE_SETTINGS_KEY =
-  "award-viewer:marriott-value-settings"
+export const HYATT_VALUE_SETTINGS_KEY = "award-viewer:hyatt-value-settings"
 
-export type MarriottValueSettings = {
+export type HyattValueSettings = {
   goodValueThreshold: number
   badValueThreshold: number
   // Which cash figure to value points against / show on badges.
   taxBasis: "pretax" | "aftertax"
 }
 
-export const DEFAULT_MARRIOTT_VALUE_SETTINGS: MarriottValueSettings = {
-  goodValueThreshold: 0.6,
-  badValueThreshold: 0.45,
+// Thresholds are ¢/pt in USD (CPP is currency-normalized before comparison — see
+// content.ts toUsd()). World of Hyatt redemptions tend to run higher value than
+// the other chains, so the good/bad bars sit higher.
+export const DEFAULT_HYATT_VALUE_SETTINGS: HyattValueSettings = {
+  goodValueThreshold: 2,
+  badValueThreshold: 1.5,
   taxBasis: "aftertax"
 }
 
@@ -24,21 +26,21 @@ const coerceTaxBasis = (
 ): "pretax" | "aftertax" =>
   value === "pretax" || value === "aftertax" ? value : fallback
 
-export const normalizeMarriottValueSettings = (
-  value?: Partial<MarriottValueSettings> | null
-): MarriottValueSettings => {
+export const normalizeHyattValueSettings = (
+  value?: Partial<HyattValueSettings> | null
+): HyattValueSettings => {
   return {
     goodValueThreshold: coerceNumber(
       value?.goodValueThreshold,
-      DEFAULT_MARRIOTT_VALUE_SETTINGS.goodValueThreshold
+      DEFAULT_HYATT_VALUE_SETTINGS.goodValueThreshold
     ),
     badValueThreshold: coerceNumber(
       value?.badValueThreshold,
-      DEFAULT_MARRIOTT_VALUE_SETTINGS.badValueThreshold
+      DEFAULT_HYATT_VALUE_SETTINGS.badValueThreshold
     ),
     taxBasis: coerceTaxBasis(
       value?.taxBasis,
-      DEFAULT_MARRIOTT_VALUE_SETTINGS.taxBasis
+      DEFAULT_HYATT_VALUE_SETTINGS.taxBasis
     )
   }
 }

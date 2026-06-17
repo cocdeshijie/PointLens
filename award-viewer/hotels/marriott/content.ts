@@ -342,7 +342,11 @@ const buildRatesFromStorage = (raw: unknown) => {
         ?.currency as string | undefined) ??
       (property?.currencyCode as string | undefined)
 
-    const cashForCpp = cashTotal ?? cash ?? cashBase
+    // Cash basis for CPP per the user's setting (default after-tax = total).
+    const cashForCpp =
+      marriottValueSettings.taxBasis === "pretax"
+        ? cashBase ?? cash ?? cashTotal
+        : cashTotal ?? cash ?? cashBase
     const cppPoints =
       stayNights !== undefined && stayNights > 1 && points !== undefined
         ? points / stayNights
@@ -783,8 +787,8 @@ const refreshValueSettings = async () => {
   marriottValueSettings = normalizeMarriottValueSettings(
     result?.[MARRIOTT_VALUE_SETTINGS_KEY]
   )
-  updateExistingPlaceholders()
-  scheduleUpdate()
+  // Rebuild rates so CPP reflects the (possibly changed) tax basis.
+  await refreshRatesFromStorage()
 }
 
 const ensurePlaceholderStyles = () => {

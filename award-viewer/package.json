@@ -1,8 +1,8 @@
 {
-  "name": "award-viewer",
-  "displayName": "Award viewer",
-  "version": "0.0.1",
-  "description": "A basic Plasmo extension.",
+  "name": "point-lens",
+  "displayName": "Point Lens",
+  "version": "1.0.0",
+  "description": "See hotel award point value (cents per point) at a glance on Hilton, IHG, Marriott, and Hyatt search results.",
   "author": "cocdeshijie",
   "scripts": {
     "dev": "plasmo dev",
@@ -10,6 +10,7 @@
     "package": "plasmo package"
   },
   "dependencies": {
+    "jotai": "^2.20.1",
     "plasmo": "0.90.5",
     "react": "18.2.0",
     "react-dom": "18.2.0",
