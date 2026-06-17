@@ -1,7 +1,7 @@
 {
   "name": "point-lens",
   "displayName": "Point Lens",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "See hotel award point value (cents per point) at a glance on Hilton, IHG, Marriott, and Hyatt search results.",
   "author": "cocdeshijie",
   "scripts": {
