@@ -1,0 +1,94 @@
+name: Build extension
+
+on:
+  push:
+    branches: [master]
+
+# Allow the workflow to push the version bump and publish a release.
+permissions:
+  contents: write
+
+concurrency:
+  group: build-extension
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: award-viewer
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: award-viewer/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Use the version in package.json as-is when it's new (i.e. you bumped it
+      # yourself). If a release tag already exists for it — meaning this push did
+      # NOT change the version — bump the patch (x.y.Z -> x.y.Z+1) until the
+      # version is free, then commit that bump back to master.
+      - name: Resolve version
+        id: ver
+        run: |
+          set -e
+          git fetch --tags --force --quiet || true
+          CUR=$(node -p "require('./package.json').version")
+          FINAL="$CUR"
+          BUMPED=false
+          while git rev-parse -q --verify "refs/tags/v$FINAL" >/dev/null; do
+            FINAL=$(node -e "const p='$FINAL'.split('.').map(Number); p[2]=(p[2]||0)+1; console.log(p[0]+'.'+p[1]+'.'+p[2])")
+            BUMPED=true
+          done
+          if [ "$BUMPED" = "true" ]; then
+            echo "Version $CUR already released; bumping to $FINAL."
+            npm version "$FINAL" --no-git-tag-version --allow-same-version >/dev/null
+          else
+            echo "Releasing version $FINAL as-is."
+          fi
+          echo "version=$FINAL" >> "$GITHUB_OUTPUT"
+          echo "bumped=$BUMPED" >> "$GITHUB_OUTPUT"
+
+      - name: Build & package
+        run: |
+          npm run build
+          npm run package
+          zip=$(ls build/*.zip | head -1)
+          out="point-lens-${{ steps.ver.outputs.version }}-chrome.zip"
+          cp "$zip" "$out"
+          echo "ZIP_PATH=award-viewer/$out" >> "$GITHUB_ENV"
+
+      - name: Commit version bump
+        if: steps.ver.outputs.bumped == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json package-lock.json
+          git commit -m "chore: release v${{ steps.ver.outputs.version }} [skip ci]"
+          git push
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: point-lens-${{ steps.ver.outputs.version }}-chrome
+          path: ${{ env.ZIP_PATH }}
+          if-no-files-found: error
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.ver.outputs.version }}
+          name: Point Lens v${{ steps.ver.outputs.version }}
+          files: ${{ env.ZIP_PATH }}
+          generate_release_notes: true
