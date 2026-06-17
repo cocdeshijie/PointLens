@@ -3,6 +3,7 @@ name: Build extension
 on:
   push:
     branches: [master]
+  workflow_dispatch:
 
 # Allow the workflow to push the version bump and publish a release.
 permissions:
