@@ -107,7 +107,7 @@ and ctyhocn identity. Use `shopMultiPropAvail` for actual date-specific pricing.
 
 ## How the extension handles it today
 
-`award-viewer/hotels/hilton/`:
+`pointlens/hotels/hilton/`:
 - `injected/hilton-fetch-hook.js` — MAIN-world fetch hook: intercepts
   `shopMultiPropAvail`, applies `patchBodyForPoints` + `ensureHhonorsInQuery` +
   `setOriginalOpNameToPoints` to request, captures response.

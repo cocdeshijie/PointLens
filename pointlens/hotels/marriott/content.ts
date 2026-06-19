@@ -14,16 +14,16 @@ export const config: PlasmoCSConfig = {
   run_at: "document_start"
 }
 
-const MARRIOTT_STORAGE_KEY = "award-viewer:marriott-last-capture"
-const PLACEHOLDER_CLASS = "award-viewer-marriott-price-placeholder"
-const PLACEHOLDER_ICON_CLASS = "award-viewer-marriott-cpp-icon"
-const PLACEHOLDER_VALUE_CLASS = "award-viewer-marriott-cpp-value"
-const PLACEHOLDER_STYLE_ID = "award-viewer-marriott-placeholder-style"
+const MARRIOTT_STORAGE_KEY = "pointlens:marriott-last-capture"
+const PLACEHOLDER_CLASS = "pointlens-marriott-price-placeholder"
+const PLACEHOLDER_ICON_CLASS = "pointlens-marriott-cpp-icon"
+const PLACEHOLDER_VALUE_CLASS = "pointlens-marriott-cpp-value"
+const PLACEHOLDER_STYLE_ID = "pointlens-marriott-placeholder-style"
 // CPP line we append INSIDE Marriott's own map price pin (.m-map-pin), IHG-style.
-const MAP_PIN_CPP_CLASS = "award-viewer-marriott-pin-cpp"
-const MAP_PIN_ANNOTATED_CLASS = "award-viewer-pin-annotated"
+const MAP_PIN_CPP_CLASS = "pointlens-marriott-pin-cpp"
+const MAP_PIN_ANNOTATED_CLASS = "pointlens-pin-annotated"
 // CPP badge injected into the large "hqv" hotel detail modal (2nd click).
-const DETAIL_CPP_CLASS = "award-viewer-marriott-detail-cpp"
+const DETAIL_CPP_CLASS = "pointlens-marriott-detail-cpp"
 
 type MarriottRateInfo = {
   cpp?: number
@@ -545,7 +545,7 @@ const positionSharedTooltip = (icon: HTMLElement) => {
 const getSharedTooltip = () => {
   if (sharedTooltip && sharedTooltip.isConnected) return sharedTooltip
   sharedTooltip = document.createElement("div")
-  sharedTooltip.className = "award-viewer-tooltip award-viewer-shared-tooltip"
+  sharedTooltip.className = "pointlens-tooltip pointlens-shared-tooltip"
   document.body.appendChild(sharedTooltip)
   document.addEventListener(
     "mousemove",
@@ -572,7 +572,7 @@ const getSharedTooltip = () => {
 
 const attachSmartTooltip = (iconWrapper: HTMLElement) => {
   if (iconWrapper.dataset.avSmartTip) return
-  const source = iconWrapper.querySelector<HTMLElement>(".award-viewer-tooltip")
+  const source = iconWrapper.querySelector<HTMLElement>(".pointlens-tooltip")
   if (!source) return
   iconWrapper.dataset.avSmartTip = "1"
 
@@ -600,10 +600,10 @@ const buildInfoIcon = (info: MarriottRateInfo) => {
   const iconWrapper = document.createElement("span")
   iconWrapper.className = PLACEHOLDER_ICON_CLASS
   const iconTarget = document.createElement("span")
-  iconTarget.className = "award-viewer-icon"
+  iconTarget.className = "pointlens-icon"
   iconWrapper.appendChild(iconTarget)
   const tooltip = document.createElement("span")
-  tooltip.className = "award-viewer-tooltip"
+  tooltip.className = "pointlens-tooltip"
   tooltip.appendChild(buildTooltipContent(info))
   iconWrapper.appendChild(tooltip)
   const root = createRoot(iconTarget)
@@ -680,7 +680,7 @@ const renderCppBadge = (
   badge?.remove()
   badge = document.createElement("div")
   badge.className = `${DETAIL_CPP_CLASS} ${tier}${
-    compact ? " award-viewer-marriott-cpp-compact" : ""
+    compact ? " pointlens-marriott-cpp-compact" : ""
   }`.trim()
   badge.dataset.av = sig
   badge.appendChild(buildCppBadgeContents(info, hasReward))
@@ -707,7 +707,7 @@ const feeAnchor = (
       e.offsetParent !== null &&
       e.parentElement &&
       FEE_TEXT_RE.test(e.textContent || "") &&
-      !e.closest(".award-viewer-tooltip") &&
+      !e.closest(".pointlens-tooltip") &&
       !e.closest(`.${DETAIL_CPP_CLASS}`)
   )
   if (fee?.parentElement) {
@@ -832,7 +832,7 @@ const ensurePlaceholderStyles = () => {
       line-height: 1;
       z-index: 2;
     }
-    .${PLACEHOLDER_ICON_CLASS} .award-viewer-icon {
+    .${PLACEHOLDER_ICON_CLASS} .pointlens-icon {
       display: inline-flex;
       align-items: center;
     }
@@ -841,7 +841,7 @@ const ensurePlaceholderStyles = () => {
        escapes the transformed/overflow ancestors of the InfoWindow and modal
        (position:fixed resolves to the viewport only when no ancestor is
        transformed). Visibility + position are set by JS, not :hover. */
-    .award-viewer-tooltip {
+    .pointlens-tooltip {
       position: fixed;
       opacity: 0;
       pointer-events: none;
@@ -859,10 +859,10 @@ const ensurePlaceholderStyles = () => {
       max-width: 280px;
     }
     /* In-icon tooltips are content storage only (cloned into the shared one). */
-    .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip {
+    .${PLACEHOLDER_ICON_CLASS} .pointlens-tooltip {
       display: none;
     }
-    .award-viewer-tooltip-grid {
+    .pointlens-tooltip-grid {
       display: grid;
       grid-template-columns: max-content minmax(160px, auto);
       column-gap: 12px;
@@ -870,15 +870,15 @@ const ensurePlaceholderStyles = () => {
       align-items: center;
       justify-content: start;
     }
-    .award-viewer-tooltip-row { display: contents; }
-    .award-viewer-tooltip-cell { white-space: normal; }
-    .award-viewer-tooltip-cell--label { color: #475569; }
-    .award-viewer-tooltip-cell--value {
+    .pointlens-tooltip-row { display: contents; }
+    .pointlens-tooltip-cell { white-space: normal; }
+    .pointlens-tooltip-cell--label { color: #475569; }
+    .pointlens-tooltip-cell--value {
       font-weight: 400;
       color: #0f172a;
       text-align: left;
     }
-    .award-viewer-tooltip-divider {
+    .pointlens-tooltip-divider {
       grid-column: 1 / -1;
       border-top: 1px solid #e2e8f0;
       height: 1px;
@@ -910,16 +910,16 @@ const ensurePlaceholderStyles = () => {
       border-color: #fde68a;
       color: #b45309;
     }
-    .${PLACEHOLDER_CLASS}.is-loading .award-viewer-skeleton {
+    .${PLACEHOLDER_CLASS}.is-loading .pointlens-skeleton {
       display: inline-block;
       width: 56px;
       height: 12px;
       border-radius: 6px;
       background: linear-gradient(90deg, #e5e7eb 25%, #f3f4f6 37%, #e5e7eb 63%);
       background-size: 400% 100%;
-      animation: award-viewer-skeleton 1.4s ease infinite;
+      animation: pointlens-skeleton 1.4s ease infinite;
     }
-    @keyframes award-viewer-skeleton {
+    @keyframes pointlens-skeleton {
       0% { background-position: 100% 50%; }
       100% { background-position: 0 50%; }
     }
@@ -974,36 +974,36 @@ const ensurePlaceholderStyles = () => {
     .${DETAIL_CPP_CLASS}.is-bad .av-cpp { color: #be123c; }
     .${DETAIL_CPP_CLASS}.is-none .av-cpp { color: #64748b; font-size: 13px; }
     /* Compact variant for the small selected preview card. */
-    .${DETAIL_CPP_CLASS}.award-viewer-marriott-cpp-compact {
+    .${DETAIL_CPP_CLASS}.pointlens-marriott-cpp-compact {
       margin-top: 4px;
       padding: 3px 9px;
       border-radius: 6px;
       gap: 6px;
     }
-    .award-viewer-marriott-cpp-compact .${PLACEHOLDER_ICON_CLASS} { font-size: 16px; }
-    .award-viewer-marriott-cpp-compact .av-cpp { font-size: 12px; }
-    .award-viewer-marriott-cpp-compact .av-sub { font-size: 12px; }
-    .award-viewer-marriott-cpp-compact .av-sub::before { margin-right: 6px; }
+    .pointlens-marriott-cpp-compact .${PLACEHOLDER_ICON_CLASS} { font-size: 16px; }
+    .pointlens-marriott-cpp-compact .av-cpp { font-size: 12px; }
+    .pointlens-marriott-cpp-compact .av-sub { font-size: 12px; }
+    .pointlens-marriott-cpp-compact .av-sub::before { margin-right: 6px; }
   `
   document.head?.appendChild(style)
 }
 
 const buildTooltipContent = (info: MarriottRateInfo) => {
   const wrapper = document.createElement("div")
-  wrapper.className = "award-viewer-tooltip-content"
+  wrapper.className = "pointlens-tooltip-content"
   const grid = document.createElement("div")
-  grid.className = "award-viewer-tooltip-grid"
+  grid.className = "pointlens-tooltip-grid"
 
   const addRow = (label: string, value: string) => {
     const row = document.createElement("div")
-    row.className = "award-viewer-tooltip-row"
+    row.className = "pointlens-tooltip-row"
 
     const labelEl = document.createElement("div")
-    labelEl.className = "award-viewer-tooltip-cell award-viewer-tooltip-cell--label"
+    labelEl.className = "pointlens-tooltip-cell pointlens-tooltip-cell--label"
     labelEl.textContent = label
 
     const valueEl = document.createElement("div")
-    valueEl.className = "award-viewer-tooltip-cell award-viewer-tooltip-cell--value"
+    valueEl.className = "pointlens-tooltip-cell pointlens-tooltip-cell--value"
     valueEl.textContent = value
 
     row.appendChild(labelEl)
@@ -1025,12 +1025,12 @@ const buildTooltipContent = (info: MarriottRateInfo) => {
 
   if (hasCashContent) {
     const headerRow = document.createElement("div")
-    headerRow.className = "award-viewer-tooltip-row"
+    headerRow.className = "pointlens-tooltip-row"
     const headerLabel = document.createElement("div")
-    headerLabel.className = "award-viewer-tooltip-cell award-viewer-tooltip-cell--label"
+    headerLabel.className = "pointlens-tooltip-cell pointlens-tooltip-cell--label"
     headerLabel.textContent = "Lowest cash"
     const headerValue = document.createElement("div")
-    headerValue.className = "award-viewer-tooltip-cell award-viewer-tooltip-cell--value"
+    headerValue.className = "pointlens-tooltip-cell pointlens-tooltip-cell--value"
     headerValue.textContent =
       info.stayNights !== undefined && info.stayNights > 1 ? "Price per night" : "Price"
     headerRow.appendChild(headerLabel)
@@ -1055,7 +1055,7 @@ const buildTooltipContent = (info: MarriottRateInfo) => {
   const hasCashRow = baseLabel || totalLabel || info.cashFees !== undefined
   if (hasCashRow && hasPointsContent) {
     const divider = document.createElement("div")
-    divider.className = "award-viewer-tooltip-divider"
+    divider.className = "pointlens-tooltip-divider"
     grid.appendChild(divider)
   }
 
@@ -1092,11 +1092,11 @@ const ensurePlaceholderContents = (placeholder: HTMLElement) => {
     iconWrapper.className = PLACEHOLDER_ICON_CLASS
 
     const iconTarget = document.createElement("span")
-    iconTarget.className = "award-viewer-icon"
+    iconTarget.className = "pointlens-icon"
     iconWrapper.appendChild(iconTarget)
 
     const tooltip = document.createElement("span")
-    tooltip.className = "award-viewer-tooltip"
+    tooltip.className = "pointlens-tooltip"
     tooltip.textContent = "Awaiting Marriott response"
     iconWrapper.appendChild(tooltip)
 
@@ -1123,12 +1123,12 @@ const setSkeleton = (placeholder: HTMLElement) => {
   const { valueEl } = ensurePlaceholderContents(placeholder)
   placeholder.classList.add("is-loading")
   valueEl.textContent = ""
-  const existing = valueEl.querySelector(".award-viewer-skeleton")
+  const existing = valueEl.querySelector(".pointlens-skeleton")
   if (existing) {
     return
   }
   const skeleton = document.createElement("span")
-  skeleton.className = "award-viewer-skeleton"
+  skeleton.className = "pointlens-skeleton"
   skeleton.setAttribute("aria-hidden", "true")
   valueEl.appendChild(skeleton)
 }
@@ -1178,7 +1178,7 @@ const updatePlaceholderText = (placeholder: HTMLElement) => {
 
   const info = marriottRatesByHotel.get(hotelId)
   const { iconWrapper, valueEl } = ensurePlaceholderContents(placeholder)
-  const tooltip = iconWrapper.querySelector<HTMLElement>(".award-viewer-tooltip")
+  const tooltip = iconWrapper.querySelector<HTMLElement>(".pointlens-tooltip")
 
   updateValueClass(valueEl, info?.cpp)
 
@@ -1233,7 +1233,7 @@ const cardFeeNotice = (card: HTMLElement) =>
     (e) =>
       e.offsetParent !== null &&
       FEE_TEXT_RE.test(e.textContent || "") &&
-      !e.closest(".award-viewer-tooltip")
+      !e.closest(".pointlens-tooltip")
   )
 
 const ensurePlaceholder = (card: HTMLElement) => {

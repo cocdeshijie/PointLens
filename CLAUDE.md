@@ -6,10 +6,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This repo holds **two coexisting things**:
 
-1. **`award-viewer/`** — the product: a **Plasmo (TypeScript/React) MV3 browser
+1. **`pointlens/`** — the product: a **Plasmo (TypeScript/React) MV3 browser
    extension** that surfaces hotel award availability for Hilton, IHG, and
    Marriott. Its own conventions live in `agents.md` (per-site folders under
-   `award-viewer/hotels/<site>/`, injected fetch-hooks, site-specific popups).
+   `pointlens/hotels/<site>/`, injected fetch-hooks, site-specific popups).
    `test/` is a Plasmo sandbox. This is the thing that ships.
 2. **The exploration harness** (everything below — `scripts/`, `.claude/agents/`,
    `findings/`, `sessions/`) — a **site-exploration lab** used to

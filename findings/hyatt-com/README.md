@@ -31,13 +31,13 @@ CPP = `(leadingRate.rate / leadingRate.points) * 100`. Map is Google Maps JS
 
 CPP overlay verified live on `https://www.hyatt.com/search/hotels/` (list + map, mixed view).
 
-### Files created in `award-viewer/`
+### Files created in `pointlens/`
 
 | File | World | Purpose |
 |---|---|---|
 | `hotels/hyatt/settings.ts` | — | `HYATT_VALUE_SETTINGS_KEY`; default thresholds 1.7 ¢/pt (good) / 1.2 ¢/pt (bad) |
 | `hotels/hyatt/content-main.ts` | MAIN | Unified extractor: wraps `__next_f.push` + defineProperty setter for RSC streaming; `window.fetch` wrapper for Server Action POST responses; merges into `{spiritCode -> {rate,rateAfterTax,points,currency,status}}`; posts via `window.postMessage({__AV_HYATT_RATES__:true, rates})` |
-| `hotels/hyatt/content.ts` | ISOLATED | Receives rates; CPP = `toUsd(rate,currency)/points*100` (FX via background, 24h cache); persists to `award-viewer:hyatt-rates` storage; renders badges via rAF-coalesced MutationObserver loop |
+| `hotels/hyatt/content.ts` | ISOLATED | Receives rates; CPP = `toUsd(rate,currency)/points*100` (FX via background, 24h cache); persists to `pointlens:hyatt-rates` storage; renders badges via rAF-coalesced MutationObserver loop |
 | `hotels/hyatt/background.ts` | — | `registerHyattListeners` + `HYATT_FETCH_FX` (open.er-api.com, 24h cache; same pattern as Marriott) |
 | `hotels/hyatt/Popup.tsx` | — | Threshold settings UI (Hyatt variant of Marriott's) |
 | `contents/hyatt.ts` | ISOLATED | Literal `config` with `matches: ["https://www.hyatt.com/*"]`, run_at document_start |
@@ -48,7 +48,7 @@ Wired into root `background.ts` (`registerHyattListeners`) and `popup.tsx` (`SUP
 ### Overlay surfaces (all verified live)
 
 1. **List card** — selector `div[data-spirit-code]`; badge inserted directly below `[data-testid="all-in-pricing-label"]` inside `[class*="rate_with_text"]`. Shows `{cpp}¢/pt · {pts}k pts`, colored by tier. SOLD_OUT cards carry no rate block and are skipped.
-2. **Map pin** — `gmp-advanced-marker[data-locator="map-pin-<spirit>"]`; inner pill matched via `[data-testid="map-marker"]` / `.MapMarker_map-marker`; pill flipped to `flex-direction:column` (class `award-viewer-hyatt-pin-annotated`); CPP line appended under the price. Text colors for contrast on Hyatt blue: good `#6ee7b7` / mid `#fcd34d` / bad `#fca5a5`.
+2. **Map pin** — `gmp-advanced-marker[data-locator="map-pin-<spirit>"]`; inner pill matched via `[data-testid="map-marker"]` / `.MapMarker_map-marker`; pill flipped to `flex-direction:column` (class `pointlens-hyatt-pin-annotated`); CPP line appended under the price. Text colors for contrast on Hyatt blue: good `#6ee7b7` / mid `#fcd34d` / bad `#fca5a5`.
 3. **1st-click selection popover** — clicking a pin adds `MapMarker_map-marker__bookable--selected` and reveals `[class*="map-marker__popover--visible"]` inside the marker; CPP chip appended there, keyed by the marker's `data-locator`.
 
 There is NO 2nd-click price modal on the search page — the popover/hotel name navigates to `/shop/rooms/<spiritCode>`, which is out of current scope.

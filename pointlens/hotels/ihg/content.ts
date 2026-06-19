@@ -9,15 +9,15 @@ import {
   normalizeIhgValueSettings
 } from "./settings"
 
-const IHG_STORAGE_KEY = "award-viewer:ihg-last-request"
-const IHG_SENT_STORAGE_KEY = "award-viewer:ihg-sent-request"
-const IHG_CONVERSION_STORAGE_KEY = "award-viewer:ihg-currency-conversion-request"
+const IHG_STORAGE_KEY = "pointlens:ihg-last-request"
+const IHG_SENT_STORAGE_KEY = "pointlens:ihg-sent-request"
+const IHG_CONVERSION_STORAGE_KEY = "pointlens:ihg-currency-conversion-request"
 const MESSAGE_FLAG = "__AWARD_VIEWER_IHG__"
 const REPLAY_FLAG = "__AWARD_VIEWER_IHG_REPLAY__"
-const PLACEHOLDER_CLASS = "award-viewer-price-placeholder"
-const PLACEHOLDER_ICON_CLASS = "award-viewer-cpp-icon"
-const PLACEHOLDER_VALUE_CLASS = "award-viewer-cpp-value"
-const PLACEHOLDER_STYLE_ID = "award-viewer-placeholder-style"
+const PLACEHOLDER_CLASS = "pointlens-price-placeholder"
+const PLACEHOLDER_ICON_CLASS = "pointlens-cpp-icon"
+const PLACEHOLDER_VALUE_CLASS = "pointlens-cpp-value"
+const PLACEHOLDER_STYLE_ID = "pointlens-placeholder-style"
 const IHG_API_KEY = "se9ym5iAzaW8pxfBjkmgbuGjJcr3Pj6Y"
 const USD_CURRENCY = "USD"
 
@@ -131,7 +131,7 @@ let ihgRateDetailsSignature: string | null = null
 // ("212 USD", = baseAmount + fees) or points ("28K PTS"). We join on that to the
 // hotel's CPP. Two lookups so both cash- and points-mode maps work. Value is
 // null when two hotels share a price (ambiguous → skip).
-const MAP_CPP_CLASS = "award-viewer-map-cpp"
+const MAP_CPP_CLASS = "pointlens-map-cpp"
 // Pin value: CPP (number) | "none" (hotel has no reward nights) | null (two
 // hotels share the price → ambiguous, skip).
 type IhgMapValue = number | "none"
@@ -441,13 +441,13 @@ const createCell = (text: string, className: string) => {
 
 const buildTooltipRow = (label: string, lowValue: string, highValue: string) => {
   const row = document.createElement("div")
-  row.className = "award-viewer-tooltip-row"
-  row.appendChild(createCell(label, "award-viewer-tooltip-cell award-viewer-tooltip-cell--label"))
-  row.appendChild(createCell(lowValue, "award-viewer-tooltip-cell award-viewer-tooltip-cell--value"))
+  row.className = "pointlens-tooltip-row"
+  row.appendChild(createCell(label, "pointlens-tooltip-cell pointlens-tooltip-cell--label"))
+  row.appendChild(createCell(lowValue, "pointlens-tooltip-cell pointlens-tooltip-cell--value"))
   row.appendChild(
     createCell(
       highValue,
-      "award-viewer-tooltip-cell award-viewer-tooltip-cell--value award-viewer-tooltip-cell--high"
+      "pointlens-tooltip-cell pointlens-tooltip-cell--value pointlens-tooltip-cell--high"
     )
   )
   return row
@@ -455,7 +455,7 @@ const buildTooltipRow = (label: string, lowValue: string, highValue: string) => 
 
 const buildTooltipDividerRow = () => {
   const divider = document.createElement("div")
-  divider.className = "award-viewer-tooltip-divider"
+  divider.className = "pointlens-tooltip-divider"
   return divider
 }
 
@@ -465,22 +465,22 @@ const setTooltipDetails = (
   options?: { pointsLabel?: string; stay?: IhgStayDetails }
 ) => {
   const content = document.createElement("div")
-  content.className = "award-viewer-tooltip-content"
+  content.className = "pointlens-tooltip-content"
 
   const grid = document.createElement("div")
-  grid.className = "award-viewer-tooltip-grid"
+  grid.className = "pointlens-tooltip-grid"
   const header = document.createElement("div")
-  header.className = "award-viewer-tooltip-row award-viewer-tooltip-header"
+  header.className = "pointlens-tooltip-row pointlens-tooltip-header"
   header.appendChild(
-    createCell("", "award-viewer-tooltip-cell award-viewer-tooltip-cell--label")
+    createCell("", "pointlens-tooltip-cell pointlens-tooltip-cell--label")
   )
   header.appendChild(
-    createCell("Lowest", "award-viewer-tooltip-cell award-viewer-tooltip-cell--value")
+    createCell("Lowest", "pointlens-tooltip-cell pointlens-tooltip-cell--value")
   )
   header.appendChild(
     createCell(
       "Highest",
-      "award-viewer-tooltip-cell award-viewer-tooltip-cell--value award-viewer-tooltip-cell--high"
+      "pointlens-tooltip-cell pointlens-tooltip-cell--value pointlens-tooltip-cell--high"
     )
   )
   grid.appendChild(header)
@@ -553,13 +553,13 @@ const setTooltipDetails = (
 
   if (info.rewardNightAvailable === false) {
     const note = document.createElement("div")
-    note.className = "award-viewer-tooltip-note"
+    note.className = "pointlens-tooltip-note"
     note.textContent = "No award nights available"
     content.appendChild(note)
   }
   if (stay && stay.status === "ok" && (stay.freeNightCount ?? 0) > 0 && stay.savedPoints) {
     const benefit = document.createElement("div")
-    benefit.className = "award-viewer-tooltip-benefit"
+    benefit.className = "pointlens-tooltip-benefit"
     const nights = stay.freeNightCount === 1 ? "4th night free" : `${stay.freeNightCount} free nights`
     benefit.textContent = `★ ${nights} — saved ${formatPoints(stay.savedPoints)}`
     content.appendChild(benefit)
@@ -608,11 +608,11 @@ const ensurePlaceholderContents = (placeholder: HTMLElement) => {
     iconWrapper.className = PLACEHOLDER_ICON_CLASS
 
     const iconTarget = document.createElement("span")
-    iconTarget.className = "award-viewer-icon"
+    iconTarget.className = "pointlens-icon"
     iconWrapper.appendChild(iconTarget)
 
     const tooltip = document.createElement("span")
-    tooltip.className = "award-viewer-tooltip"
+    tooltip.className = "pointlens-tooltip"
     tooltip.textContent = "Awaiting points response"
     iconWrapper.appendChild(tooltip)
 
@@ -643,12 +643,12 @@ const setSkeleton = (placeholder: HTMLElement) => {
   const { valueEl } = ensurePlaceholderContents(placeholder)
   placeholder.classList.add("is-loading")
   valueEl.textContent = ""
-  const existing = valueEl.querySelector(".award-viewer-skeleton")
+  const existing = valueEl.querySelector(".pointlens-skeleton")
   if (existing) {
     return
   }
   const skeleton = document.createElement("span")
-  skeleton.className = "award-viewer-skeleton"
+  skeleton.className = "pointlens-skeleton"
   skeleton.setAttribute("aria-hidden", "true")
   valueEl.appendChild(skeleton)
 }
@@ -690,7 +690,7 @@ const updatePlaceholderText = (placeholder: HTMLElement) => {
 
   const info = ihgRatesByHotel.get(hotelId)
   const { iconWrapper, valueEl } = ensurePlaceholderContents(placeholder)
-  const tooltip = iconWrapper.querySelector<HTMLElement>(".award-viewer-tooltip")
+  const tooltip = iconWrapper.querySelector<HTMLElement>(".pointlens-tooltip")
   const errorMessage =
     ihgRateErrorsByHotel.get(hotelId) ?? ihgLastRateError ?? "Awaiting points response"
   const hasCashRates =
@@ -1913,11 +1913,11 @@ const observePriceCards = () => {
         font-size: 22px;
         line-height: 1;
       }
-      .${PLACEHOLDER_ICON_CLASS} .award-viewer-icon {
+      .${PLACEHOLDER_ICON_CLASS} .pointlens-icon {
         display: inline-flex;
         align-items: center;
       }
-      .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip {
+      .${PLACEHOLDER_ICON_CLASS} .pointlens-tooltip {
         position: absolute;
         right: 0;
         bottom: 100%;
@@ -1936,7 +1936,7 @@ const observePriceCards = () => {
         box-shadow: 0 4px 12px rgba(15, 23, 42, 0.12);
         min-width: 320px;
       }
-      .${PLACEHOLDER_ICON_CLASS}:hover .award-viewer-tooltip {
+      .${PLACEHOLDER_ICON_CLASS}:hover .pointlens-tooltip {
         opacity: 1;
         transform: translateY(-8px);
       }
@@ -1949,12 +1949,12 @@ const observePriceCards = () => {
       app-hotel-details-info-card .right-column:has(.${PLACEHOLDER_ICON_CLASS}:hover) {
         z-index: 1000;
       }
-      .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-content {
+      .${PLACEHOLDER_ICON_CLASS} .pointlens-tooltip-content {
         display: flex;
         flex-direction: column;
         gap: 8px;
       }
-      .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-grid {
+      .${PLACEHOLDER_ICON_CLASS} .pointlens-tooltip-grid {
         display: grid;
         grid-template-columns: max-content minmax(140px, auto) minmax(140px, auto);
         column-gap: 12px;
@@ -1962,46 +1962,46 @@ const observePriceCards = () => {
         align-items: center;
         justify-content: start;
       }
-      .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-row {
+      .${PLACEHOLDER_ICON_CLASS} .pointlens-tooltip-row {
         display: contents;
       }
-      .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-cell {
+      .${PLACEHOLDER_ICON_CLASS} .pointlens-tooltip-cell {
         white-space: nowrap;
       }
-      .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-cell--label {
+      .${PLACEHOLDER_ICON_CLASS} .pointlens-tooltip-cell--label {
         color: #475569;
       }
-      .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-cell--value {
+      .${PLACEHOLDER_ICON_CLASS} .pointlens-tooltip-cell--value {
         font-weight: 400;
         color: #0f172a;
         text-align: left;
       }
-      .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-cell--high {
+      .${PLACEHOLDER_ICON_CLASS} .pointlens-tooltip-cell--high {
         border-left: 1px solid #e2e8f0;
         padding-left: 8px;
       }
-      .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-divider {
+      .${PLACEHOLDER_ICON_CLASS} .pointlens-tooltip-divider {
         grid-column: 1 / -1;
         border-top: 1px solid #e2e8f0;
         height: 1px;
       }
-      .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-header .award-viewer-tooltip-cell {
+      .${PLACEHOLDER_ICON_CLASS} .pointlens-tooltip-header .pointlens-tooltip-cell {
         font-size: 10px;
         font-weight: 600;
         text-transform: uppercase;
         letter-spacing: 0.04em;
         color: #475569;
       }
-      .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-header .award-viewer-tooltip-cell--label {
+      .${PLACEHOLDER_ICON_CLASS} .pointlens-tooltip-header .pointlens-tooltip-cell--label {
         color: transparent;
       }
-      .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-note {
+      .${PLACEHOLDER_ICON_CLASS} .pointlens-tooltip-note {
         margin-top: 4px;
         font-size: 10px;
         font-weight: 600;
         color: #b91c1c;
       }
-      .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-benefit {
+      .${PLACEHOLDER_ICON_CLASS} .pointlens-tooltip-benefit {
         margin-top: 4px;
         font-size: 10px;
         font-weight: 600;
@@ -2030,16 +2030,16 @@ const observePriceCards = () => {
         border-color: #fde68a;
         color: #b45309;
       }
-      .${PLACEHOLDER_CLASS}.is-loading .award-viewer-skeleton {
+      .${PLACEHOLDER_CLASS}.is-loading .pointlens-skeleton {
         display: inline-block;
         width: 56px;
         height: 12px;
         border-radius: 6px;
         background: linear-gradient(90deg, #e5e7eb 25%, #f3f4f6 37%, #e5e7eb 63%);
         background-size: 400% 100%;
-        animation: award-viewer-skeleton 1.4s ease infinite;
+        animation: pointlens-skeleton 1.4s ease infinite;
       }
-      @keyframes award-viewer-skeleton {
+      @keyframes pointlens-skeleton {
         0% { background-position: 100% 50%; }
         100% { background-position: 0 50%; }
       }

@@ -22,7 +22,7 @@ overlays on top.
 
 ## Extension map overlay — `injected/hilton-map-overlay.js`
 
-File: `award-viewer/hotels/hilton/injected/hilton-map-overlay.js`
+File: `pointlens/hotels/hilton/injected/hilton-map-overlay.js`
 World: MAIN (injected by `content.ts` alongside `hilton-fetch-hook.js`;
 registered in `web_accessible_resources` in `package.json`).
 

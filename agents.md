@@ -1,4 +1,4 @@
-# Agents.md — AwardViewer
+# Agents.md — PointLens
 
 ## Rules
 - Each hotel site must live under `/hotels/<site>/...` with a dedicated folder per site.

@@ -52,7 +52,7 @@ def detect_windows_username() -> str:
 
 # Files/dirs we skip when cloning a Chrome User Data dir. Caches alone can be
 # many GB and contribute zero fingerprint value; bumping them out makes the
-# clone seconds-fast and small enough to live under AwardViewer.
+# clone seconds-fast and small enough to live under PointLens.
 CLONE_EXCLUDE_DIRS = [
     "Cache", "Code Cache", "GPUCache", "GrShaderCache", "ShaderCache",
     "DawnCache", "DawnGraphiteCache", "DawnWebGPUCache",
@@ -156,7 +156,7 @@ def main() -> None:
         "--clone-from-real-chrome",
         action="store_true",
         help="Robocopy the user's real Chrome User Data dir to a scratch clone "
-             "(C:\\Users\\<user>\\AppData\\Local\\AwardViewer\\<slug>-realclone), "
+             "(C:\\Users\\<user>\\AppData\\Local\\PointLens\\<slug>-realclone), "
              "skipping caches. Real Chrome can keep running; we get its "
              "cookies/extensions/settings/fingerprint without touching it.",
     )
@@ -169,7 +169,7 @@ def main() -> None:
     ap.add_argument(
         "--profile-base",
         default=None,
-        help="Windows path to base profile dir; default C:\\Users\\<user>\\AppData\\Local\\AwardViewer",
+        help="Windows path to base profile dir; default C:\\Users\\<user>\\AppData\\Local\\PointLens",
     )
     ap.add_argument(
         "--load-extension",
@@ -190,7 +190,7 @@ def main() -> None:
     if args.profile_base:
         profile_root_win = args.profile_base
     else:
-        profile_root_win = f"C:\\Users\\{win_user}\\AppData\\Local\\AwardViewer"
+        profile_root_win = f"C:\\Users\\{win_user}\\AppData\\Local\\PointLens"
 
     profile_win = profile_root_win + "\\" + args.slug
 

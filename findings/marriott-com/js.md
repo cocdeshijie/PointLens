@@ -46,7 +46,7 @@ Key responsibilities:
   MAIN world.
 - Bridges `__AV_MARRIOTT_SAVE__` postMessage → `chrome.runtime.sendMessage`
   → background storage.
-- Reads `chrome.storage.local["award-viewer:marriott-last-capture"]` and calls
+- Reads `chrome.storage.local["pointlens:marriott-last-capture"]` and calls
   `buildRatesFromStorage` to populate the hotel rate map.
 - Runs a `MutationObserver` on `document.body` to catch dynamically added
   `.property-card` elements and inject CPP placeholders.

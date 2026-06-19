@@ -1,4 +1,4 @@
-"""Shared Playwright harness for AwardViewer.
+"""Shared Playwright harness for PointLens.
 
 Opens a persistent Chromium context per site slug so auth cookies survive
 across runs. Captures HAR, console output, and a JSONL request log into
@@ -55,7 +55,7 @@ ROOT = Path(__file__).resolve().parent.parent
 # Sessions/captures default to <repo>/sessions/, but can be overridden via
 # DDX_SESSIONS env var. Use this when running browser.py on Windows but
 # accessing the script from WSL — point sessions at a Windows-native path
-# (e.g. C:\Users\28655\AppData\Local\AwardViewer\sessions) so file writes don't
+# (e.g. C:\Users\28655\AppData\Local\PointLens\sessions) so file writes don't
 # go through 9P, and drive.py from WSL still reads them via /mnt/c/...
 SESSIONS = Path(os.environ.get("DDX_SESSIONS", "")) if os.environ.get("DDX_SESSIONS") else ROOT / "sessions"
 SCRIPTS = ROOT / "scripts"

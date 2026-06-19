@@ -1,6 +1,6 @@
 # DOM / Frontend — marriott-com
 
-Source: extension source code (`award-viewer/hotels/marriott/content.ts`),
+Source: extension source code (`pointlens/hotels/marriott/content.ts`),
 reviewed 2026-06-14. Live DOM inspection not yet done.
 
 ## Framework / meta-framework
@@ -29,20 +29,20 @@ present has not been confirmed._
 | `.gm-style .m-map-pin` | Marriott search-map price pill (dark charcoal, white text, 4px radius, 14px Roboto) | High — confirmed live 2026-06-14; shipped in `content.ts` |
 | `.m-map-pin.pin-N` | The Nth hotel pin (0-indexed, edge order) — identity key for map view | High — confirmed live; used by `updateMapPins()` in `content.ts` |
 | `.m-map-pin.marker-label-grey` | Variant style class present on some pins | Observed — purpose unknown |
-| `div.award-viewer-marriott-pin-cpp` | Extension-injected CPP badge inside each `.m-map-pin` | Extension-owned |
+| `div.pointlens-marriott-pin-cpp` | Extension-injected CPP badge inside each `.m-map-pin` | Extension-owned |
 | `.property-card-container.map-view-selected` | Wrapper element that appears when a map pin is clicked (first click = "selected preview card"); wraps a real `.property-card[data-marsha]` | High — confirmed live 2026-06-14 |
 | `.hqv-modal-opener` | Hotel-name button inside the selected preview card; clicking it (second click) opens the large HQV hotel detail modal | High — confirmed live 2026-06-14 |
 | `.hqv-rate-container.rate-container` | Rate price container inside the HQV modal; contains `span.price-value.currency-value.amount-display` showing cash rate (e.g. "426 USD / Night"); **cash only — no points shown** | High — confirmed live 2026-06-14 |
-| `div.award-viewer-marriott-detail-cpp` | Extension-injected CPP badge inserted immediately after `.hqv-rate-container`; shows "{cpp}¢/pt + {pts} pts / night", value-color-tiered; "Reward nights unavailable" for cash-only hotels | Extension-owned |
+| `div.pointlens-marriott-detail-cpp` | Extension-injected CPP badge inserted immediately after `.hqv-rate-container`; shows "{cpp}¢/pt + {pts} pts / night", value-color-tiered; "Reward nights unavailable" for cash-only hotels | Extension-owned |
 
 ## Extension injection points
 
-The extension inserts a `<div class="award-viewer-marriott-price-placeholder">`
+The extension inserts a `<div class="pointlens-marriott-price-placeholder">`
 immediately after the rate link `<a>` element inside each `.property-card`.
 The placeholder contains:
-- A `<span class="award-viewer-marriott-cpp-icon">` wrapping a React-rendered
+- A `<span class="pointlens-marriott-cpp-icon">` wrapping a React-rendered
   `CiCircleInfo` icon and a hover tooltip.
-- A `<span class="award-viewer-marriott-cpp-value">` showing the CPP badge
+- A `<span class="pointlens-marriott-cpp-value">` showing the CPP badge
   (e.g. `0.45¢/pt`), color-coded good/mid/bad.
 
 The placeholder `data-hotel-id` attribute stores the normalized MARSHA code
@@ -50,7 +50,7 @@ used to look up the rate map.
 
 ## CSS overrides
 
-`content.ts` injects a `<style id="award-viewer-marriott-placeholder-style">`
+`content.ts` injects a `<style id="pointlens-marriott-placeholder-style">`
 that sets `overflow: visible !important` on `.price-container`,
 `.price-sub-section`, `.property-card-price-component`, and `.la-dUdY .price-sub-section`
 to prevent the tooltip from clipping.
@@ -100,7 +100,7 @@ Some pins also carry the class `marker-label-grey`.
 **Extension approach for map CPP overlay — SHIPPED (2026-06-14):**
 
 Implemented entirely in the ISOLATED content script
-`award-viewer/hotels/marriott/content.ts`. No MAIN-world injected script is
+`pointlens/hotels/marriott/content.ts`. No MAIN-world injected script is
 involved. The earlier `marriott-map-overlay.js` (AdvancedMarkerElement overlay
 + Map instance capture via `OverlayView.setMap` hook + resize nudge, modelled
 on the Hilton overlay) was built and then deleted in favor of this simpler
@@ -111,7 +111,7 @@ Key implementation details:
   list in edge order (position 0 = first edge, etc.).
 - `updateMapPins()` queries `document.querySelectorAll('[class*="pin-"]')` inside
   `.gm-style`, extracts N from the `pin-N` class, looks up `order[N]`, then
-  appends a `<div class="award-viewer-marriott-pin-cpp">` inside the
+  appends a `<div class="pointlens-marriott-pin-cpp">` inside the
   `.m-map-pin` element showing `"{pts}k · {cpp}¢"`.
 - Badge text is value-color-tiered (same thresholds as list view). Hotels with
   cash rates only show "No reward"; hotels with no data at all show nothing.
@@ -128,7 +128,7 @@ Marriott's map has two distinct click-states after the pin list is shown.
 Clicking a map pin opens a `.property-card-container.map-view-selected` wrapper
 that contains a real `.property-card[data-marsha]` element. The existing list-card
 placeholder logic (which targets `.property-card`) therefore annotates it
-automatically — the CPP value badge `.award-viewer-marriott-cpp-value` appears
+automatically — the CPP value badge `.pointlens-marriott-cpp-value` appears
 without any extra code. Verified showing "0.95¢/pt" on a test hotel.
 
 ### Second click — HQV hotel detail modal
@@ -156,7 +156,7 @@ extraction approach for the modal.
 ("426 USD / Night"). The modal shows **cash only** — no points or reward-night
 rate is rendered by the site here.
 
-**Extension injection:** A `div.award-viewer-marriott-detail-cpp` badge is
+**Extension injection:** A `div.pointlens-marriott-detail-cpp` badge is
 inserted immediately after `.hqv-rate-container`. It shows "{cpp}¢/pt + {pts}
 pts / night" (value-color-tiered), or "Reward nights unavailable" for hotels
 that returned no points rate. Re-applied via the body `MutationObserver` on the

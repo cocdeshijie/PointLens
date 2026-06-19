@@ -63,7 +63,7 @@ SOLD_OUT pins render with empty price text — skip badge injection for those.
 1. Enumerate `gmp-advanced-marker[data-locator^="map-pin-"]`; strip `map-pin-` prefix to get spiritCode.
 2. Skip SOLD_OUT markers (empty price text in `.be-text-section-3`).
 3. Match the inner pill via `[data-testid="map-marker"]` or `.MapMarker_map-marker` (the full hashed class is unstable).
-4. Add class `award-viewer-hyatt-pin-annotated` to flip the pill to `flex-direction:column`, then append a CPP line under the price. Text colors for contrast on Hyatt blue: good `#6ee7b7` / mid `#fcd34d` / bad `#fca5a5`.
+4. Add class `pointlens-hyatt-pin-annotated` to flip the pill to `flex-direction:column`, then append a CPP line under the price. Text colors for contrast on Hyatt blue: good `#6ee7b7` / mid `#fcd34d` / bad `#fca5a5`.
 
 ### 1st-click selection popover (CPP)
 
@@ -77,7 +77,7 @@ There is **no 2nd-click price modal** on the search page. Clicking the popover/h
 
 ## CSS overrides
 
-Map pin pill: `flex-direction:column` applied via `award-viewer-hyatt-pin-annotated` class on `.MapMarker_map-marker`. No `overflow: visible` override was needed (unlike Marriott).
+Map pin pill: `flex-direction:column` applied via `pointlens-hyatt-pin-annotated` class on `.MapMarker_map-marker`. No `overflow: visible` override was needed (unlike Marriott).
 
 ## Open questions
 

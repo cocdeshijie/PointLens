@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: award-viewer
+        working-directory: pointlens
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -31,7 +31,7 @@ jobs:
         with:
           node-version: 20
           cache: npm
-          cache-dependency-path: award-viewer/package-lock.json
+          cache-dependency-path: pointlens/package-lock.json
 
       - name: Install dependencies
         run: npm ci
@@ -74,7 +74,7 @@ jobs:
         run: |
           out="point-lens-${{ steps.ver.outputs.version }}-chrome.zip"
           ( cd build/chrome-mv3-prod && zip -qr "../../$out" . )
-          echo "ZIP_PATH=award-viewer/$out" >> "$GITHUB_ENV"
+          echo "ZIP_PATH=pointlens/$out" >> "$GITHUB_ENV"
 
       - name: Commit version bump
         if: steps.ver.outputs.bumped == 'true'

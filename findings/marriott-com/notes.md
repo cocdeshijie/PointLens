@@ -74,7 +74,7 @@ First check `rateRequestTypes` in the outgoing replay body in DevTools Network.
     injected file.
   - Hotel identity via `pin-N` class index matched to `searchByGeolocation` edge
     order; no geometry or coordinate projection needed.
-  - CPP badge `<div class="award-viewer-marriott-pin-cpp">` appended inside each
+  - CPP badge `<div class="pointlens-marriott-pin-cpp">` appended inside each
     `.m-map-pin`; value-color-tiered; re-applied on body mutation / pan / zoom.
 - Map click-states: DONE and shipping (verified 2026-06-14).
   - **1st click (selected preview card):** `.property-card-container.map-view-selected`
@@ -85,5 +85,5 @@ First check `rateRequestTypes` in the outgoing replay body in DevTools Network.
     `propertyCode=` from `availabilityCalendar.mi` links, falling back to
     `/hotels/travel/<marsha>-` path segments. Rate anchor is
     `.hqv-rate-container.rate-container` (cash only). Extension injects
-    `div.award-viewer-marriott-detail-cpp` after that container; re-applied on
+    `div.pointlens-marriott-detail-cpp` after that container; re-applied on
     body `MutationObserver`. Full structural detail in [dom.md](dom.md).

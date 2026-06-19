@@ -62,7 +62,7 @@ export const PALETTES: Record<ThemeName, Palette> = {
   }
 }
 
-const THEME_KEY = "award-viewer:theme"
+const THEME_KEY = "pointlens:theme"
 
 // User preference, loaded from + synced to chrome.storage. onMount hydrates from
 // storage and listens for cross-context changes; writes persist back.

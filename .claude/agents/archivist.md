@@ -16,9 +16,9 @@ You are the **archivist**. Your job is to make sure that everything worth knowin
 ## Scaffold for a new target
 
 **Canonical path is the repo-root `findings/` tree, always.** Use absolute
-path `/home/cocdeshijie/CodeProjects/Award-Viewer/findings/<slug>/`. Do
+path `/home/cocdeshijie/CodeProjects/PointLens/findings/<slug>/`. Do
 NOT write under any subdirectory's `findings/` (e.g. `proxy-manager/findings/`)
-even if subdirectories exist for unrelated reasons (the award-viewer/ extension,
+even if subdirectories exist for unrelated reasons (the pointlens/ extension,
 release artifacts). The findings tree lives ONCE at the repo root and
 is consumed by every other agent. Writing it elsewhere creates a
 duplicate that the orchestrator has to clean up — this has now happened

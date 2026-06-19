@@ -95,7 +95,7 @@ function tryEmit(requestId: string) {
 }
 
 const FX_TTL_MS = 24 * 60 * 60 * 1000
-const FX_KEY = (cur: string) => `award-viewer:fx-usd:${cur}`
+const FX_KEY = (cur: string) => `pointlens:fx-usd:${cur}`
 
 // Fetch "USD per 1 unit of <currency>" from a free, no-key FX API. Runs in the
 // background (extension origin) so it isn't subject to page CORS. Cached in
@@ -141,7 +141,7 @@ export const registerMarriottListeners = () => {
     if (msg?.type !== "MARRIOTT_SAVE_CAPTURE") return
 
     chrome.storage.local.set({
-      "award-viewer:marriott-last-capture": msg.payload
+      "pointlens:marriott-last-capture": msg.payload
     })
   })
 

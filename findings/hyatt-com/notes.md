@@ -20,12 +20,12 @@ Replicate the Marriott/IHG pattern:
 
 ### Prior art to reference
 
-- **Marriott** (`award-viewer/hotels/marriott/`) — closest analog. GraphQL POST,
+- **Marriott** (`pointlens/hotels/marriott/`) — closest analog. GraphQL POST,
   unconditional `rateRequestTypes` patch, ISOLATED content script with `pin-N`
   index matching for map pins, `MutationObserver` for dynamic updates.
-- **IHG** (`award-viewer/hotels/ihg/`) — simpler: REST, no MAIN-world injection
+- **IHG** (`pointlens/hotels/ihg/`) — simpler: REST, no MAIN-world injection
   needed, ISOLATED content script only.
-- **Hilton** (`award-viewer/hotels/hilton/`) — most complex: separate geo fetch
+- **Hilton** (`pointlens/hotels/hilton/`) — most complex: separate geo fetch
   for coordinates, MAIN-world `AdvancedMarkerElement` overlay.
 
 ### Open questions / first probe targets

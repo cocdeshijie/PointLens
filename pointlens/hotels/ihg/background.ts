@@ -1,5 +1,5 @@
-const IHG_STORAGE_KEY = "award-viewer:ihg-last-request"
-const IHG_SENT_STORAGE_KEY = "award-viewer:ihg-sent-request"
+const IHG_STORAGE_KEY = "pointlens:ihg-last-request"
+const IHG_SENT_STORAGE_KEY = "pointlens:ihg-sent-request"
 const IHG_TARGET_URL = "https://apis.ihg.com/availability/v3/hotels/offers"
 const requestMap = new Map<
   string,

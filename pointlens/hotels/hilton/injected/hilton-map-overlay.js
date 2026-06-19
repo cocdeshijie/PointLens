@@ -9,8 +9,8 @@
   // carries ctyhocn + coordinate + reward points + lowest cash for every hotel
   // in the map viewport (no login or replay needed).
 
-  const BADGE_CLASS = "award-viewer-map-cpp"
-  const STYLE_ID = "award-viewer-map-cpp-style"
+  const BADGE_CLASS = "pointlens-map-cpp"
+  const STYLE_ID = "pointlens-map-cpp-style"
 
   // ctyhocn -> { lat, lng, points, cash, cpp, hasReward, name }
   const hotelData = new Map()

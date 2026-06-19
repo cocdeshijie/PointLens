@@ -1,6 +1,6 @@
 # Network / APIs — marriott-com
 
-Source: extension source code (`award-viewer/hotels/marriott/`), reviewed
+Source: extension source code (`pointlens/hotels/marriott/`), reviewed
 2026-06-14. Live HAR captures not yet taken.
 
 ## Auth flow
@@ -214,7 +214,7 @@ reflects a per-night basis.
    `chrome.runtime.sendMessage({ type: "MARRIOTT_SAVE_CAPTURE" })`.
 
 5. **`background.ts`** persists to
-   `chrome.storage.local["award-viewer:marriott-last-capture"]`.
+   `chrome.storage.local["pointlens:marriott-last-capture"]`.
 
 6. **`content.ts`** reads storage on change, rebuilds the hotel rate map via
    `buildRatesFromStorage`, and updates DOM placeholders.

@@ -40,4 +40,4 @@ Thumbs.db
 *.log
 
 # build artifact
-award-viewer/tsconfig.tsbuildinfo
+pointlens/tsconfig.tsbuildinfo

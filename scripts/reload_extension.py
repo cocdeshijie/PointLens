@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build (optional), stage, and (hot-)reload the award-viewer extension in a
+"""Build (optional), stage, and (hot-)reload the pointlens extension in a
 running win_chrome instance via CDP.
 
 The repo lives on WSL ext4 (/home/...), which chrome.exe (a Windows process)
@@ -9,7 +9,7 @@ the CDP Extensions.loadUnpacked command. Re-running it on the same path picks up
 a fresh build.
 
 Usage:
-    cd award-viewer && npm run build          # produce build/chrome-mv3-prod
+    cd pointlens && npm run build          # produce build/chrome-mv3-prod
     python3 scripts/reload_extension.py <cdp-url>
     # e.g. python3 scripts/reload_extension.py http://172.19.176.1:9322
 """
@@ -23,8 +23,8 @@ import urllib.request
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-BUILD = REPO / "award-viewer" / "build" / "chrome-mv3-prod"
-STAGE_MNT = Path("/mnt/c/Users/28655/AppData/Local/AwardViewer/award-viewer-ext")
+BUILD = REPO / "pointlens" / "build" / "chrome-mv3-prod"
+STAGE_MNT = Path("/mnt/c/PointLens/extension")
 
 
 def mnt_to_windows(p: Path) -> str:
@@ -36,7 +36,7 @@ def mnt_to_windows(p: Path) -> str:
 
 def stage() -> str:
     if not (BUILD / "manifest.json").is_file():
-        sys.exit(f"no build at {BUILD} — run `cd award-viewer && npm run build` first")
+        sys.exit(f"no build at {BUILD} — run `cd pointlens && npm run build` first")
     STAGE_MNT.mkdir(parents=True, exist_ok=True)
     subprocess.run(["rsync", "-a", "--delete", str(BUILD) + "/", str(STAGE_MNT) + "/"], check=True)
     win = mnt_to_windows(STAGE_MNT)

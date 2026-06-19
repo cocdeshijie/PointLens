@@ -1,5 +1,5 @@
 const FX_TTL_MS = 24 * 60 * 60 * 1000
-const FX_KEY = (cur: string) => `award-viewer:fx-usd:${cur}`
+const FX_KEY = (cur: string) => `pointlens:fx-usd:${cur}`
 
 // Fetch "USD per 1 unit of <currency>" from a free, no-key FX API. Runs in the
 // background (extension origin) so it isn't subject to page CORS. Cached in

@@ -177,7 +177,7 @@ Hyatt is the simplest intercept target of the four hotels:
 - **No background webRequest interception and no authenticated replay needed**
   (unlike Marriott) — the page already fetches everything required; the hook
   just reads it.
-- Per-site folder: `award-viewer/hotels/hyatt/`.
+- Per-site folder: `pointlens/hotels/hyatt/`.
 
 ## Open questions
 

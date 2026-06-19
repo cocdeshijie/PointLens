@@ -14,11 +14,11 @@ export const config: PlasmoCSConfig = {
   run_at: "document_start"
 }
 
-const PLACEHOLDER_CLASS = "award-viewer-hilton-price-placeholder"
-const PLACEHOLDER_ICON_CLASS = "award-viewer-hilton-cpp-icon"
-const PLACEHOLDER_VALUE_CLASS = "award-viewer-hilton-cpp-value"
-const DIALOG_CPP_CLASS = "award-viewer-hilton-dialog-cpp"
-const PLACEHOLDER_STYLE_ID = "award-viewer-hilton-placeholder-style"
+const PLACEHOLDER_CLASS = "pointlens-hilton-price-placeholder"
+const PLACEHOLDER_ICON_CLASS = "pointlens-hilton-cpp-icon"
+const PLACEHOLDER_VALUE_CLASS = "pointlens-hilton-cpp-value"
+const DIALOG_CPP_CLASS = "pointlens-hilton-dialog-cpp"
+const PLACEHOLDER_STYLE_ID = "pointlens-hilton-placeholder-style"
 const HILTON_STORAGE_KEY = "hilton-last-capture"
 
 type HiltonRateInfo = {
@@ -365,14 +365,14 @@ const setTooltipText = (tooltip: HTMLElement, text: string) => {
 
 const buildTooltipCell = (label: string, value: string) => {
   const row = document.createElement("div")
-  row.className = "award-viewer-tooltip-row"
+  row.className = "pointlens-tooltip-row"
 
   const labelCell = document.createElement("div")
-  labelCell.className = "award-viewer-tooltip-cell award-viewer-tooltip-cell--label"
+  labelCell.className = "pointlens-tooltip-cell pointlens-tooltip-cell--label"
   labelCell.textContent = label
 
   const valueCell = document.createElement("div")
-  valueCell.className = "award-viewer-tooltip-cell award-viewer-tooltip-cell--value"
+  valueCell.className = "pointlens-tooltip-cell pointlens-tooltip-cell--value"
   valueCell.textContent = value
 
   row.appendChild(labelCell)
@@ -382,18 +382,18 @@ const buildTooltipCell = (label: string, value: string) => {
 
 const buildTooltipContent = (info: HiltonRateInfo, showCpp: boolean) => {
   const wrapper = document.createElement("div")
-  wrapper.className = "award-viewer-tooltip-content"
+  wrapper.className = "pointlens-tooltip-content"
 
   const grid = document.createElement("div")
-  grid.className = "award-viewer-tooltip-grid"
+  grid.className = "pointlens-tooltip-grid"
 
   const headerRow = document.createElement("div")
-  headerRow.className = "award-viewer-tooltip-row"
+  headerRow.className = "pointlens-tooltip-row"
   const headerLabel = document.createElement("div")
-  headerLabel.className = "award-viewer-tooltip-cell award-viewer-tooltip-cell--label"
+  headerLabel.className = "pointlens-tooltip-cell pointlens-tooltip-cell--label"
   headerLabel.textContent = "Lowest cash"
   const headerValue = document.createElement("div")
-  headerValue.className = "award-viewer-tooltip-cell award-viewer-tooltip-cell--value"
+  headerValue.className = "pointlens-tooltip-cell pointlens-tooltip-cell--value"
   headerValue.textContent =
     info.stayNights !== undefined && info.stayNights > 1 ? "Price per night" : "Price"
   headerRow.appendChild(headerLabel)
@@ -425,7 +425,7 @@ const buildTooltipContent = (info: HiltonRateInfo, showCpp: boolean) => {
   }
 
   const divider = document.createElement("div")
-  divider.className = "award-viewer-tooltip-divider"
+  divider.className = "pointlens-tooltip-divider"
   grid.appendChild(divider)
 
   const pointsLabel = formatPoints(info.points)
@@ -477,11 +477,11 @@ function ensurePlaceholderStyles() {
       font-size: 22px;
       line-height: 1;
     }
-    .${PLACEHOLDER_ICON_CLASS} .award-viewer-icon {
+    .${PLACEHOLDER_ICON_CLASS} .pointlens-icon {
       display: inline-flex;
       align-items: center;
     }
-    .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip {
+    .${PLACEHOLDER_ICON_CLASS} .pointlens-tooltip {
       position: absolute;
       right: 0;
       bottom: 100%;
@@ -501,11 +501,11 @@ function ensurePlaceholderStyles() {
       min-width: 240px;
       max-width: 280px;
     }
-    .${PLACEHOLDER_ICON_CLASS}:hover .award-viewer-tooltip {
+    .${PLACEHOLDER_ICON_CLASS}:hover .pointlens-tooltip {
       opacity: 1;
       transform: translateY(-8px);
     }
-    .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-grid {
+    .${PLACEHOLDER_ICON_CLASS} .pointlens-tooltip-grid {
       display: grid;
       grid-template-columns: max-content minmax(160px, auto);
       column-gap: 12px;
@@ -513,21 +513,21 @@ function ensurePlaceholderStyles() {
       align-items: center;
       justify-content: start;
     }
-    .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-row {
+    .${PLACEHOLDER_ICON_CLASS} .pointlens-tooltip-row {
       display: contents;
     }
-    .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-cell {
+    .${PLACEHOLDER_ICON_CLASS} .pointlens-tooltip-cell {
       white-space: normal;
     }
-    .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-cell--label {
+    .${PLACEHOLDER_ICON_CLASS} .pointlens-tooltip-cell--label {
       color: #475569;
     }
-    .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-cell--value {
+    .${PLACEHOLDER_ICON_CLASS} .pointlens-tooltip-cell--value {
       font-weight: 400;
       color: #0f172a;
       text-align: left;
     }
-    .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip-divider {
+    .${PLACEHOLDER_ICON_CLASS} .pointlens-tooltip-divider {
       grid-column: 1 / -1;
       border-top: 1px solid #e2e8f0;
       height: 1px;
@@ -559,16 +559,16 @@ function ensurePlaceholderStyles() {
       border-color: #fde68a;
       color: #b45309;
     }
-    .${PLACEHOLDER_CLASS}.is-loading .award-viewer-skeleton {
+    .${PLACEHOLDER_CLASS}.is-loading .pointlens-skeleton {
       display: inline-block;
       width: 56px;
       height: 12px;
       border-radius: 6px;
       background: linear-gradient(90deg, #e5e7eb 25%, #f3f4f6 37%, #e5e7eb 63%);
       background-size: 400% 100%;
-      animation: award-viewer-skeleton 1.4s ease infinite;
+      animation: pointlens-skeleton 1.4s ease infinite;
     }
-    @keyframes award-viewer-skeleton {
+    @keyframes pointlens-skeleton {
       0% { background-position: 100% 50%; }
       100% { background-position: 0 50%; }
     }
@@ -599,11 +599,11 @@ const ensurePlaceholderContents = (placeholder: HTMLElement) => {
     iconWrapper.className = PLACEHOLDER_ICON_CLASS
 
     const iconTarget = document.createElement("span")
-    iconTarget.className = "award-viewer-icon"
+    iconTarget.className = "pointlens-icon"
     iconWrapper.appendChild(iconTarget)
 
     const tooltip = document.createElement("span")
-    tooltip.className = "award-viewer-tooltip"
+    tooltip.className = "pointlens-tooltip"
     tooltip.textContent = "Awaiting Hilton response"
     iconWrapper.appendChild(tooltip)
 
@@ -629,12 +629,12 @@ const setSkeleton = (placeholder: HTMLElement) => {
   const { valueEl } = ensurePlaceholderContents(placeholder)
   placeholder.classList.add("is-loading")
   valueEl.textContent = ""
-  const existing = valueEl.querySelector(".award-viewer-skeleton")
+  const existing = valueEl.querySelector(".pointlens-skeleton")
   if (existing) {
     return
   }
   const skeleton = document.createElement("span")
-  skeleton.className = "award-viewer-skeleton"
+  skeleton.className = "pointlens-skeleton"
   skeleton.setAttribute("aria-hidden", "true")
   valueEl.appendChild(skeleton)
 }
@@ -664,7 +664,7 @@ const updatePlaceholderText = (placeholder: HTMLElement) => {
 
   const info = getRateInfo(hotelId)
   const { iconWrapper, valueEl } = ensurePlaceholderContents(placeholder)
-  const tooltip = iconWrapper.querySelector<HTMLElement>(".award-viewer-tooltip")
+  const tooltip = iconWrapper.querySelector<HTMLElement>(".pointlens-tooltip")
   const showCpp = isStandardReward(info?.ratePlanName)
   const displayCpp = showCpp ? info?.cpp : undefined
 

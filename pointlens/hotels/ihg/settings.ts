@@ -1,4 +1,4 @@
-export const IHG_VALUE_SETTINGS_KEY = "award-viewer:ihg-value-settings"
+export const IHG_VALUE_SETTINGS_KEY = "pointlens:ihg-value-settings"
 
 export type IhgValueSettings = {
   goodValueThreshold: number

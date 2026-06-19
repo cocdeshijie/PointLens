@@ -1,14 +1,13 @@
-export const MARRIOTT_VALUE_SETTINGS_KEY =
-  "award-viewer:marriott-value-settings"
+export const HILTON_VALUE_SETTINGS_KEY = "pointlens:hilton-value-settings"
 
-export type MarriottValueSettings = {
+export type HiltonValueSettings = {
   goodValueThreshold: number
   badValueThreshold: number
   // Which cash figure to value points against / show on badges.
   taxBasis: "pretax" | "aftertax"
 }
 
-export const DEFAULT_MARRIOTT_VALUE_SETTINGS: MarriottValueSettings = {
+export const DEFAULT_HILTON_VALUE_SETTINGS: HiltonValueSettings = {
   goodValueThreshold: 0.6,
   badValueThreshold: 0.45,
   taxBasis: "aftertax"
@@ -24,21 +23,21 @@ const coerceTaxBasis = (
 ): "pretax" | "aftertax" =>
   value === "pretax" || value === "aftertax" ? value : fallback
 
-export const normalizeMarriottValueSettings = (
-  value?: Partial<MarriottValueSettings> | null
-): MarriottValueSettings => {
+export const normalizeHiltonValueSettings = (
+  value?: Partial<HiltonValueSettings> | null
+): HiltonValueSettings => {
   return {
     goodValueThreshold: coerceNumber(
       value?.goodValueThreshold,
-      DEFAULT_MARRIOTT_VALUE_SETTINGS.goodValueThreshold
+      DEFAULT_HILTON_VALUE_SETTINGS.goodValueThreshold
     ),
     badValueThreshold: coerceNumber(
       value?.badValueThreshold,
-      DEFAULT_MARRIOTT_VALUE_SETTINGS.badValueThreshold
+      DEFAULT_HILTON_VALUE_SETTINGS.badValueThreshold
     ),
     taxBasis: coerceTaxBasis(
       value?.taxBasis,
-      DEFAULT_MARRIOTT_VALUE_SETTINGS.taxBasis
+      DEFAULT_HILTON_VALUE_SETTINGS.taxBasis
     )
   }
 }

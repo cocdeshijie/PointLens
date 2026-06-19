@@ -18,18 +18,18 @@ const MESSAGE_FLAG = "__AV_HYATT_RATES__"
 // Rates also persisted to storage so they survive a full SSR navigation (date /
 // points toggle reload the page; the MAIN hook re-extracts, but seeding from
 // storage avoids a flash of "loading" on every nav).
-const HYATT_STORAGE_KEY = "award-viewer:hyatt-rates"
+const HYATT_STORAGE_KEY = "pointlens:hyatt-rates"
 
-const PLACEHOLDER_CLASS = "award-viewer-hyatt-price-placeholder"
-const PLACEHOLDER_ICON_CLASS = "award-viewer-hyatt-cpp-icon"
-const PLACEHOLDER_VALUE_CLASS = "award-viewer-hyatt-cpp-value"
-const PLACEHOLDER_STYLE_ID = "award-viewer-hyatt-placeholder-style"
+const PLACEHOLDER_CLASS = "pointlens-hyatt-price-placeholder"
+const PLACEHOLDER_ICON_CLASS = "pointlens-hyatt-cpp-icon"
+const PLACEHOLDER_VALUE_CLASS = "pointlens-hyatt-cpp-value"
+const PLACEHOLDER_STYLE_ID = "pointlens-hyatt-placeholder-style"
 // CPP line appended INSIDE Hyatt's own Google map price pin (.MapMarker_map-marker).
-const MAP_PIN_CPP_CLASS = "award-viewer-hyatt-pin-cpp"
-const MAP_PIN_ANNOTATED_CLASS = "award-viewer-hyatt-pin-annotated"
+const MAP_PIN_CPP_CLASS = "pointlens-hyatt-pin-cpp"
+const MAP_PIN_ANNOTATED_CLASS = "pointlens-hyatt-pin-annotated"
 // CPP chip appended into the marker's selection popover (1st-click preview card,
 // which natively shows only name/rating/distance — no price).
-const POPOVER_CPP_CLASS = "award-viewer-hyatt-popover-cpp"
+const POPOVER_CPP_CLASS = "pointlens-hyatt-popover-cpp"
 
 type HyattRateInfo = {
   cpp?: number
@@ -264,7 +264,7 @@ const positionSharedTooltip = (icon: HTMLElement) => {
 const getSharedTooltip = () => {
   if (sharedTooltip && sharedTooltip.isConnected) return sharedTooltip
   sharedTooltip = document.createElement("div")
-  sharedTooltip.className = "award-viewer-tooltip award-viewer-shared-tooltip"
+  sharedTooltip.className = "pointlens-tooltip pointlens-shared-tooltip"
   document.body.appendChild(sharedTooltip)
   document.addEventListener(
     "mousemove",
@@ -290,7 +290,7 @@ const getSharedTooltip = () => {
 }
 const attachSmartTooltip = (iconWrapper: HTMLElement) => {
   if (iconWrapper.dataset.avSmartTip) return
-  const source = iconWrapper.querySelector<HTMLElement>(".award-viewer-tooltip")
+  const source = iconWrapper.querySelector<HTMLElement>(".pointlens-tooltip")
   if (!source) return
   iconWrapper.dataset.avSmartTip = "1"
   const show = () => {
@@ -311,20 +311,20 @@ const attachSmartTooltip = (iconWrapper: HTMLElement) => {
 
 const buildTooltipContent = (info: HyattRateInfo) => {
   const wrapper = document.createElement("div")
-  wrapper.className = "award-viewer-tooltip-content"
+  wrapper.className = "pointlens-tooltip-content"
   const grid = document.createElement("div")
-  grid.className = "award-viewer-tooltip-grid"
+  grid.className = "pointlens-tooltip-grid"
 
   const addRow = (label: string, value: string) => {
     const row = document.createElement("div")
-    row.className = "award-viewer-tooltip-row"
+    row.className = "pointlens-tooltip-row"
     const labelEl = document.createElement("div")
     labelEl.className =
-      "award-viewer-tooltip-cell award-viewer-tooltip-cell--label"
+      "pointlens-tooltip-cell pointlens-tooltip-cell--label"
     labelEl.textContent = label
     const valueEl = document.createElement("div")
     valueEl.className =
-      "award-viewer-tooltip-cell award-viewer-tooltip-cell--value"
+      "pointlens-tooltip-cell pointlens-tooltip-cell--value"
     valueEl.textContent = value
     row.appendChild(labelEl)
     row.appendChild(valueEl)
@@ -345,7 +345,7 @@ const buildTooltipContent = (info: HyattRateInfo) => {
 
   if (cashLabel && info.points !== undefined) {
     const divider = document.createElement("div")
-    divider.className = "award-viewer-tooltip-divider"
+    divider.className = "pointlens-tooltip-divider"
     grid.appendChild(divider)
   }
 
@@ -377,10 +377,10 @@ const ensurePlaceholderContents = (placeholder: HTMLElement) => {
     iconWrapper = document.createElement("span")
     iconWrapper.className = PLACEHOLDER_ICON_CLASS
     const iconTarget = document.createElement("span")
-    iconTarget.className = "award-viewer-icon"
+    iconTarget.className = "pointlens-icon"
     iconWrapper.appendChild(iconTarget)
     const tooltip = document.createElement("span")
-    tooltip.className = "award-viewer-tooltip"
+    tooltip.className = "pointlens-tooltip"
     tooltip.textContent = "Awaiting Hyatt rates"
     iconWrapper.appendChild(tooltip)
     placeholder.appendChild(iconWrapper)
@@ -405,9 +405,9 @@ const setSkeleton = (placeholder: HTMLElement) => {
   const { valueEl } = ensurePlaceholderContents(placeholder)
   placeholder.classList.add("is-loading")
   valueEl.textContent = ""
-  if (valueEl.querySelector(".award-viewer-skeleton")) return
+  if (valueEl.querySelector(".pointlens-skeleton")) return
   const skeleton = document.createElement("span")
-  skeleton.className = "award-viewer-skeleton"
+  skeleton.className = "pointlens-skeleton"
   skeleton.setAttribute("aria-hidden", "true")
   valueEl.appendChild(skeleton)
 }
@@ -422,7 +422,7 @@ const updatePlaceholderText = (placeholder: HTMLElement) => {
   const hotelId = placeholder.dataset.hotelId
   const info = hotelId ? hyattRatesByHotel.get(hotelId) : undefined
   const { iconWrapper, valueEl } = ensurePlaceholderContents(placeholder)
-  const tooltip = iconWrapper.querySelector<HTMLElement>(".award-viewer-tooltip")
+  const tooltip = iconWrapper.querySelector<HTMLElement>(".pointlens-tooltip")
 
   if (!info) {
     // No data yet — hide the icon so its tooltip can't float, show skeleton.
@@ -645,11 +645,11 @@ const ensureStyles = () => {
       line-height: 1;
       z-index: 2;
     }
-    .${PLACEHOLDER_ICON_CLASS} .award-viewer-icon {
+    .${PLACEHOLDER_ICON_CLASS} .pointlens-icon {
       display: inline-flex;
       align-items: center;
     }
-    .award-viewer-tooltip {
+    .pointlens-tooltip {
       position: fixed;
       opacity: 0;
       pointer-events: none;
@@ -666,8 +666,8 @@ const ensureStyles = () => {
       min-width: 220px;
       max-width: 280px;
     }
-    .${PLACEHOLDER_ICON_CLASS} .award-viewer-tooltip { display: none; }
-    .award-viewer-tooltip-grid {
+    .${PLACEHOLDER_ICON_CLASS} .pointlens-tooltip { display: none; }
+    .pointlens-tooltip-grid {
       display: grid;
       grid-template-columns: max-content minmax(120px, auto);
       column-gap: 12px;
@@ -675,11 +675,11 @@ const ensureStyles = () => {
       align-items: center;
       justify-content: start;
     }
-    .award-viewer-tooltip-row { display: contents; }
-    .award-viewer-tooltip-cell { white-space: normal; }
-    .award-viewer-tooltip-cell--label { color: #475569; }
-    .award-viewer-tooltip-cell--value { color: #0f172a; text-align: left; }
-    .award-viewer-tooltip-divider {
+    .pointlens-tooltip-row { display: contents; }
+    .pointlens-tooltip-cell { white-space: normal; }
+    .pointlens-tooltip-cell--label { color: #475569; }
+    .pointlens-tooltip-cell--value { color: #0f172a; text-align: left; }
+    .pointlens-tooltip-divider {
       grid-column: 1 / -1;
       border-top: 1px solid #e2e8f0;
       height: 1px;
@@ -697,16 +697,16 @@ const ensureStyles = () => {
     .${PLACEHOLDER_VALUE_CLASS}.is-good { background: #d1fae5; border-color: #a7f3d0; color: #047857; }
     .${PLACEHOLDER_VALUE_CLASS}.is-bad { background: #ffe4e6; border-color: #fecdd3; color: #be123c; }
     .${PLACEHOLDER_VALUE_CLASS}.is-mid { background: #fef3c7; border-color: #fde68a; color: #b45309; }
-    .${PLACEHOLDER_CLASS}.is-loading .award-viewer-skeleton {
+    .${PLACEHOLDER_CLASS}.is-loading .pointlens-skeleton {
       display: inline-block;
       width: 56px;
       height: 12px;
       border-radius: 6px;
       background: linear-gradient(90deg, #e5e7eb 25%, #f3f4f6 37%, #e5e7eb 63%);
       background-size: 400% 100%;
-      animation: award-viewer-skeleton 1.4s ease infinite;
+      animation: pointlens-skeleton 1.4s ease infinite;
     }
-    @keyframes award-viewer-skeleton {
+    @keyframes pointlens-skeleton {
       0% { background-position: 100% 50%; }
       100% { background-position: 0 50%; }
     }

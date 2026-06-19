@@ -1,4 +1,4 @@
-export const HYATT_VALUE_SETTINGS_KEY = "award-viewer:hyatt-value-settings"
+export const HYATT_VALUE_SETTINGS_KEY = "pointlens:hyatt-value-settings"
 
 export type HyattValueSettings = {
   goodValueThreshold: number

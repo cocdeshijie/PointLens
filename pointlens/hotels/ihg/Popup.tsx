@@ -11,9 +11,9 @@ import {
   normalizeIhgValueSettings
 } from "./settings"
 
-const IHG_STORAGE_KEY = "award-viewer:ihg-last-request"
-const IHG_SENT_STORAGE_KEY = "award-viewer:ihg-sent-request"
-const IHG_CONVERSION_STORAGE_KEY = "award-viewer:ihg-currency-conversion-request"
+const IHG_STORAGE_KEY = "pointlens:ihg-last-request"
+const IHG_SENT_STORAGE_KEY = "pointlens:ihg-sent-request"
+const IHG_CONVERSION_STORAGE_KEY = "pointlens:ihg-currency-conversion-request"
 const IS_DEV =  process.env.NODE_ENV === "development"
 
 type IhgRequestPayload = {
