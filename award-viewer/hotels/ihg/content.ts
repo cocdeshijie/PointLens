@@ -898,6 +898,13 @@ const updateMapMarkers = () => {
       box.appendChild(label)
     }
     label.classList.toggle(`${MAP_CPP_CLASS}--none`, noRewards)
+    // Color the pin by value (green/amber/red), same thresholds as the list
+    // placeholders. "No rewards" pins stay grey via the --none modifier.
+    if (noRewards) {
+      label.classList.remove("is-good", "is-bad", "is-mid")
+    } else {
+      updateValueClass(label, value as number)
+    }
     const sig = `${ptsText}|${cppText}`
     if (label.dataset.av !== sig) {
       label.dataset.av = sig
@@ -2050,9 +2057,13 @@ const observePriceCards = () => {
         font-weight: 800;
         line-height: 1.05;
         text-align: center;
-        color: #047857;            /* green, readable on the white bubble */
+        color: #475569;            /* neutral fallback, readable on the white bubble */
         white-space: nowrap;
       }
+      /* Color by value, same thresholds/palette as the list placeholders. */
+      .${MAP_CPP_CLASS}.is-good { color: #047857; }   /* green */
+      .${MAP_CPP_CLASS}.is-mid { color: #b45309; }    /* amber */
+      .${MAP_CPP_CLASS}.is-bad { color: #be123c; }    /* red */
       .${MAP_CPP_CLASS} > span { display: block; }
       .${MAP_CPP_CLASS} .av-pts { font-weight: 600; }   /* points line */
       .${MAP_CPP_CLASS} .av-cpp { font-weight: 800; }   /* ¢/pt line */
