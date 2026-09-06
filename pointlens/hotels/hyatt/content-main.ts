@@ -1,5 +1,10 @@
 import type { PlasmoCSConfig } from "plasmo"
 
+import { installHyattRoomCapture } from "./room-capture"
+import { hyattStayContext } from "./room-pricing"
+
+installHyattRoomCapture()
+
 // MAIN-world hook for Hyatt's Next.js (App Router) search results.
 //
 // Hyatt delivers hotel + rate data as React Server Components ("Flight") payload,
@@ -44,10 +49,10 @@ type RateOut = {
 // soft update that returns only the changed hotels still merges with what we
 // already learned on load.
 const ratesByHotel = new Map<string, RateOut>()
-let ratesContext = location.href
+let ratesContext = hyattStayContext(location.href)
 const syncContext = () => {
-  if (ratesContext === location.href) return
-  ratesContext = location.href
+  if (ratesContext === hyattStayContext(location.href)) return
+  ratesContext = hyattStayContext(location.href)
   ratesByHotel.clear()
 }
 
@@ -194,7 +199,7 @@ const hookNextF = () => {
 const hookFetch = () => {
   const orig = window.fetch
   window.fetch = function (...args: Parameters<typeof fetch>) {
-    const context = location.href
+    const context = hyattStayContext(location.href)
     return orig.apply(this, args).then((res) => {
       // Only Flight responses contain leadingRate data. Never buffer images,
       // analytics, or unrelated API bodies on the site's critical path.
@@ -209,7 +214,7 @@ const hookFetch = () => {
           .clone()
           .text()
           .then((text) => {
-            if (location.href !== context) return
+            if (hyattStayContext(location.href) !== context) return
             if (extractInto(text) > 0) postRates()
           })
           .catch(() => {})

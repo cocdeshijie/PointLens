@@ -4,7 +4,10 @@ import { createRoot } from "react-dom/client"
 import { CiCircleInfo } from "react-icons/ci"
 
 import { hasHostMutation, makeInfoAccessible } from "../../shared/dom"
+import { installBudgetBridge } from "../../shared/pricing-budget"
 import { attachTooltip as attachSmartTooltip } from "../../shared/tooltip"
+import { hyattStayContext } from "./room-pricing"
+import { acceptHyattRooms, updateHyattRooms } from "./rooms"
 import {
   DEFAULT_HYATT_VALUE_SETTINGS,
   HYATT_VALUE_SETTINGS_KEY,
@@ -43,7 +46,7 @@ type HyattRateInfo = {
 
 const iconRoots = new WeakMap<HTMLElement, ReturnType<typeof createRoot>>()
 let hyattRatesByHotel = new Map<string, HyattRateInfo>()
-let ratesContext = location.href
+let ratesContext = hyattStayContext(location.href)
 let hyattValueSettings = DEFAULT_HYATT_VALUE_SETTINGS
 
 // Currency -> USD-per-unit. CPP thresholds are USD cents, so non-USD cash is
@@ -242,14 +245,14 @@ const isPointsView = () => {
 // "$394" / "12k pts".
 const secondaryText = (info: HyattRateInfo) =>
   isPointsView()
-    ? formatCashCompact(basisCashUsd(info), "USD")
+    ? formatCashCompact(basisCash(info), info.currency)
     : `${formatPointsK(info.points)} pts`
 
 // Full form for the roomy list card: 2-decimal cash ("$394.38") and the full
 // points value ("12,000 pts").
 const secondaryTextFull = (info: HyattRateInfo) =>
   isPointsView()
-    ? formatCash(basisCashUsd(info), "USD")
+    ? formatCash(basisCash(info), info.currency)
     : `${formatPoints(info.points)} pts`
 
 const valueTier = (cpp?: number) => {
@@ -285,12 +288,12 @@ const buildTooltipContent = (info: HyattRateInfo) => {
     return wrapper
   }
 
-  // USD-normalized so our overlay is consistent regardless of the property's
-  // display currency.
-  const cashLabel = formatCash(toUsd(info.rate, info.currency), "USD")
-  const taxLabel = formatCash(toUsd(info.rateAfterTax, info.currency), "USD")
-  if (cashLabel) addRow("Cash/night", cashLabel)
-  if (info.rateAfterTax !== undefined && taxLabel) addRow("After tax", taxLabel)
+  const cashLabel = formatCash(info.rate, info.currency)
+  const taxLabel = formatCash(info.rateAfterTax, info.currency)
+  if (cashLabel) addRow("Base", cashLabel)
+  if (info.rateAfterTax !== undefined && info.rate !== undefined)
+    addRow("Fees", formatCash(info.rateAfterTax - info.rate, info.currency))
+  if (taxLabel) addRow("Total", taxLabel)
 
   if (cashLabel && info.points !== undefined) {
     const divider = document.createElement("div")
@@ -303,7 +306,7 @@ const buildTooltipContent = (info: HyattRateInfo) => {
     const cppLabel = formatCpp(info.cpp)
     if (pointsLabel) {
       addRow(
-        "Points/night",
+        "Points",
         cppLabel ? `${pointsLabel} pts (${cppLabel})` : `${pointsLabel} pts`
       )
     }
@@ -314,6 +317,13 @@ const buildTooltipContent = (info: HyattRateInfo) => {
     return wrapper
   }
   wrapper.appendChild(grid)
+  const basis = document.createElement("div")
+  basis.style.cssText = "margin-top:8px;font-size:11px;color:#64748b"
+  basis.textContent =
+    hyattValueSettings.taxBasis === "pretax"
+      ? "Per night · CPP before tax"
+      : "Per night"
+  wrapper.appendChild(basis)
   return wrapper
 }
 
@@ -559,14 +569,15 @@ const scheduleUpdate = () => {
   updateScheduled = true
   requestAnimationFrame(() => {
     updateScheduled = false
-    if (ratesContext !== location.href) {
-      ratesContext = location.href
+    if (ratesContext !== hyattStayContext(location.href)) {
+      ratesContext = hyattStayContext(location.href)
       hyattRatesByHotel.clear()
     }
     refreshPlaceholders()
     updateExistingPlaceholders()
     updateMapPins()
     updatePopovers()
+    updateHyattRooms(hyattValueSettings, toUsd)
   })
 }
 
@@ -722,14 +733,29 @@ const start = () => {
   if (!document.body) return
   void refreshValueSettings()
   refreshPlaceholders()
+  window.postMessage({ __POINTLENS_HYATT_ROOMS_READY__: true }, location.origin)
   const observer = new MutationObserver((mutations) => {
-    if (hasHostMutation(mutations)) scheduleUpdate()
+    if (
+      hasHostMutation(
+        mutations.filter(
+          (m) =>
+            m.attributeName !== "class" ||
+            (m.target as Element).matches(".slide")
+        )
+      )
+    )
+      scheduleUpdate()
   })
   observer.observe(document.body, {
     childList: true,
     subtree: true,
     attributes: true,
-    attributeFilter: ["data-spirit-code", "aria-checked", "data-locator"]
+    attributeFilter: [
+      "data-spirit-code",
+      "aria-checked",
+      "data-locator",
+      "class"
+    ]
   })
 
   chrome?.storage?.onChanged?.addListener((changes, area) => {
@@ -748,13 +774,22 @@ if (document.readyState === "loading") {
 window.addEventListener("message", (event) => {
   if (event.source !== window) return
   const data = event.data as Record<string, unknown> | undefined
+  if (acceptHyattRooms(data)) {
+    scheduleUpdate()
+    return
+  }
   if (data?.[MESSAGE_FLAG] !== true) return
-  if (data.context !== location.href) return
-  if (ratesContext !== data.context) {
-    ratesContext = data.context as string
+  if (
+    typeof data.context !== "string" ||
+    hyattStayContext(data.context) !== hyattStayContext(location.href)
+  )
+    return
+  if (ratesContext !== hyattStayContext(data.context as string)) {
+    ratesContext = hyattStayContext(data.context as string)
     hyattRatesByHotel.clear()
   }
   mergeRates(data.rates as Record<string, unknown> | undefined)
   persistRates()
   scheduleUpdate()
 })
+installBudgetBridge("hyatt")

@@ -1,6 +1,8 @@
 import { fetchUsdRate } from "../../shared/fx"
+import { registerPricingBudget } from "../../shared/pricing-budget"
 
 export const registerHyattListeners = () => {
+  registerPricingBudget("hyatt")
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (msg?.type !== "HYATT_FETCH_FX" || typeof msg.currency !== "string") {
       return

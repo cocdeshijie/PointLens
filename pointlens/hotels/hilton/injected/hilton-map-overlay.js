@@ -1,14 +1,6 @@
 ;(function () {
-  // Runs in the page MAIN world (needs window.google.maps). Renders our own
-  // cents-per-point badges as Google Advanced Markers on the search map.
-  //
-  // Hilton draws its own price pins on a WebGL canvas (no per-pin DOM), so we
-  // cannot annotate them directly the way we do IHG's HTML markers. Instead we
-  // place our OWN AdvancedMarkerElement at each hotel's coordinate — the data
-  // comes from the page's native `hotelSummaryOptions` GraphQL response, which
-  // carries ctyhocn + coordinate + reward points + lowest cash for every hotel
-  // in the map viewport (no login or replay needed).
-
+  // Native metadata supplies coordinates; content supplies date-specific prices.
+  // This overlay never requests hotel inventory or pricing itself.
   const BADGE_CLASS = "pointlens-map-cpp"
   const STYLE_ID = "pointlens-map-cpp-style"
 
@@ -53,11 +45,6 @@
   }
   setInterval(refreshMode, 600)
 
-  // Any graphql/customer URL we've seen — we swap its operationName to replay the
-  // quadrant + summary ops ourselves (the queries are hardcoded minimally below).
-  let graphqlBaseUrl = null
-  let quadrantsRequested = false
-
   // ----------------------------------------------------------------
   // Settings bridge (content script, ISOLATED world -> here)
   // ----------------------------------------------------------------
@@ -80,12 +67,15 @@
 
     // Authoritative per-hotel rates from the content script (shopMultiPropAvail).
     if (data && data.__AV_HILTON_AUTH_RATES__ && Array.isArray(data.rates)) {
-      let changed = false
+      authRates.clear()
+      let changed = true
       for (const r of data.rates) {
         if (!r || typeof r.id !== "string") continue
         const next = {
           points: typeof r.points === "number" ? r.points : undefined,
           cash: typeof r.cash === "number" ? r.cash : undefined,
+          currency: r.currency,
+          pointsEstimated: r.pointsEstimated === true,
           cpp: typeof r.cpp === "number" ? r.cpp : undefined,
           hasReward: r.rewardStatus === "available"
         }
@@ -96,14 +86,10 @@
     }
   })
 
-  // Merge the authoritative (after-tax, list-card-accurate) rate over the
-  // hotelSummaryOptions data, keeping coordinates/name/brand from the latter.
-  // shopRates (our own date-aware shopMultiPropAvail fetch) wins over authRates
-  // (Hilton's captured shop data relayed by the content script) — both beat the
-  // generic leadRate baked into hotelData.
+  // Only date-specific prices may be combined with native coordinates.
   function effective(id, d) {
-    const a = shopRates.get(id) || authRates.get(id)
-    if (!a) return d
+    const a = authRates.get(id)
+    if (!a) return { lat: d.lat, lng: d.lng, name: d.name }
     // Confirmed unavailable for these dates (shopMultiPropAvail returned no cash
     // and no points). Show an explicit "Unavailable" badge — do NOT fall back to
     // the generic leadRate, which would resurrect a wrong "$88 No reward".
@@ -126,9 +112,11 @@
       name: d.name,
       brandCode: d.brandCode,
       addr: d.addr,
-      points: typeof a.points === "number" ? a.points : d.points,
-      cash: typeof a.cash === "number" ? a.cash : d.cash,
-      cpp: typeof a.cpp === "number" ? a.cpp : d.cpp,
+      points: a.points,
+      cash: a.cash,
+      currency: a.currency,
+      pointsEstimated: a.pointsEstimated,
+      cpp: a.cpp,
       hasReward: a.hasReward
     }
   }
@@ -143,51 +131,17 @@
       url.indexOf("hotelSummaryOptions") !== -1
     )
   }
-  function isQuadrantsUrl(url) {
-    return (
-      typeof url === "string" &&
-      url.indexOf("/graphql/customer") !== -1 &&
-      url.indexOf("hotelQuadrants") !== -1
-    )
-  }
-
-  function noteGraphqlUrl(url) {
-    if (
-      !graphqlBaseUrl &&
-      typeof url === "string" &&
-      url.indexOf("/graphql/customer") !== -1
-    ) {
-      graphqlBaseUrl = url
-    }
-  }
-
-  function buildGraphqlUrl(op) {
-    if (!graphqlBaseUrl) return null
-    try {
-      const u = new URL(graphqlBaseUrl, location.origin)
-      u.searchParams.set("operationName", op)
-      u.searchParams.set("originalOpName", op)
-      return u.toString()
-    } catch {
-      return graphqlBaseUrl
-    }
-  }
-
   function handleResponseJson(json) {
     ingest(json)
-    ingestQuadrants(json)
   }
 
   const origFetch = window.fetch
   window.fetch = function (...args) {
     const input = args[0]
     const url = typeof input === "string" ? input : input && input.url
-    try {
-      noteGraphqlUrl(url)
-    } catch {}
     const p = origFetch.apply(this, args)
     try {
-      if (isSummaryUrl(url) || isQuadrantsUrl(url)) {
+      if (isSummaryUrl(url)) {
         p.then((res) => {
           res
             .clone()
@@ -208,10 +162,7 @@
   }
   XMLHttpRequest.prototype.send = function (body) {
     const u = this.__avUrl
-    try {
-      noteGraphqlUrl(u)
-    } catch {}
-    if (isSummaryUrl(u) || isQuadrantsUrl(u)) {
+    if (isSummaryUrl(u)) {
       this.addEventListener("load", () => {
         try {
           handleResponseJson(JSON.parse(this.responseText))
@@ -219,40 +170,6 @@
       })
     }
     return origSend.call(this, body)
-  }
-
-  // Minimal hardcoded queries requesting only the fields we read. Parameter-less
-  // hotelQuadrants returns the whole tree; hotelSummaryOptions takes a quadrantId.
-  const QUADRANTS_QUERY =
-    "query hotelQuadrants { hotelQuadrants { id bounds { northeast { latitude longitude } southwest { latitude longitude } } } }"
-  const SUMMARY_QUERY =
-    "query hotelSummaryOptions($language: String!, $input: HotelSummaryOptionsInput) { hotelSummaryOptions(language: $language, input: $input) { hotels { ctyhocn name brandCode address { addressLine1 city stateName } localization { coordinate { latitude longitude } } leadRate { lowest { rateAmount(currencyCode: \"USD\") } hhonors { lead { dailyRmPointsRate } min { rateAmount dailyRmPointsRate } max { rateAmount dailyRmPointsRate } } } } } }"
-
-  // Make sure we have the quadrant tree (one parameter-less fetch).
-  function ensureQuadrantTree() {
-    if (quadrantCells.size > 0 || quadrantsRequested) return
-    const url = buildGraphqlUrl("hotelQuadrants")
-    if (!url) return
-    quadrantsRequested = true
-    try {
-      origFetch(url, {
-        method: "POST",
-        credentials: "include",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          query: QUADRANTS_QUERY,
-          operationName: "hotelQuadrants",
-          variables: {}
-        })
-      })
-        .then((r) => r.json())
-        .then(ingestQuadrants)
-        .catch(() => {
-          quadrantsRequested = false
-        })
-    } catch {
-      quadrantsRequested = false
-    }
   }
 
   // Collect every array of hotel-like objects (have ctyhocn + coordinate/rate)
@@ -310,30 +227,6 @@
       const lng = coord && coord.longitude
       if (typeof lat !== "number" || typeof lng !== "number") continue
 
-      const lead = h.leadRate || null
-      const hhonors = lead && lead.hhonors ? lead.hhonors : null
-      const points =
-        hhonors && hhonors.lead ? hhonors.lead.dailyRmPointsRate : undefined
-      // Cash anchor for ¢/pt = cheapest cash rate. Live hotelSummaryOptions uses
-      // leadRate.lowest; the SSR __NEXT_DATA__ shape has no `lowest` and instead
-      // exposes the cash on hhonors.min/max — fall back to those (min = cheapest,
-      // matching the list-card "lowest cash ÷ standard points" CPP).
-      const lowest = lead && lead.lowest ? lead.lowest : null
-      let cash = lowest ? lowest.rateAmount : undefined
-      if (typeof cash !== "number" && hhonors) {
-        if (hhonors.min && typeof hhonors.min.rateAmount === "number") {
-          cash = hhonors.min.rateAmount
-        } else if (hhonors.max && typeof hhonors.max.rateAmount === "number") {
-          cash = hhonors.max.rateAmount
-        }
-      }
-
-      const hasReward = !!(typeof points === "number" && points > 0)
-      const cpp =
-        hasReward && typeof cash === "number" && cash > 0
-          ? (cash / points) * 100
-          : null
-
       const addr = h.address || null
       const addrText = addr
         ? [addr.addressLine1, addr.city].filter(Boolean).join(", ")
@@ -342,10 +235,6 @@
       hotelData.set(id, {
         lat,
         lng,
-        points,
-        cash,
-        cpp,
-        hasReward,
         name: h.name,
         brandCode: h.brandCode || null,
         addr: addrText
@@ -356,27 +245,7 @@
     if (changed) {
       ensureMap()
       renderMarkers()
-      schedulePostRates()
-      schedulePrices()
     }
-  }
-
-  // Share our (comprehensive) hotel rates with the content script so the list
-  // cards and the pin-click dialog can show CPP even when Hilton's own
-  // shopMultiPropAvail capture is incomplete.
-  let postRatesTimer = null
-  function schedulePostRates() {
-    clearTimeout(postRatesTimer)
-    postRatesTimer = setTimeout(postRates, 1000)
-  }
-  function postRates() {
-    const rates = []
-    for (const [id, d] of hotelData) {
-      rates.push({ id, points: d.points, cash: d.cash, cpp: d.cpp, hasReward: d.hasReward })
-    }
-    try {
-      window.postMessage({ __AV_HILTON_RATES__: true, rates }, "*")
-    } catch {}
   }
 
   // Seed from server-rendered search data. __NEXT_DATA__ carries the search's
@@ -406,6 +275,7 @@
   // ----------------------------------------------------------------
   // Acquire the page's Google Map instance
   // ----------------------------------------------------------------
+  let markerLibraryPending = false
   function adoptMarkerLib(g) {
     if (AdvancedMarkerElement) return
     if (g && g.maps && g.maps.marker && g.maps.marker.AdvancedMarkerElement) {
@@ -416,7 +286,13 @@
     // Marker library loads on demand; pull it in ourselves. Called repeatedly by
     // the poll until it lands — Google caches the library, so retries are cheap
     // and we avoid a sticky in-flight guard that could wedge if a call hangs.
-    if (g && g.maps && typeof g.maps.importLibrary === "function") {
+    if (
+      !markerLibraryPending &&
+      g &&
+      g.maps &&
+      typeof g.maps.importLibrary === "function"
+    ) {
+      markerLibraryPending = true
       g.maps
         .importLibrary("marker")
         .then((lib) => {
@@ -435,7 +311,8 @@
     if (!inst || mapInstance) return
     try {
       const div = inst.getDiv && inst.getDiv()
-      const r = div && div.getBoundingClientRect ? div.getBoundingClientRect() : null
+      const r =
+        div && div.getBoundingClientRect ? div.getBoundingClientRect() : null
       if (!r || r.width < 250 || r.height < 250) return
     } catch {
       return
@@ -444,319 +321,6 @@
     adoptMarkerLib(window.google)
     renderMarkers()
     installIdleTrigger(inst)
-  }
-
-  // Robust, flicker-free coverage by replaying Hilton's own quadrant API instead
-  // of nudging the map. `hotelQuadrants` (parameter-less) returns the full
-  // quadtree of cells, each with bounds; `hotelSummaryOptions(quadrantId)` returns
-  // the hotels in one leaf cell. On idle we find the leaf cells intersecting the
-  // viewport and fetch each one we haven't fetched yet.
-  const quadrantCells = new Map() // id -> { ne:{lat,lng}, sw:{lat,lng} }
-  const fetchedQuadrants = new Set()
-  let idleDebounce = null
-
-  function ingestQuadrants(json) {
-    const cells = json && json.data && json.data.hotelQuadrants
-    if (!Array.isArray(cells)) return
-    let added = false
-    for (const c of cells) {
-      if (!c || !c.id || !c.bounds || quadrantCells.has(c.id)) continue
-      const ne = c.bounds.northeast
-      const sw = c.bounds.southwest
-      if (!ne || !sw) continue
-      quadrantCells.set(c.id, {
-        ne: { lat: ne.latitude, lng: ne.longitude },
-        sw: { lat: sw.latitude, lng: sw.longitude }
-      })
-      added = true
-    }
-    if (added) fetchVisibleQuadrants()
-  }
-
-  // A cell is a leaf (a real fetch target) if none of its 4 children are present.
-  function isLeaf(id) {
-    return (
-      !quadrantCells.has(id + "::nw") &&
-      !quadrantCells.has(id + "::ne") &&
-      !quadrantCells.has(id + "::sw") &&
-      !quadrantCells.has(id + "::se")
-    )
-  }
-
-  function intersectsViewport(cell, b) {
-    return !(
-      cell.sw.lat > b.n ||
-      cell.ne.lat < b.s ||
-      cell.sw.lng > b.e ||
-      cell.ne.lng < b.w
-    )
-  }
-
-  function replaySummary(quadrantId) {
-    const url = buildGraphqlUrl("hotelSummaryOptions")
-    if (!url || fetchedQuadrants.has(quadrantId)) return
-    fetchedQuadrants.add(quadrantId)
-    try {
-      origFetch(url, {
-        method: "POST",
-        credentials: "include",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          query: SUMMARY_QUERY,
-          operationName: "hotelSummaryOptions",
-          variables: {
-            language: "en",
-            input: { quadrantId: quadrantId, guestLocationCountry: "US" }
-          }
-        })
-      })
-        .then((r) => r.json())
-        .then(ingest)
-        .catch(() => {
-          fetchedQuadrants.delete(quadrantId) // allow retry later
-        })
-    } catch {
-      fetchedQuadrants.delete(quadrantId)
-    }
-  }
-
-  function fetchVisibleQuadrants() {
-    if (!mapInstance || !graphqlBaseUrl || quadrantCells.size === 0) return
-    let b
-    try {
-      const bb = mapInstance.getBounds()
-      if (!bb) return
-      const ne = bb.getNorthEast()
-      const sw = bb.getSouthWest()
-      b = { n: ne.lat(), e: ne.lng(), s: sw.lat(), w: sw.lng() }
-    } catch {
-      return
-    }
-    let count = 0
-    for (const [id, cell] of quadrantCells) {
-      if (fetchedQuadrants.has(id)) continue
-      if (!isLeaf(id)) continue
-      if (!intersectsViewport(cell, b)) continue
-      replaySummary(id)
-      if (++count >= 24) break // safety cap per pass
-    }
-  }
-
-  // ----------------------------------------------------------------
-  // Date-specific pricing via shopMultiPropAvail
-  // ----------------------------------------------------------------
-  // hotelSummaryOptions (above) only carries a generic, DATE-INDEPENDENT "from"
-  // rate with no points — it literally rejects arrival/departure inputs. Hilton's
-  // real per-date prices + reward points (and the after-tax totals the list cards
-  // show) come from shopMultiPropAvail, keyed by the search's dates. We replay it
-  // for the hotels in view so a map badge matches its list card / pin-click window.
-  // Two passes per batch: hhonors:true yields points + the reward room's cash for
-  // hotels with award availability; hhonors:false yields the cash "from" price for
-  // the rest (e.g. a Spark with no points left for these dates → "$X No reward").
-  const PRICE_QUERY =
-    'query shopMultiPropAvail($ctyhocns: [String!], $language: String!, $input: ShopMultiPropAvailQueryInput!) { shopMultiPropAvail(input: $input, language: $language, ctyhocns: $ctyhocns) { ctyhocn statusCode summary { hhonors { dailyRmPointsRate ratePlan { ratePlanName } } lowest { rateAmount(currencyCode: "USD") amountAfterTax(currencyCode: "USD") ratePlanCode ratePlan { ratePlanName } } } } }'
-
-  // ctyhocn -> { points, cash, cpp, hasReward } from shopMultiPropAvail (date-aware).
-  const shopRates = new Map()
-  const pricedKeys = new Set() // `${ctyhocn}@${arrival_departure}` already resolved
-  const queuedKeys = new Set() // currently in-flight (prevents duplicate fetches)
-  const PRICE_BATCH = 20 // shopMultiPropAvail rejects >20 ctyhocns ("Constraint Violation")
-  let priceDebounce = null
-
-  function getSearchInput() {
-    try {
-      const p = new URLSearchParams(location.search)
-      const arrivalDate = p.get("arrivalDate")
-      const departureDate = p.get("departureDate")
-      if (!arrivalDate || !departureDate) return null
-      return {
-        arrivalDate,
-        departureDate,
-        numAdults: parseInt(p.get("numAdults") || "1", 10) || 1,
-        numChildren: parseInt(p.get("numChildren") || "0", 10) || 0,
-        numRooms: parseInt(p.get("numRooms") || "1", 10) || 1
-      }
-    } catch {
-      return null
-    }
-  }
-
-  function priceInput(si, useHhonors) {
-    return {
-      guestId: 0,
-      guestLocationCountry: "US",
-      arrivalDate: si.arrivalDate,
-      departureDate: si.departureDate,
-      numAdults: si.numAdults,
-      numChildren: si.numChildren,
-      numRooms: si.numRooms,
-      childAges: [],
-      ratePlanCodes: [],
-      rateCategoryTokens: [],
-      specialRates: {
-        aaa: false,
-        aarp: false,
-        corporateId: "",
-        governmentMilitary: false,
-        groupCode: "",
-        hhonors: useHhonors,
-        lta: false,
-        pnd: "",
-        offerId: null,
-        promoCode: "",
-        senior: false,
-        smb: false,
-        travelAgent: false,
-        teamMember: false,
-        familyAndFriends: false,
-        owner: false,
-        ownerHGV: false
-      }
-    }
-  }
-
-  function postShop(ctyhocns, si, useHhonors) {
-    const url = buildGraphqlUrl("shopMultiPropAvail")
-    if (!url) return Promise.resolve(null)
-    try {
-      return origFetch(url, {
-        method: "POST",
-        credentials: "include",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          operationName: "shopMultiPropAvail",
-          query: PRICE_QUERY,
-          variables: { language: "en", input: priceInput(si, useHhonors), ctyhocns }
-        })
-      })
-        .then((r) => r.json())
-        .catch(() => null)
-    } catch {
-      return Promise.resolve(null)
-    }
-  }
-
-  function shopRows(json) {
-    const rows = json && json.data && json.data.shopMultiPropAvail
-    return Array.isArray(rows) ? rows : []
-  }
-  function lowestAmount(row) {
-    const lo = row && row.summary && row.summary.lowest
-    if (!lo) return undefined
-    if (typeof lo.amountAfterTax === "number") return lo.amountAfterTax
-    if (typeof lo.rateAmount === "number") return lo.rateAmount
-    return undefined
-  }
-
-  function fetchPriceBatch(ctyhocns, si, key) {
-    const keys = ctyhocns.map((id) => id + "@" + key)
-    keys.forEach((k) => queuedKeys.add(k))
-    return Promise.all([
-      postShop(ctyhocns, si, true),
-      postShop(ctyhocns, si, false)
-    ])
-      .then(([ptsJson, cashJson]) => {
-        const cashById = new Map()
-        for (const r of shopRows(cashJson)) {
-          if (r && r.ctyhocn) cashById.set(r.ctyhocn, lowestAmount(r))
-        }
-        // Reward hotels: points + the (after-tax) reward-room cash → CPP.
-        for (const r of shopRows(ptsJson)) {
-          if (!r || !r.ctyhocn) continue
-          const hh = r.summary && r.summary.hhonors
-          const points =
-            hh && typeof hh.dailyRmPointsRate === "number"
-              ? hh.dailyRmPointsRate
-              : undefined
-          if (typeof points !== "number" || points <= 0) continue
-          const cash = lowestAmount(r)
-          const anchor = typeof cash === "number" ? cash : cashById.get(r.ctyhocn)
-          const cpp =
-            typeof anchor === "number" && anchor > 0
-              ? (anchor / points) * 100
-              : null
-          shopRates.set(r.ctyhocn, {
-            points,
-            cash: anchor,
-            cpp,
-            hasReward: true
-          })
-        }
-        // The rest: cash "from" price, marked no-reward.
-        const cashOk = !!(
-          cashJson &&
-          cashJson.data &&
-          Array.isArray(cashJson.data.shopMultiPropAvail)
-        )
-        for (const id of ctyhocns) {
-          const existing = shopRates.get(id)
-          if (existing && existing.hasReward) continue
-          const cash = cashById.get(id)
-          if (typeof cash === "number") {
-            shopRates.set(id, { points: undefined, cash, cpp: null, hasReward: false })
-          } else if (cashOk && !(existing && existing.cash != null)) {
-            // Cash pass succeeded but this hotel has no cash and no points →
-            // sold out / unavailable for these dates. Mark it so we draw an
-            // "Unavailable" badge over Hilton's pin instead of leaving the pin.
-            shopRates.set(id, { unavailable: true, hasReward: false })
-          }
-        }
-        // Mark a hotel resolved only if we actually learned something (it has a
-        // rate now) OR the cash pass succeeded (so "no data" genuinely means
-        // unavailable). If the cash pass errored, leave it unpriced so the next
-        // idle retries it — otherwise a transient error sticks it on the generic
-        // leadRate forever.
-        for (const id of ctyhocns) {
-          const k = id + "@" + key
-          queuedKeys.delete(k)
-          if (shopRates.has(id) || cashOk) pricedKeys.add(k)
-        }
-        scheduleRender()
-      })
-      .catch(() => {
-        keys.forEach((k) => queuedKeys.delete(k)) // allow retry
-      })
-  }
-
-  function fetchVisiblePrices() {
-    if (!mapInstance || !graphqlBaseUrl) return
-    const si = getSearchInput()
-    if (!si) return
-    const key = si.arrivalDate + "_" + si.departureDate
-    let b
-    try {
-      const bb = mapInstance.getBounds()
-      if (!bb) return
-      const ne = bb.getNorthEast()
-      const sw = bb.getSouthWest()
-      b = { n: ne.lat(), e: ne.lng(), s: sw.lat(), w: sw.lng() }
-    } catch {
-      return
-    }
-    const pending = []
-    let moreRemain = false
-    for (const [id, d] of hotelData) {
-      const k = id + "@" + key
-      if (pricedKeys.has(k) || queuedKeys.has(k)) continue
-      if (d.lat > b.n || d.lat < b.s || d.lng > b.e || d.lng < b.w) continue
-      if (pending.length >= 120) {
-        moreRemain = true // cap concurrency per pass; come back for the rest
-        break
-      }
-      pending.push(id)
-    }
-    for (let i = 0; i < pending.length; i += PRICE_BATCH) {
-      fetchPriceBatch(pending.slice(i, i + PRICE_BATCH), si, key)
-    }
-    // A wide viewport can hold more hotels than one pass prices. Without this,
-    // the leftover isolated ones never get a badge and keep showing Hilton's
-    // native pin. Re-run once these resolve (queued/priced ones are skipped).
-    if (moreRemain) schedulePrices()
-  }
-
-  function schedulePrices() {
-    clearTimeout(priceDebounce)
-    priceDebounce = setTimeout(fetchVisiblePrices, 500)
   }
 
   // Respect Hilton's clustering: it collapses nearby hotels into count "circles"
@@ -891,19 +455,13 @@
     if (!ev) return
     ev.addListener(inst, "idle", () => {
       updateClustering()
-      clearTimeout(idleDebounce)
-      idleDebounce = setTimeout(fetchVisibleQuadrants, 250)
-      schedulePrices()
     })
     // Recompute promptly while zooming, before the map settles.
     ev.addListener(inst, "zoom_changed", updateClustering)
     // The map may already be settled when captured (no 'idle' fires) — also try
     // shortly after capture, and ensure we have the quadrant tree.
     setTimeout(() => {
-      ensureQuadrantTree()
       updateClustering()
-      fetchVisibleQuadrants()
-      schedulePrices()
     }, 1000)
   }
 
@@ -937,7 +495,8 @@
   // page awaits importLibrary, hence the fast early poll below.
   function wrapImportLibrary() {
     const g = window.google
-    if (!g || !g.maps || typeof g.maps.importLibrary !== "function") return false
+    if (!g || !g.maps || typeof g.maps.importLibrary !== "function")
+      return false
     if (g.maps.importLibrary.__avWrapped) return true
     const orig = g.maps.importLibrary
     const wrapped = function (name) {
@@ -977,7 +536,14 @@
     const g = window.google
     const M = g && g.maps && g.maps.Map
     if (!M || !M.prototype || M.prototype.__avProtoPatched) return false
-    for (const name of ["setCenter", "panTo", "panBy", "fitBounds", "setZoom", "moveCamera"]) {
+    for (const name of [
+      "setCenter",
+      "panTo",
+      "panBy",
+      "fitBounds",
+      "setZoom",
+      "moveCamera"
+    ]) {
       const orig = M.prototype[name]
       if (typeof orig !== "function") continue
       M.prototype[name] = function (...a) {
@@ -1015,17 +581,17 @@
   const fastPoll = setInterval(() => {
     fastCount += 1
     tryHooks()
-    if (mapInstance || fastCount > 150) clearInterval(fastPoll)
+    if (mapInstance || fastCount > 50) clearInterval(fastPoll)
   }, 15)
 
   let pollCount = 0
   const poll = setInterval(() => {
     pollCount += 1
     tryHooks()
-    if ((mapInstance && markers.size > 0) || pollCount > 600) {
+    if ((mapInstance && markers.size > 0) || pollCount > 120) {
       clearInterval(poll)
     }
-  }, 200)
+  }, 500)
 
   // Lightweight status hook (handy for support/debugging from the console).
   window.__AV_HILTON_MAP_DEBUG__ = () => ({
@@ -1033,16 +599,7 @@
     hasMarkerLib: !!AdvancedMarkerElement,
     dataCount: hotelData.size,
     markerCount: markers.size,
-    quadrantCells: quadrantCells.size,
-    fetchedQuadrants: fetchedQuadrants.size,
-    shopRates: shopRates.size,
-    pricedKeys: pricedKeys.size,
-    queued: queuedKeys.size,
-    searchInput: getSearchInput(),
-    rewardCount: (() => { let n = 0; for (const [, v] of shopRates) if (v.hasReward) n++; return n })(),
-    noRewardCount: (() => { let n = 0; for (const [, v] of shopRates) if (!v.hasReward && !v.unavailable) n++; return n })(),
-    unavailableCount: (() => { let n = 0; for (const [, v] of shopRates) if (v.unavailable) n++; return n })(),
-    unavailableIds: (() => { const o = []; for (const [id, v] of shopRates) if (v.unavailable) o.push(id); return o.slice(0, 15) })(),
+    authoritativeRates: authRates.size,
     zoom: (() => {
       try {
         return mapInstance ? mapInstance.getZoom() : null
@@ -1052,8 +609,6 @@
     })(),
     settings
   })
-
-
 
   // ----------------------------------------------------------------
   // Marker rendering
@@ -1160,18 +715,25 @@
     return new Intl.NumberFormat("en-US").format(points)
   }
 
-  function formatCash(amount) {
+  function formatCash(amount, currency) {
     if (typeof amount !== "number" || !isFinite(amount)) return ""
-    return "$" + amount.toFixed(2)
+    return currency
+      ? new Intl.NumberFormat(undefined, {
+          style: "currency",
+          currency
+        }).format(amount)
+      : ""
   }
 
   function signature(d) {
     return [
       pointsMode ? "p" : "c",
       d.hasReward ? "r" : "n",
-      d.cash == null ? "" : Math.round(d.cash),
+      d.cash == null ? "" : d.cash.toFixed(2),
       d.cpp == null ? "" : d.cpp.toFixed(2),
       d.points || "",
+      d.currency || "",
+      d.pointsEstimated ? "estimated" : "",
       valueClass(d.cpp)
     ].join("|")
   }
@@ -1218,6 +780,7 @@
 
   function buildBadge(d) {
     const el = document.createElement("div")
+    if (d.pointsEstimated) el.title = "Estimated CPP using first-night points"
     el.className = BADGE_CLASS
     if (pointsMode) el.classList.add(`${BADGE_CLASS}--points`)
 
@@ -1225,7 +788,7 @@
       el.classList.add(`${BADGE_CLASS}--none`)
       if (typeof d.cash === "number" && isFinite(d.cash)) {
         // No award points, but it's bookable for cash — show the cash price.
-        el.appendChild(lineSpan("av-big", formatCash(d.cash)))
+        el.appendChild(lineSpan("av-big", formatCash(d.cash, d.currency)))
         el.appendChild(lineSpan("av-small", "No reward"))
       } else {
         // No cash either — Hilton shows it as unavailable for these dates.
@@ -1241,9 +804,9 @@
     if (vc) el.classList.add(vc)
 
     const hasCash = typeof d.cash === "number" && isFinite(d.cash)
-    const cashText = hasCash ? formatCash(d.cash) : ""
+    const cashText = hasCash ? formatCash(d.cash, d.currency) : ""
     const ptsText = formatPoints(d.points)
-    const cppText = d.cpp != null ? d.cpp.toFixed(2) + "¢/pt" : "—"
+    const cppText = d.cpp != null ? "≈" + d.cpp.toFixed(2) + "¢/pt" : "—"
 
     if (pointsMode) {
       // Points first (large), then cash (small), then ¢/pt.
@@ -1288,9 +851,15 @@
       // showing it first made badges flip wrong→correct, and every content swap
       // briefly cleared the marker and flashed Hilton's canvas pin underneath.
       // Until real data lands we draw nothing and leave Hilton's native pin.
-      const hasReal = shopRates.has(id) || authRates.has(id)
+      const hasReal = authRates.has(id)
       let entry = markers.get(id)
-      if (!hasReal) continue
+      if (!hasReal) {
+        if (entry) {
+          entry.marker.map = null
+          markers.delete(id)
+        }
+        continue
+      }
 
       const d = effective(id, raw)
       const sig = signature(d)
@@ -1364,12 +933,16 @@
   // Cards nest testids: hotel-card-<ctyhocn> (the <li>) wraps hotel-card-image
   // and hotel-card-content. Climb until the suffix matches a real badge.
   function cardCtyhocn(el) {
-    let card = el && el.closest ? el.closest("[data-testid^='hotel-card-']") : null
+    let card =
+      el && el.closest ? el.closest("[data-testid^='hotel-card-']") : null
     while (card) {
       const suffix = (card.getAttribute("data-testid") || "").slice(11)
       if (markers.has(suffix.toUpperCase())) return suffix
       const parent = card.parentElement
-      card = parent && parent.closest ? parent.closest("[data-testid^='hotel-card-']") : null
+      card =
+        parent && parent.closest
+          ? parent.closest("[data-testid^='hotel-card-']")
+          : null
     }
     return null
   }
