@@ -32,6 +32,81 @@ test.afterAll(async () => {
   await context?.close()
 })
 
+test("Marriott skips browser-managed XHR headers while preserving session cookies and allowed headers", async () => {
+  const p = await context.newPage()
+  const errors = []
+  p.on("console", (message) => {
+    if (message.type() === "error") errors.push(message.text())
+  })
+  const requests = []
+  await p.route("https://www.marriott.com/**", async (route) => {
+    if (route.request().method() === "POST") {
+      requests.push(await route.request().allHeaders())
+      return route.fulfill({ json: { data: {} } })
+    }
+    return route.fulfill({
+      contentType: "text/html",
+      body: "<html><head></head><body>Marriott fixture</body></html>"
+    })
+  })
+  await p.goto("https://www.marriott.com/default.mi")
+  const statuses = await p.evaluate(async () => {
+    document.cookie =
+      "pointlens_fixture=browser-owned; path=/; Secure; SameSite=Lax"
+    const results = []
+    for (const url of [
+      "/mi/query/PhoenixBookDTTSearchProductsByProperty",
+      "/unrelated-fixture"
+    ]) {
+      results.push(
+        await new Promise((resolve, reject) => {
+          const xhr = new XMLHttpRequest()
+          xhr.open("POST", url)
+          xhr.withCredentials = true
+          xhr.setRequestHeader("Cookie", "pointlens_fixture=manual-override")
+          xhr.setRequestHeader("cOoKiE", "another=manual-value")
+          for (const name of [
+            "user-agent",
+            "sec-fetch-user",
+            "sec-fetch-mode",
+            "sec-fetch-site",
+            "sec-fetch-dest",
+            "referer"
+          ])
+            xhr.setRequestHeader(name, "manual-value")
+          xhr.setRequestHeader("content-type", "application/json")
+          xhr.setRequestHeader("x-request-id", "fixture-request")
+          xhr.setRequestHeader("Authorization", "Bearer fixture-token")
+          xhr.onload = () => resolve(xhr.status)
+          xhr.onerror = () => reject(new Error("fixture request failed"))
+          xhr.send("{}")
+        })
+      )
+    }
+    return results
+  })
+  expect(statuses).toEqual([200, 200])
+  expect(requests).toHaveLength(2)
+  for (const headers of requests) {
+    expect(headers.cookie).toContain("pointlens_fixture=browser-owned")
+    expect(headers.cookie).not.toContain("manual")
+    expect(headers["x-request-id"]).toBe("fixture-request")
+    expect(headers["content-type"]).toBe("application/json")
+    expect(headers.authorization).toBe("Bearer fixture-token")
+    for (const name of [
+      "user-agent",
+      "sec-fetch-user",
+      "sec-fetch-mode",
+      "sec-fetch-site",
+      "sec-fetch-dest",
+      "referer"
+    ])
+      expect(headers[name]).not.toBe("manual-value")
+  }
+  expect(errors.filter((message) => /unsafe header/i.test(message))).toEqual([])
+  await p.close()
+})
+
 test("IHG room cards and detail dialogs show matching stay values with no additional pricing calls", async () => {
   const fixture = require("../fixtures/ihg-rooms.json")
   const p = await context.newPage()
