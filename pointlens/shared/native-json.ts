@@ -76,8 +76,17 @@ export function observeNativeJson(
     return (open as any).call(this, method, url, ...rest)
   }
   XMLHttpRequest.prototype.setRequestHeader = function (name, value) {
+    // Some site scripts copy browser-managed headers into XHR. Chrome ignores
+    // these but attributes the warnings to this wrapper. Leave cookies,
+    // referrer, user agent and fetch metadata to the browser, including replays.
+    if (
+      this.readyState === XMLHttpRequest.OPENED &&
+      /^(cookie2?|referer|user-agent|sec-.+)$/i.test(name)
+    )
+      return
+    const result = setHeader.call(this, name, value)
     requests.get(this)?.headers.append(name, value)
-    return setHeader.call(this, name, value)
+    return result
   }
   XMLHttpRequest.prototype.send = function (body) {
     const request = requests.get(this)
