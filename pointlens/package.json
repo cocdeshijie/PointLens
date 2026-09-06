@@ -5,9 +5,9 @@
   "description": "See hotel award point value (cents per point) at a glance on Hilton, IHG, Marriott, and Hyatt search results.",
   "author": "cocdeshijie",
   "scripts": {
-    "dev": "plasmo dev",
-    "build": "plasmo build",
-    "package": "plasmo package",
+    "dev": "POST_BUILD_SCRIPT=./scripts/finalize-main-world.cjs plasmo dev",
+    "build": "POST_BUILD_SCRIPT=./scripts/finalize-main-world.cjs plasmo build",
+    "package": "POST_BUILD_SCRIPT=./scripts/finalize-main-world.cjs plasmo package",
     "typecheck": "tsc --noEmit",
     "test:unit": "node --test tests/*.test.mjs",
     "test:browser": "playwright test",
@@ -34,12 +34,42 @@
   },
   "manifest": {
     "permissions": [
+      "scripting",
       "storage",
       "webRequest",
       "tabs"
     ],
     "host_permissions": [
       "https://*/*"
+    ],
+    "content_scripts": [
+      {
+        "matches": [
+          "https://www.hyatt.com/*"
+        ],
+        "js": [
+          "../hotels/hyatt/content-main.ts"
+        ],
+        "run_at": "document_start"
+      },
+      {
+        "matches": [
+          "https://www.ihg.com/*"
+        ],
+        "js": [
+          "../hotels/ihg/content-main.ts"
+        ],
+        "run_at": "document_start"
+      },
+      {
+        "matches": [
+          "https://www.marriott.com/*"
+        ],
+        "js": [
+          "../hotels/marriott/content-main.ts"
+        ],
+        "run_at": "document_start"
+      }
     ],
     "web_accessible_resources": [
       {

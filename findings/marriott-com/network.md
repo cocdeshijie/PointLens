@@ -228,3 +228,44 @@ reflects a per-night basis.
   `MonetaryAmount.currency` are account-locale-dependent. Observed `"USD"` and
   `"CNY"`. The CPP display hardcodes `$` and USD thresholds — needs locale-aware
   formatting for non-USD accounts. (See confirmed `rates` structure above.)
+
+## 2026-09-06 Chrome audit (in progress)
+
+- Chicago, Oct 12–14, one adult/room: 140 search results, 40 per page. Existing PointLens placeholders remain loading; no legacy Marriott Replay logs were observed. The current endpoint/operation must be captured before changing replay behavior.
+- Residence Inn Chicago Downtown/Loop (`CHIRL`) room and rate pages show no PointLens badges. Native Studio King card: $738 average/night, $1,477 rounded stay total before taxes. Expanded rate carousel has Flexible member/non-member plus package rates. View Rates expands pricing; Select advances booking and was not clicked.
+- Room Details links carry `marshaCode`, `roomPoolCode` (e.g. `stdo`), and `productId`. Room and rate overlays must preserve these identities and use exact amounts from native responses rather than rounded card prices.
+- Temporary QA-only passive schema diagnostics are built; awaiting manual extension reload to inspect native search/room operations. Existing webRequest/header replay architecture should be replaced with passive native capture plus bounded missing-side lookups, preserving special-rate inputs and preventing stale cross-tab pricing.
+
+### Native room/search capture implementation, pending live badge validation
+
+- MAIN-world observer activation confirmed. Search still uses `phoenixShopDatedSearchByGeoQuery`. CHIRL's two-night search returns `pointsPerUnit.points=108000`; the visible site confirms **108,000 Points / Stay**. Earlier notes calling this field nightly were incorrect. Cash `lowestAverageRate.amount.amount=73850` with decimal scaling corresponds to $738.50/night; after-tax amount is $878.08/night.
+- Room API is `/mi/query/PhoenixBookDTTSearchProductsByProperty`, at `data.commerce.product.searchProductsByProperty.edges[].node`. The points page returned 55 products including cash plans, so passive capture can cover both sides without another pricing request. Native expanded Studio shows Redemption 108,000 points/stay beside Flexible cash $738 average/$1,477 stay before tax.
+- Product IDs decode to hotel|plan|room-pool|arrival|departure|opaque suffix; both room-detail and rate-detail links expose exact product IDs. Room cards use `[data-testid=RateCardV2]`; rate links use `[data-testid=rate-modal]`; dialogs use `#room-details-modal` and `#rateDetailsContent` (the latter has no dialog role).
+- New code removes background header collection/replay and global cached rates as a UI source. Native search capture retains the current page/context, preserves special-rate inputs on missing-side replays, retains native result order for map pins, rejects superseded responses, and shares a conservative request budget/backoff across tabs.
+- Room product cash normalization uses `totalPricing.rateModes.subtotalPerQuantity`/`grandTotal` and points from `rates.rateModes.pointsPerUnit`; currency, quantity semantics and full live product samples remain to be checked against the newly built diagnostics before finalizing.
+
+### Live totals correction
+
+- Native cash product confirms quantity=1 for a two-night, one-room stay. Studio member subtotal is $1,477.00, grand total $1,756.17, and nightly base $738.50; these are not rounded DOM-derived amounts.
+- Points-only rate modes have `pointsPerUnit` without a cash rate field. Their `totalPricing` still contains internal cash amounts ($511.27 for Studio redemption; $47.56 for a points upgrade). Native cards, expanded rates, and redemption Rate Details show only points, so these amounts must not be treated as guest copays. Award comparisons now deduct the explicit mandatory fee field instead. Cash-and-points variants still need separate live validation.
+- The updated regression uses a nonzero internal award cash total to ensure it cannot reduce CPP. Real Chrome validation of the corrected build remains pending manual reload.
+
+### Completed live checks, 2026-09-06
+
+- Live dated searches use both `/mi/query/phoenixShopDatedSearchByGeoQuery` and `/mi/query/phoenixShopDatedSearchByDestinationQuery`. Corresponding response collections are `searchByGeolocation` and `searchByDestination`; both are supported and covered by browser regressions.
+- Canonical search context ignores view, deviceType, and hash changes. These presentation changes occurred while the native response was pending and previously discarded usable results. Cash/points mode uses the native checkbox, with URL fallback. Undated Continue links do not receive empty price placeholders.
+- Verified the Oct 12–14 Chicago search in cash and points mode, list/map, current smart-info-window portal previews, and hotel quick-view modal. CHIRL search shows 1.63¢/pt, with 54,000 points/night on cash view and $878.08/night on points view. The room page uses exact stay totals ($1,756.17 / 108,000 points); the one-cent nightly rounding difference comes from Marriott's API.
+- Verified CHIRL room cards, expanded redemption/member/non-member/package rates, room-detail dialog, and rate-detail dialog. Shared room and rate IDs retain the correct selected comparison and compact badge placement.
+- Native points search explicitly charges destination fees (e.g. JW Marriott Chicago +$30 daily). Search CPP now subtracts `lowestAverageRate.mandatoryFees`, with a compact Award fees row in the tooltip. JW's value changes from 0.95 to 0.91¢/pt; the full cash amount remains $692.59/night.
+- Map pins now stack the comparison on a second line despite Marriott's flex-row styling. Preview capture covers `.smart-info-window-portal-layer .HotelCard` as well as the old Google InfoWindow.
+- Cash search made one bounded missing-award lookup. Combined native search responses and room responses need no duplicate request. The per-brand cross-tab budget, in-flight lease, timeout, Retry-After handling, and cooldown are tested.
+- Removed temporary schema/pricing logs for the final production build. Cash-and-points products and other locales were not independently live-audited in this pass.
+
+### Fresh cash-room load follow-up
+
+- A final reload after changing the shared Marriott search session opened LaSalle (`CHIAD`) in cash mode. This native room response contained 54 cash products and **no award products**; the earlier combined-room-response observation applies to points mode, not every room load.
+- Native points toggle adds `{type:"REDEMPTION", value:""}` to room `variables.search.options.rateRequestTypes`. Added one bounded missing-side room request with this exact selector, preserving the native query, headers, dates, guests, special rates and credentials. No replay when the native request already asked for that side.
+- Native and replayed cash product IDs have different opaque suffixes. Retain original cash IDs and merge only missing award offers so room/rate links still identify their own cash price. Request revisions discard superseded responses and replays.
+- Verified a fresh real-Chrome LaSalle cash page: Superior Queen/Queen shows 1.13¢/pt and 145,000 points/stay; Deluxe King shows 1.14¢/pt using the available award fallback. No user toggle is required.
+- Mixed cash-and-points/points-plus-cash-upgrade modes are excluded from ordinary cash candidates; their internal subtotals must not contaminate minimum cash comparisons.
+- Final production build has no temporary pricing logs. All 18 unit + 24 browser tests pass, including fetch/Request and XHR replay, preserved headers/special rates/native product IDs, static registration migration, and fractional-cent tooltip rounding. Type check and diff whitespace check pass.

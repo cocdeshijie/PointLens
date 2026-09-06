@@ -472,9 +472,12 @@ test("Hyatt switches complementary value, removes sold-out pins, and rejects old
   await expect(p.locator(".pointlens-hyatt-cpp-value")).toContainText(
     "2.00¢/pt"
   )
-  await p
-    .locator("[role=switch]")
-    .evaluate((e) => e.setAttribute("aria-checked", "true"))
+  await p.evaluate(() => {
+    const url = new URL(location.href)
+    url.searchParams.set("rateFilter", "woh")
+    history.replaceState({}, "", url.href)
+    document.querySelector("[role=switch]").setAttribute("aria-checked", "true")
+  })
   await expect(p.locator(".pointlens-hyatt-cpp-value")).toHaveText(
     "2.00¢/pt · $240.00"
   )
@@ -630,16 +633,30 @@ test("Marriott tooltip refreshes even when changed cash/points keep the same CPP
       }
     ]
   })
-  await worker.evaluate(
-    (v) => chrome.storage.local.set({ "pointlens:marriott-last-capture": v }),
+  await p.evaluate(
+    (v) =>
+      window.postMessage(
+        {
+          __AV_MARRIOTT_SAVE__: true,
+          payload: { ...v, context: location.href }
+        },
+        location.origin
+      ),
     capture(250, 50000)
   )
   await expect(p.locator(".pointlens-marriott-cpp-value")).toContainText(
     "0.50¢/pt"
   )
   await expect(p.locator(".gm-style-iw .av-sub")).toHaveText("50k pts/night")
-  await worker.evaluate(
-    (v) => chrome.storage.local.set({ "pointlens:marriott-last-capture": v }),
+  await p.evaluate(
+    (v) =>
+      window.postMessage(
+        {
+          __AV_MARRIOTT_SAVE__: true,
+          payload: { ...v, context: location.href }
+        },
+        location.origin
+      ),
     capture(300, 60000)
   )
   await expect(p.locator(".gm-style-iw .av-sub")).toHaveText("60k pts/night")
@@ -653,27 +670,37 @@ test("Hilton list uses multi-night totals and responds to tax-basis settings", a
       body: '<!doctype html><body><article data-testid="hotel-card-CHI"><div data-testid="priceInfo"><a href="/book/reservation/rooms/">View Rates</a></div></article></body>'
     })
   )
-  await p.goto("https://www.hilton.com/en/hotels/")
-  await worker.evaluate(() =>
-    chrome.storage.local.set({
-      "hilton-last-capture": {
-        arrivalDate: "2026-10-12",
-        departureDate: "2026-10-16",
-        shopMultiPropAvail: [
-          {
-            ctyhocn: "CHI",
-            currencyCode: "USD",
-            summary: {
-              lowest: { rateAmount: 200, amountAfterTax: 1000 },
-              hhonors: {
-                dailyRmPointsRate: 50000,
-                ratePlan: { ratePlanName: "Standard Room Reward" }
+  await p.goto(
+    "https://www.hilton.com/en/search/?arrivalDate=2026-10-12&departureDate=2026-10-16"
+  )
+  await p.evaluate(() =>
+    window.postMessage(
+      {
+        __AV_HILTON_PRICING__: true,
+        payload: {
+          meta: {
+            context: 1,
+            arrivalDate: "2026-10-12",
+            departureDate: "2026-10-16",
+            points: true
+          },
+          hotels: [
+            {
+              ctyhocn: "CHI",
+              currencyCode: "USD",
+              summary: {
+                lowest: { rateAmount: 200, amountAfterTax: 1000 },
+                hhonors: {
+                  dailyRmPointsRate: 50000,
+                  ratePlan: { ratePlanName: "Standard Room Reward" }
+                }
               }
             }
-          }
-        ]
-      }
-    })
+          ]
+        }
+      },
+      location.origin
+    )
   )
   await expect(p.locator(".pointlens-hilton-cpp-value")).toContainText(
     "0.50¢/pt"
@@ -796,3 +823,853 @@ test("IHG failed detail requests do not loop when the dialog refreshes", async (
     await p.close()
   }
 })
+
+test("Hilton native pricing drives rooms, cash plans and points details without duplicate replays", async () => {
+  await worker.evaluate(() =>
+    chrome.storage.session.remove("pointlens:hilton:budget")
+  )
+  await worker.evaluate(() =>
+    chrome.storage.local.remove("pointlens:hilton-value-settings")
+  )
+  const p = await context.newPage()
+  const room = {
+    roomTypeCode: "KXLX",
+    roomTypeName: "King",
+    roomOnlyRates: [
+      {
+        ratePlanCode: "FLEX",
+        rateAmount: 379,
+        fullAmountAfterTax: "$901.26",
+        ratePlan: { ratePlanName: "Flexible Rate" }
+      },
+      {
+        ratePlanCode: "MEMBER",
+        rateAmount: 316.595,
+        fullAmountAfterTax: "$752.86",
+        ratePlan: { ratePlanName: "Honors Discount Non-refundable" }
+      }
+    ]
+  }
+  let requests = 0
+  await p.route("https://www.hilton.com/**", (r) => {
+    if (r.request().url().includes("/graphql/customer")) {
+      requests++
+      const points = r.request().postDataJSON().variables.specialRates?.hhonors
+      return r.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          data: {
+            hotel: {
+              ctyhocn: "CHITDHX",
+              shopAvail: {
+                currencyCode: "USD",
+                roomTypes: [
+                  {
+                    ...room,
+                    redemptionRoomRates: points
+                      ? [
+                          {
+                            ratePlanCode: "SR",
+                            totalCostPoints: 140000,
+                            pointDetails: [{ pointsRate: 70000 }],
+                            ratePlan: { ratePlanName: "Standard Room Reward" }
+                          }
+                        ]
+                      : []
+                  }
+                ]
+              }
+            }
+          }
+        })
+      })
+    }
+    return r.fulfill({
+      contentType: "text/html",
+      body: `<html><head></head><body><label><input id="usePoints" type="checkbox">Use Points & Money</label><section data-roomtypecode="KXLX"><h2>King</h2><button data-testid="moreRatesButton">More Rates From $317</button></section><div data-testid="standardRateBlock"><div data-testid="ratePrice"><p>$379</p><button>Rate details for Flexible Rate<span aria-hidden="true">Rate details</span></button></div></div><div data-testid="pamRatesBlock"><div><span data-testid="allPointsTotalCost">70,000</span></div></div></body></html>`
+    })
+  })
+  await p.goto(
+    "https://www.hilton.com/en/book/reservation/rooms/?ctyhocn=CHITDHX&arrivalDate=2026-10-12&departureDate=2026-10-14&room1NumAdults=1&roomTypeCode=KXLX"
+  )
+  const native = async () =>
+    p.evaluate(() =>
+      fetch(
+        "/graphql/customer?originalOpName=hotel_shopAvailOptions_shopPropAvail",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            operationName: "hotel_shopAvailOptions_shopPropAvail",
+            query:
+              "query roomPricing { hotel { shopAvail { roomTypes { roomOnlyRates { rateAmount } redemptionRoomRates { totalCostPoints } } } } }",
+            variables: {
+              ctyhocn: "CHITDHX",
+              arrivalDate: "2026-10-12",
+              departureDate: "2026-10-14",
+              numAdults: 1,
+              specialRates: { hhonors: false }
+            }
+          })
+        }
+      )
+    )
+  await native()
+  const roomBadge = p.locator("[data-roomtypecode] .pointlens-hilton-cpp-value")
+  await expect(roomBadge).toHaveText("≈0.54¢/pt · 70,000 pts")
+  await expect(
+    p.locator('[data-testid="standardRateBlock"] .pointlens-hilton-cpp-value')
+  ).toHaveText("≈0.64¢/pt · 70,000 pts")
+  await expect(
+    p.locator('[data-testid="pamRatesBlock"] .pointlens-hilton-cpp-value')
+  ).toHaveText("≈0.54¢/pt · $376.43")
+  expect(requests).toBe(2)
+  await p.evaluate(() => {
+    history.pushState({}, "", "/en/book/reservation/rates/")
+    const selected = document.createElement("button")
+    selected.dataset.testid = "roomSelectedLabel"
+    selected.innerHTML = '<span class="sr-only">King</span>'
+    document.body.append(selected)
+  })
+  await expect(
+    p.locator('[data-testid="pamRatesBlock"] .pointlens-hilton-cpp-value')
+  ).toHaveText("≈0.54¢/pt · $376.43")
+  await native()
+  await expect(roomBadge).toHaveText("≈0.54¢/pt · 70,000 pts")
+  expect(requests).toBe(3)
+  // Hilton uses separate button IDs for accessible rooms. Exercise that native
+  // layout without requiring another pricing request or losing the room badge.
+  await p.evaluate(() => {
+    const card = document.querySelector('[data-roomtypecode="KXLX"]')
+    card.dataset.testid = "accessibleRoomCard"
+    card.querySelector('[data-testid="moreRatesButton"]').dataset.testid =
+      "accessibleMoreRatesButton"
+  })
+  await p.locator("#usePoints").check()
+  await expect(roomBadge).toHaveText("≈0.54¢/pt · $376.43")
+  await p.evaluate(() => {
+    const dialog = document.createElement("div")
+    dialog.setAttribute("role", "dialog")
+    dialog.setAttribute("aria-label", "Honors Discount Non-refundable")
+    dialog.innerHTML =
+      '<div data-testid="quickLookRoomTypeName">King</div><div data-testid="priceDetailsExpandedSection"><div data-testid="currencyText">Price in $USD</div><span data-testid="totalRoomChargeAmount">$633.19</span><span data-testid="totalForStayAmount">$752.86</span></div>'
+    document.body.append(dialog)
+    document.querySelector('[data-testid="standardRateBlock"]').style.width =
+      "150px"
+    dispatchEvent(new Event("resize"))
+  })
+  await expect(
+    p.locator('[data-testid="standardRateBlock"] .pointlens-hilton-cpp-value')
+  ).toHaveText("≈0.64¢/pt · 70k")
+  const bounds = await p
+    .locator(
+      '[data-testid="standardRateBlock"] .pointlens-hilton-price-placeholder'
+    )
+    .evaluate((e) => ({
+      width: e.getBoundingClientRect().width,
+      scroll: e.scrollWidth,
+      height: e.getBoundingClientRect().height
+    }))
+  expect(bounds.scroll).toBeLessThanOrEqual(150)
+  expect(bounds.height).toBeLessThan(30)
+  await p.locator("[data-roomtypecode] .pointlens-hilton-cpp-icon").focus()
+  await expect(p.locator("#pointlens-value-details")).toContainText("$633.19")
+  await expect(p.locator("#pointlens-value-details")).toContainText("$119.67")
+  await expect(p.locator("#pointlens-value-details")).toContainText(
+    "140,000 pts"
+  )
+  await p.evaluate(() =>
+    history.pushState(
+      {},
+      "",
+      "/en/book/reservation/rooms/?ctyhocn=CHITDHX&arrivalDate=2026-10-12&departureDate=2026-10-15&room1NumAdults=1"
+    )
+  )
+  await expect(p.locator(".pointlens-hilton-cpp-value")).toHaveCount(0)
+  expect(requests).toBe(3)
+  await p.close()
+})
+
+test("Hilton throttling survives across tabs and honors a server cooldown", async () => {
+  await worker.evaluate(() =>
+    chrome.storage.session.remove("pointlens:hilton:budget")
+  )
+  const p = await context.newPage()
+  await p.goto(
+    "https://www.hilton.com/en/search/?arrivalDate=2026-10-12&departureDate=2026-10-14"
+  )
+  // Exercise the real content bridge; tab scripts never receive credentials.
+  const ask = (tab = p) =>
+    tab.evaluate(
+      () =>
+        new Promise((resolve) => {
+          const id = Math.random()
+          const listener = (e) => {
+            if (e.data?.__AV_HILTON_BUDGET_REPLY__ && e.data.id === id) {
+              removeEventListener("message", listener)
+              resolve(e.data.allowed)
+            }
+          }
+          addEventListener("message", listener)
+          postMessage({ __AV_HILTON_BUDGET__: true, id }, location.origin)
+        })
+    )
+  expect(await ask()).toBe(true)
+  expect(await ask()).toBe(false)
+  await p.evaluate(() =>
+    postMessage(
+      { __AV_HILTON_FINISHED__: true, status: 429, retryMs: 1800000 },
+      location.origin
+    )
+  )
+  await expect
+    .poll(() =>
+      worker.evaluate(
+        async () =>
+          Number(
+            (await chrome.storage.session.get("pointlens:hilton:budget"))[
+              "pointlens:hilton:budget"
+            ]?.until
+          ) || 0
+      )
+    )
+    .toBeGreaterThan(Date.now() + 1700000)
+  const p2 = await context.newPage()
+  await p2.goto("https://www.hilton.com/en/")
+  expect(await ask(p2)).toBe(false)
+  await p.close()
+  await p2.close()
+})
+
+test("Hilton queues split native search batches and reuses overlapping hotel results", async () => {
+  await worker.evaluate(() =>
+    chrome.storage.session.remove("pointlens:hilton:budget")
+  )
+  const p = await context.newPage(),
+    lookups = []
+  const hotelIds = Array.from(
+    { length: 35 },
+    (_, i) => `H${String(i).padStart(2, "0")}`
+  )
+  await p.route("https://www.hilton.com/**", (route) => {
+    if (route.request().url().includes("/graphql/customer")) {
+      const b = route.request().postDataJSON(),
+        award = b.variables.input.specialRates.hhonors
+      if (award) lookups.push({ ids: b.variables.ctyhocns, time: Date.now() })
+      return route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          data: {
+            shopMultiPropAvail: b.variables.ctyhocns.map((ctyhocn) => ({
+              ctyhocn,
+              currencyCode: "USD",
+              summary: {
+                lowest: { rateAmount: 200, amountAfterTax: 480 },
+                ...(award
+                  ? {
+                      hhonors: {
+                        dailyRmPointsRate: 50000,
+                        rateChangeIndicator: false
+                      }
+                    }
+                  : {})
+              }
+            }))
+          }
+        })
+      })
+    }
+    return route.fulfill({
+      contentType: "text/html",
+      body: `<body>${hotelIds.map((id) => `<article data-testid="hotel-card-${id}"><div data-testid="priceInfo"><a href="/book/reservation/rooms/">View Rates</a></div></article>`).join("")}</body>`
+    })
+  })
+  await p.goto(
+    "https://www.hilton.com/en/search/?arrivalDate=2026-10-12&departureDate=2026-10-14"
+  )
+  await p.evaluate(
+    (hotelIds) =>
+      Promise.all(
+        [hotelIds.slice(0, 20), hotelIds.slice(20), hotelIds.slice(5, 25)].map(
+          (ids) =>
+            fetch("/graphql/customer?originalOpName=shopMultiPropAvail", {
+              method: "POST",
+              body: JSON.stringify({
+                operationName: "shopMultiPropAvail",
+                query:
+                  "query shopMultiPropAvail { shopMultiPropAvail { summary { lowest { rateAmount amountAfterTax } } } }",
+                variables: {
+                  ctyhocns: ids,
+                  input: {
+                    arrivalDate: "2026-10-12",
+                    departureDate: "2026-10-14",
+                    specialRates: { hhonors: false }
+                  }
+                }
+              })
+            })
+        )
+      ),
+    hotelIds
+  )
+  await expect(p.locator(".pointlens-hilton-cpp-value")).toHaveText(
+    Array(35).fill("≈0.48¢/pt · 50,000 pts"),
+    { timeout: 12000 }
+  )
+  expect(lookups).toHaveLength(2)
+  expect(lookups.every((r) => r.ids.length <= 20)).toBe(true)
+  expect(lookups.flatMap((r) => r.ids).sort()).toEqual(hotelIds)
+  if (lookups.length > 1)
+    expect(lookups[1].time - lookups[0].time).toBeGreaterThanOrEqual(1900)
+  await p.close()
+})
+
+for (const savedPoints of [false, true])
+  for (const delayedBudget of [false, true])
+    test(`Hyatt room capture pairs plans and fetches one opposite rate (saved points: ${savedPoints}, delayed budget: ${delayedBudget})`, async () => {
+      const p = await context.newPage()
+      const cash = {
+        roomRates: {
+          KING: {
+            currencyCode: "USD",
+            roomType: { title: "King" },
+            ratePlans: [
+              {
+                id: "MEM",
+                name: "Member Rate",
+                rate: 200,
+                rateAfterTax: 240,
+                totalBeforeTax: 400.05,
+                totalAfterTax: 480.06
+              }
+            ]
+          },
+          QUEEN: {
+            currencyCode: "USD",
+            roomType: { title: "Queen" },
+            ratePlans: [
+              {
+                id: "MEM",
+                name: "Member Rate",
+                rate: 300,
+                rateAfterTax: 360,
+                totalBeforeTax: 600.05,
+                totalAfterTax: 720.06
+              }
+            ]
+          }
+        }
+      }
+      const award = {
+        roomRates: {
+          KING: {
+            currencyCode: "USD",
+            roomType: { title: "King" },
+            ratePlans: [
+              {
+                id: "STEXLP",
+                name: "Point Award + Suite Upgrade",
+                totalPoints: 10000
+              }
+            ]
+          },
+          QUEEN: {
+            currencyCode: "USD",
+            roomType: { title: "Queen" },
+            ratePlans: [
+              {
+                id: "AWARD",
+                name: "Standard Room Free Night",
+                points: 15000,
+                totalPoints: 30000
+              }
+            ]
+          }
+        }
+      }
+      let requests = 0
+      await worker.evaluate(() =>
+        chrome.storage.session.remove("pointlens:hyatt:pricing-budget")
+      )
+      await p.route("https://www.hyatt.com/**", (r) => {
+        if (r.request().url().includes("/service/rooms/roomrates/")) {
+          requests++
+          return r.fulfill({
+            contentType: "application/json",
+            body: JSON.stringify(
+              r.request().url().includes("rateFilter=woh") ||
+                (savedPoints && !r.request().url().includes("rateFilter="))
+                ? award
+                : cash
+            )
+          })
+        }
+        return r.fulfill({
+          contentType: "text/html",
+          body: `<html><body><div class="room-card-divider"><h3 data-locator="room-title" id="KING-room-title">King</h3><div class="room-rate-content" data-locator="cash-rate"><span>Member Rate</span><span>$200</span></div></div><div class="room-card-divider"><h3 data-locator="room-title" id="QUEEN-room-title">Queen</h3><div class="room-rate-content" data-locator="cash-rate"><span>Member Rate</span><span>$300</span></div></div></body></html>`
+        })
+      })
+      await p.goto(
+        "https://www.hyatt.com/shop/rooms/test?checkinDate=2026-10-12&checkoutDate=2026-10-14&rooms=1&adults=1&rateFilter=standard"
+      )
+      if (delayedBudget)
+        await worker.evaluate(() =>
+          chrome.storage.session.set({
+            "pointlens:hyatt:pricing-budget": {
+              calls: [],
+              activeUntil: Date.now() + 800,
+              lease: "another-tab",
+              last: Date.now() - 3000
+            }
+          })
+        )
+      await p.evaluate(() =>
+        fetch(
+          "/en-US/shop/service/rooms/roomrates/test?checkinDate=2026-10-12&checkoutDate=2026-10-14&rate=Standard"
+        )
+      )
+      const badges = p.locator(".pointlens-hyatt-room-value")
+      if (delayedBudget) {
+        expect(requests).toBe(1)
+        await expect(badges).toHaveCount(0)
+        await expect(
+          p.locator('.pointlens-hyatt-room-status[aria-busy="true"]')
+        ).toHaveCount(2)
+      }
+      await expect(badges).toHaveCount(1)
+      await expect(badges).toContainText("2.40¢/pt · 15,000 pts")
+      await expect(p.locator(".pointlens-hyatt-room-status")).toHaveText(
+        "Points unavailable"
+      )
+      await expect(p.locator(".pointlens-hyatt-room-status")).toHaveAttribute(
+        "aria-busy",
+        "false"
+      )
+      await badges.getByRole("button").focus()
+      await expect(p.locator("#pointlens-value-details")).not.toContainText(
+        "Lowest available room"
+      )
+      await expect(p.locator("#pointlens-value-details")).toContainText(
+        "$60.00"
+      )
+      await expect(p.locator("#pointlens-value-details")).toContainText(
+        "$300.03"
+      )
+      await expect(p.locator("#pointlens-value-details")).toContainText(
+        "$360.03"
+      )
+      await p.evaluate(() => {
+        history.replaceState(
+          {},
+          "",
+          location.href.replace("rateFilter=standard", "rateFilter=woh")
+        )
+        document.querySelectorAll(".room-card-divider")[0].remove()
+        const row = document.querySelector(".room-rate-content")
+        row.setAttribute("data-locator", "points-rate")
+        row.innerHTML =
+          "<span>Standard Room Free Night</span><span>15,000</span>"
+      })
+      await expect(badges).toContainText("2.40¢/pt · $360.03")
+      expect(requests).toBe(2)
+      // A later complete award response removes rooms that are no longer bookable.
+      award.roomRates = {}
+      await p.evaluate(() =>
+        fetch("/en-US/shop/service/rooms/roomrates/test?rateFilter=woh")
+      )
+      await p.evaluate(() => {
+        history.replaceState(
+          {},
+          "",
+          location.href.replace("rateFilter=woh", "rateFilter=standard")
+        )
+        const row = document.querySelector(".room-rate-content")
+        row.setAttribute("data-locator", "cash-rate")
+        row.innerHTML = "<span>Member Rate</span>$300"
+      })
+      await expect(badges).toHaveCount(0)
+      await expect(p.locator(".pointlens-hyatt-room-status")).toHaveText(
+        "Points unavailable"
+      )
+      expect(requests).toBe(3)
+      await p.evaluate(() => {
+        history.replaceState(
+          {},
+          "",
+          location.href.replace("2026-10-14", "2026-10-15")
+        )
+        document.body.append(document.createElement("div"))
+      })
+      await expect(badges).toHaveCount(0)
+      await p.close()
+    })
+
+for (const transport of ["combined", "fetch", "xhr"])
+  test(`Marriott room cards and dialogs preserve native IDs (${transport})`, async () => {
+    const p = await context.newPage()
+    await worker.evaluate(() =>
+      chrome.storage.session.remove("pointlens:marriott:pricing-budget")
+    )
+    const id = (plan, room) =>
+      Buffer.from(
+        `CHIRL|${plan}|${room}|2026-10-12|2026-10-14|fixture`
+      ).toString("base64")
+    const cashId = id("MEM", "STDO"),
+      awardId = id("MRW", "STDO"),
+      suiteId = id("MEM", "SUIT")
+    const money = (amount) => ({
+      amount: Math.round(amount * 100),
+      currency: "USD",
+      decimalPoint: 2
+    })
+    const node = (id, base, total, points) => ({
+      id,
+      basicInformation: { name: "Studio" },
+      rates: {
+        name: points ? "Redemption" : "Flexible",
+        rateModes: points ? { pointsPerUnit: { points } } : {}
+      },
+      totalPricing: {
+        quantity: 1,
+        rateModes: {
+          subtotalPerQuantity: { amount: money(base) },
+          grandTotal: { amount: money(total) }
+        }
+      }
+    })
+    const data = {
+      data: {
+        commerce: {
+          product: {
+            searchProductsByProperty: {
+              edges: [
+                node(cashId, 400, 480),
+                node(awardId, 430, 511.27, 30000),
+                node(suiteId, 600, 720),
+                {
+                  ...node(id("MIXED", "STDO"), 1, 1),
+                  rates: {
+                    rateModes: {
+                      cashAndPointsPerUnit: {
+                        points: 15000,
+                        amount: money(100)
+                      }
+                    }
+                  }
+                }
+              ].map((node) => ({ node }))
+            }
+          }
+        }
+      }
+    }
+    let requests = 0
+    const bodies = []
+    await p.route("https://www.marriott.com/**", (r) => {
+      if (r.request().url().includes("/mi/query/")) {
+        requests++
+        const body = r.request().postDataJSON()
+        bodies.push(body)
+        expect(r.request().headers()["x-room-fixture"]).toBe("preserved")
+        const result = structuredClone(data)
+        const edges =
+          result.data.commerce.product.searchProductsByProperty.edges
+        const combined =
+          transport === "combined" ||
+          body.variables.search.options.rateRequestTypes.some(
+            (r) => r.type === "REDEMPTION"
+          )
+        if (!combined)
+          result.data.commerce.product.searchProductsByProperty.edges =
+            edges.filter((e) => !e.node.rates.rateModes.pointsPerUnit)
+        else if (transport !== "combined") {
+          for (const edge of edges)
+            if (!edge.node.rates.rateModes.pointsPerUnit)
+              edge.node.id = edge.node.id + "replayed"
+        }
+        return r.fulfill({
+          contentType: "application/json",
+          body: JSON.stringify(result)
+        })
+      }
+      return r.fulfill({
+        contentType: "text/html",
+        body: `<html><body><div data-testid="RateCardV2"><a class="room-detail-link" href="/reservation/ersViewRoomPool.mi?productId=${transport === "combined" ? awardId : cashId}">Room Details</a><div class="room-desc"><div class="rate-details">30,000 points</div></div></div><div data-testid="RateCardV2"><a class="room-detail-link" href="/reservation/ersViewRoomPool.mi?productId=${suiteId}">Suite</a><div class="room-desc"><div class="rate-details">$300</div></div></div><div><a data-testid="rate-modal" href="/reservation/ersViewRateRules.mi?productId=${cashId}" onclick="event.preventDefault();document.querySelector('#rateDetailsContent').hidden=false">Rate Details</a></div><div id="rateDetailsContent" hidden><div><h1>Rate Details</h1></div></div></body></html>`
+      })
+    })
+    await p.goto("https://www.marriott.com/reservation/rateListMenu.mi")
+    await p.evaluate(async (transport) => {
+      const url = "/mi/query/PhoenixBookDTTSearchProductsByProperty"
+      const body = JSON.stringify({
+        variables: {
+          search: {
+            propertyId: "CHIRL",
+            options: {
+              startDate: "2026-10-12",
+              endDate: "2026-10-14",
+              quantity: 1,
+              rateRequestTypes: [
+                { type: "STANDARD", value: "" },
+                { type: "CLUSTER", value: "AAA" }
+              ]
+            }
+          }
+        }
+      })
+      if (transport === "xhr")
+        return new Promise((resolve) => {
+          const xhr = new XMLHttpRequest()
+          xhr.open("POST", url)
+          xhr.setRequestHeader("x-room-fixture", "preserved")
+          xhr.onload = resolve
+          xhr.send(body)
+        })
+      return fetch(
+        new Request(new URL(url, location.href), {
+          method: "POST",
+          headers: { "x-room-fixture": "preserved" },
+          body
+        })
+      )
+    }, transport)
+    await expect(p.locator(".pointlens-marriott-room-value")).toHaveCount(3)
+    await expect(p.locator("[data-testid=RateCardV2]").first()).toContainText(
+      transport === "combined" ? "1.60¢/pt · $480.00" : "1.60¢/pt · 30,000 pts"
+    )
+    await expect(p.locator("[data-testid=RateCardV2]").nth(1)).toContainText(
+      "2.40¢/pt · 30,000 pts"
+    )
+    await p.locator("[data-testid=rate-modal]").click()
+    await expect(p.locator("#rateDetailsContent")).toContainText(
+      "1.60¢/pt · 30,000 pts"
+    )
+    expect(requests).toBe(transport === "combined" ? 1 : 2)
+    if (transport !== "combined") {
+      expect(
+        bodies[1].variables.search.options.rateRequestTypes
+      ).toContainEqual({ type: "CLUSTER", value: "AAA" })
+      expect(
+        bodies[1].variables.search.options.rateRequestTypes
+      ).toContainEqual({ type: "REDEMPTION", value: "" })
+      expect(bodies[1].variables.search.options.startDate).toBe("2026-10-12")
+    }
+    await p.close()
+  })
+
+for (const searchShape of ["searchByGeolocation", "searchByDestination"])
+  test(`Marriott ${searchShape} preserves rates, map order and presentation changes`, async () => {
+    const endpoint = `/mi/query/phoenixShopDatedSearchBy${searchShape === "searchByDestination" ? "Destination" : "Geo"}Query`
+    const p = await context.newPage()
+    await worker.evaluate(() =>
+      chrome.storage.session.remove("pointlens:marriott:pricing-budget")
+    )
+    const amount = (n) => ({
+      amount: n * 100,
+      decimalPoint: 2,
+      currency: "USD"
+    })
+    const hotel = (id, cash, points) => ({
+      node: {
+        property: { id },
+        rates: [
+          {
+            rateCategory: { code: "StandardRates" },
+            status: { code: "AvailableForSale" },
+            lengthOfStay: 2,
+            rateModes: {
+              lowestAverageRate: {
+                amount: amount(cash),
+                totalAmount: amount(cash * 1.2),
+                mandatoryFees: amount(id === "B" ? 30 : 0)
+              }
+            }
+          },
+          ...(points
+            ? [
+                {
+                  rateCategory: { code: "Special", value: "MRW" },
+                  status: { code: "AvailableForSale" },
+                  lengthOfStay: 2,
+                  rateModes: { pointsPerUnit: { points } }
+                }
+              ]
+            : [])
+        ]
+      }
+    })
+    const requests = []
+    await p.route("https://www.marriott.com/**", (r) => {
+      if (r.request().url().includes("/mi/query/")) {
+        const body = r.request().postDataJSON()
+        requests.push(body)
+        const combined = body.variables.search.options.rateRequestTypes.some(
+          (x) => x.value === "MRW"
+        )
+        const edges = combined
+          ? [hotel("B", 300, 40000), hotel("A", 200, 20000)]
+          : [hotel("A", 200), hotel("B", 300)]
+        return r.fulfill({
+          contentType: "application/json",
+          body: JSON.stringify({
+            data: {
+              search: { lowestAvailableRates: { [searchShape]: { edges } } }
+            }
+          })
+        })
+      }
+      return r.fulfill({
+        contentType: "text/html",
+        body: '<html><body><article class="property-card" data-marsha="A"><a href="/search/availabilityCalendar.mi"><div class="rate-container">$200</div></a></article><div class="gm-style"><div class="m-map-pin pin-0">$200</div><div class="m-map-pin pin-1">$300</div></div></body></html>'
+      })
+    })
+    await p.goto(
+      "https://www.marriott.com/search/findHotels.mi?fromDate=10/12/2026&toDate=10/14/2026"
+    )
+    await p.evaluate((endpoint) => {
+      const request = fetch(endpoint, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          variables: {
+            search: {
+              options: {
+                rateRequestTypes: [
+                  { type: "STANDARD", value: "" },
+                  { type: "CLUSTER", value: "AAA" }
+                ]
+              },
+              startDate: "2026-10-12",
+              endDate: "2026-10-14",
+              rooms: 1
+            }
+          }
+        })
+      })
+      history.replaceState(
+        {},
+        "",
+        location.href + "&deviceType=desktop-web&view=map#/0/"
+      )
+      return request
+    }, endpoint)
+    await expect(p.locator(".pointlens-marriott-cpp-value")).toContainText(
+      "2.40¢/pt · 10,000 pts"
+    )
+    await p.evaluate(() => {
+      const points = document.createElement("input")
+      points.type = "checkbox"
+      points.name = "useRewardsPoints"
+      points.checked = true
+      document.body.append(points)
+    })
+    await expect(p.locator(".pointlens-marriott-cpp-value")).toContainText(
+      "2.40¢/pt · $240.00"
+    )
+    expect(requests).toHaveLength(2)
+    expect(
+      requests[1].variables.search.options.rateRequestTypes
+    ).toContainEqual({
+      type: "CLUSTER",
+      value: "AAA"
+    })
+    expect(requests[1].variables.search.startDate).toBe("2026-10-12")
+    await expect(p.locator(".pin-0 .pointlens-marriott-pin-cpp")).toContainText(
+      "2.40¢"
+    )
+    await p.evaluate(
+      (endpoint) =>
+        fetch(endpoint, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            variables: {
+              search: {
+                options: {
+                  rateRequestTypes: [
+                    { type: "STANDARD", value: "" },
+                    { type: "CLUSTER", value: "MRW" }
+                  ]
+                }
+              }
+            }
+          })
+        }),
+      endpoint
+    )
+    await expect(p.locator(".pin-0 .pointlens-marriott-pin-cpp")).toContainText(
+      "1.65¢"
+    )
+    await p.evaluate(() => {
+      const layer = document.createElement("div")
+      layer.className = "smart-info-window-portal-layer"
+      layer.innerHTML =
+        '<div class="HotelCard"><div class="hotel-card-text-section"><a href="/search/availabilityCalendar.mi?propertyCode=B">40,000 Points</a></div></div>'
+      document.body.append(layer)
+    })
+    await expect(
+      p.locator(".HotelCard .pointlens-marriott-detail-cpp")
+    ).toContainText("1.65¢/pt")
+    expect(requests).toHaveLength(3)
+    await p.close()
+  })
+
+for (const status of [200, 429])
+  test(`Hyatt room availability distinguishes empty awards from lookup failure (${status})`, async () => {
+    const p = await context.newPage()
+    await worker.evaluate(() =>
+      chrome.storage.session.remove("pointlens:hyatt:pricing-budget")
+    )
+    let requests = 0
+    await p.route("https://www.hyatt.com/**", (r) => {
+      if (r.request().url().includes("/service/rooms/roomrates/")) {
+        requests++
+        const award = r.request().url().includes("rateFilter=woh")
+        return r.fulfill({
+          status: award ? status : 200,
+          contentType: "application/json",
+          body: JSON.stringify(
+            award
+              ? { roomRates: {} }
+              : {
+                  roomRates: {
+                    KING: {
+                      roomType: { title: "King" },
+                      currencyCode: "USD",
+                      ratePlans: [
+                        {
+                          id: "MEM",
+                          name: "Member",
+                          totalBeforeTax: 200,
+                          totalAfterTax: 240
+                        }
+                      ]
+                    }
+                  }
+                }
+          )
+        })
+      }
+      return r.fulfill({
+        contentType: "text/html",
+        body: '<html><body><div class="room-card-divider"><h3 data-locator="room-title" id="KING-room-title">King</h3><div class="room-rate-content" data-locator="cash-rate"><span>Member</span>$200</div></div></body></html>'
+      })
+    })
+    await p.goto(
+      "https://www.hyatt.com/shop/rooms/test?checkinDate=2026-09-18&checkoutDate=2026-09-19&rateFilter=standard"
+    )
+    await expect(
+      p.locator('.pointlens-hyatt-room-status[aria-busy="true"]')
+    ).toHaveCount(1)
+    await p.evaluate(() =>
+      fetch("/en-US/shop/service/rooms/roomrates/test?rateFilter=standard")
+    )
+    await expect(p.locator(".pointlens-hyatt-room-status")).toHaveText(
+      status === 200 ? "Points unavailable" : "Couldn’t load points"
+    )
+    await expect(p.locator(".pointlens-hyatt-room-status")).toHaveAttribute(
+      "aria-busy",
+      "false"
+    )
+    await expect(p.locator(".pointlens-room-pill")).toHaveCount(0)
+    expect(requests).toBe(2)
+    await p.close()
+  })

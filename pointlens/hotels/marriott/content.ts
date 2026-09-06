@@ -4,7 +4,10 @@ import { createRoot } from "react-dom/client"
 import { CiCircleInfo } from "react-icons/ci"
 
 import { hasHostMutation, makeInfoAccessible } from "../../shared/dom"
+import { installBudgetBridge } from "../../shared/pricing-budget"
 import { attachTooltip as attachSmartTooltip } from "../../shared/tooltip"
+import { acceptMarriottRooms, updateMarriottRooms } from "./rooms"
+import { marriottSearchContext } from "./search-context"
 import {
   DEFAULT_MARRIOTT_VALUE_SETTINGS,
   MARRIOTT_VALUE_SETTINGS_KEY,
@@ -16,7 +19,6 @@ export const config: PlasmoCSConfig = {
   run_at: "document_start"
 }
 
-const MARRIOTT_STORAGE_KEY = "pointlens:marriott-last-capture"
 const PLACEHOLDER_CLASS = "pointlens-marriott-price-placeholder"
 const PLACEHOLDER_ICON_CLASS = "pointlens-marriott-cpp-icon"
 const PLACEHOLDER_VALUE_CLASS = "pointlens-marriott-cpp-value"
@@ -33,6 +35,7 @@ type MarriottRateInfo = {
   cashBase?: number
   cashFees?: number
   cashTotal?: number
+  awardCash?: number
   points?: number
   currency?: string
   stayNights?: number
@@ -101,15 +104,7 @@ const toUsd = (amount: number | undefined, currency?: string) => {
   return undefined
 }
 
-function inject(src: string) {
-  const script = document.createElement("script")
-  script.src = src
-  script.async = false
-  ;(document.head || document.documentElement).appendChild(script)
-  script.onload = () => script.remove()
-}
-
-inject(chrome.runtime.getURL("hotels/marriott/injected/marriott-fetch-hook.js"))
+// Pricing is captured by the static MAIN-world script.
 
 const normalizeHotelId = (id: string | null | undefined) => {
   if (!id) {
@@ -125,6 +120,11 @@ const normalizeHotelId = (id: string | null | undefined) => {
 const getHotelIdFromCard = (card: HTMLElement) => {
   return card.getAttribute("data-marsha")
 }
+
+const isPointsView = () =>
+  document.querySelector<HTMLInputElement>('input[name="useRewardsPoints"]')
+    ?.checked ??
+  new URL(location.href).searchParams.get("useRewardsPoints") === "true"
 
 const formatCpp = (cpp?: number) => {
   if (cpp === undefined || !Number.isFinite(cpp)) {
@@ -270,10 +270,13 @@ const buildRatesFromStorage = (raw: unknown) => {
       continue
     }
 
-    const rates = record.rates as
-      | Record<string, unknown>
-      | Array<Record<string, unknown>>
-      | undefined
+    const rates = (
+      Array.isArray(record.rates)
+        ? record.rates.filter(
+            (r: any) => !r?.status?.code || r.status.code === "AvailableForSale"
+          )
+        : record.rates
+    ) as Record<string, unknown> | Array<Record<string, unknown>> | undefined
     if (!rates) {
       continue
     }
@@ -333,6 +336,9 @@ const buildRatesFromStorage = (raw: unknown) => {
       return (fees ?? 0) + (taxes ?? 0)
     })()
     const cashTotal = extractNumber(standardLowestAverageRate?.totalAmount)
+    // Marriott's mandatory destination/resort fee is also payable on an
+    // award night. It is not cash saved by redeeming points.
+    const awardCash = extractNumber(standardLowestAverageRate?.mandatoryFees)
     const stayNights = (() => {
       if (standardRate?.lengthOfStay !== undefined) {
         return extractNumber(standardRate.lengthOfStay)
@@ -373,12 +379,21 @@ const buildRatesFromStorage = (raw: unknown) => {
       cashBase,
       cashFees,
       cashTotal,
+      awardCash,
       stayNights,
       points,
       currency,
       // CPP is normalized to USD cents so the value thresholds hold regardless
       // of the account's display currency.
-      cpp: computeCpp(toUsd(cashForCpp, currency), cppPoints)
+      cpp: computeCpp(
+        toUsd(
+          cashForCpp === undefined
+            ? undefined
+            : Math.max(0, cashForCpp - (awardCash ?? 0)),
+          currency
+        ),
+        cppPoints
+      )
     })
   }
 
@@ -466,7 +481,13 @@ const updateMapPins = () => {
           : info.points
       const ptsText = formatPointsCompact(ptsPerNight)
       const cppText = info.cpp !== undefined ? `${info.cpp.toFixed(2)}¢` : ""
-      text = cppText ? `${ptsText} · ${cppText}` : `${ptsText} pts`
+      text = isPointsView()
+        ? [cppText, formatCash(info.cash, info.currency)]
+            .filter(Boolean)
+            .join(" · ")
+        : cppText
+          ? `${ptsText} · ${cppText}`
+          : `${ptsText} pts`
       tier = pinValueTier(info.cpp)
     } else {
       text = "No reward"
@@ -577,7 +598,9 @@ const buildCppBadgeContents = (info: MarriottRateInfo, hasReward: boolean) => {
       info.points !== undefined
         ? info.points / info.stayNights
         : info.points
-    sub.textContent = `${formatPointsK(ptsPerNight)} pts/night`
+    sub.textContent = isPointsView()
+      ? formatCash(info.cash, info.currency)
+      : `${formatPointsK(ptsPerNight)} pts/night`
     frag.appendChild(sub)
   } else {
     cpp.textContent = "Reward nights unavailable"
@@ -685,7 +708,9 @@ const updateDetailModal = () => {
 // HotelCard. Embed a compact CPP badge BELOW the fee notice. Hotel id comes from
 // the card's propertyCode / /hotels/travel/ link (no data-marsha on the IW).
 const updateInfoWindow = () => {
-  const iw = document.querySelector<HTMLElement>(".gm-style-iw")
+  const iw = document.querySelector<HTMLElement>(
+    ".smart-info-window-portal-layer .HotelCard, .gm-style-iw"
+  )
   if (!iw) return
   const marsha = marshaFromModal(iw)
   const info = marsha ? marriottRatesByHotel.get(marsha) : undefined
@@ -702,6 +727,8 @@ const updateInfoWindow = () => {
 // this collapses hundreds of redundant passes per second into at most one per
 // frame — placeholders, pins, and the two popups are all refreshed together.
 let updateScheduled = false
+let latestSearch: unknown
+let searchContext = marriottSearchContext(location.href)
 const scheduleUpdate = () => {
   if (updateScheduled) {
     return
@@ -709,18 +736,25 @@ const scheduleUpdate = () => {
   updateScheduled = true
   requestAnimationFrame(() => {
     updateScheduled = false
+    if (searchContext !== marriottSearchContext(location.href)) {
+      searchContext = marriottSearchContext(location.href)
+      latestSearch = undefined
+      marriottRatesByHotel.clear()
+      marriottHotelOrder = []
+    }
     refreshPlaceholders()
+    updateExistingPlaceholders()
     updateMapPins()
     updateInfoWindow()
     updateDetailModal()
+    updateMarriottRooms(marriottValueSettings, toUsd)
   })
 }
 
 const refreshRatesFromStorage = async () => {
   if (!chrome?.storage?.local) return
 
-  const result = await chrome.storage.local.get(MARRIOTT_STORAGE_KEY)
-  const built = buildRatesFromStorage(result?.[MARRIOTT_STORAGE_KEY])
+  const built = buildRatesFromStorage(latestSearch)
   marriottRatesByHotel = built.map
   marriottHotelOrder = built.order
   updateExistingPlaceholders()
@@ -873,6 +907,7 @@ const ensurePlaceholderStyles = () => {
     /* CPP line appended inside Marriott's own dark map pin (.m-map-pin). Let the
        pin grow to fit the extra line (its base height is fixed for one row). */
     .m-map-pin.${MAP_PIN_ANNOTATED_CLASS} {
+      flex-direction: column !important;
       height: auto !important;
       padding-top: 5px !important;
       padding-bottom: 5px !important;
@@ -970,25 +1005,6 @@ const buildTooltipContent = (info: MarriottRateInfo) => {
     return wrapper
   }
 
-  if (hasCashContent) {
-    const headerRow = document.createElement("div")
-    headerRow.className = "pointlens-tooltip-row"
-    const headerLabel = document.createElement("div")
-    headerLabel.className =
-      "pointlens-tooltip-cell pointlens-tooltip-cell--label"
-    headerLabel.textContent = "Lowest cash"
-    const headerValue = document.createElement("div")
-    headerValue.className =
-      "pointlens-tooltip-cell pointlens-tooltip-cell--value"
-    headerValue.textContent =
-      info.stayNights !== undefined && info.stayNights > 1
-        ? "Price per night"
-        : "Price"
-    headerRow.appendChild(headerLabel)
-    headerRow.appendChild(headerValue)
-    grid.appendChild(headerRow)
-  }
-
   const baseLabel = formatCash(info.cashBase, info.currency)
   const feesLabel = formatCash(info.cashFees, info.currency)
   const totalLabel = formatCash(info.cashTotal ?? info.cash, info.currency)
@@ -1025,12 +1041,22 @@ const buildTooltipContent = (info: MarriottRateInfo) => {
     }
   }
 
+  if (info.awardCash)
+    addRow("Award fees", formatCash(info.awardCash, info.currency))
+
   if (!grid.childNodes.length) {
     wrapper.textContent = "Awaiting Marriott response"
     return wrapper
   }
 
   wrapper.appendChild(grid)
+  const footer = document.createElement("div")
+  footer.style.cssText = "margin-top:6px;font-size:11px;color:#64748b"
+  footer.textContent =
+    marriottValueSettings.taxBasis === "pretax"
+      ? "Per night · CPP before tax"
+      : "Per night"
+  wrapper.append(footer)
   return wrapper
 }
 
@@ -1143,7 +1169,7 @@ const updatePlaceholderText = (placeholder: HTMLElement) => {
       info.points !== undefined
         ? info.points / info.stayNights
         : info.points
-    valueEl.textContent = `${formatCpp(info.cpp) || "USD conversion unavailable"} · ${formatPointsK(ptsPerNight)} pts`
+    valueEl.textContent = `${formatCpp(info.cpp) || "USD conversion unavailable"} · ${isPointsView() ? formatCash(info.cash, info.currency) : `${formatPoints(ptsPerNight)} pts`}`
     if (tooltip) {
       tooltip.replaceChildren(buildTooltipContent(info))
     }
@@ -1173,8 +1199,14 @@ const updatePlaceholderText = (placeholder: HTMLElement) => {
 
 const getRateLink = (card: HTMLElement) => {
   const rateContainer = card.querySelector<HTMLElement>(".rate-container")
-  if (!rateContainer) return null
-  return rateContainer.closest<HTMLAnchorElement>("a")
+  return (
+    rateContainer?.closest<HTMLAnchorElement>("a") ??
+    [
+      ...card.querySelectorAll<HTMLAnchorElement>(
+        'a[href*="availabilityCalendar.mi"]'
+      )
+    ].find((link) => /\d/.test(link.textContent ?? ""))
+  )
 }
 
 // The card fee notice: `.mandatory-fee-section-list-view` in the map sidebar,
@@ -1192,7 +1224,10 @@ const cardFeeNotice = (card: HTMLElement) =>
 
 const ensurePlaceholder = (card: HTMLElement) => {
   const link = getRateLink(card)
-  if (!link) return
+  if (!link) {
+    card.querySelector(`.${PLACEHOLDER_CLASS}`)?.remove()
+    return
+  }
 
   let placeholder = card.querySelector<HTMLElement>(`.${PLACEHOLDER_CLASS}`)
   if (!placeholder) {
@@ -1241,6 +1276,13 @@ const startPlaceholderObserver = () => {
   if (!document.body) return
   refreshPlaceholders()
   void refreshValueSettings()
+  window.postMessage(
+    {
+      __POINTLENS_MARRIOTT_ROOMS_READY__: true,
+      __POINTLENS_MARRIOTT_SEARCH_READY__: true
+    },
+    location.origin
+  )
   const observer = new MutationObserver((mutations) => {
     if (hasHostMutation(mutations)) scheduleUpdate()
   })
@@ -1248,13 +1290,12 @@ const startPlaceholderObserver = () => {
     childList: true,
     subtree: true,
     attributes: true,
-    attributeFilter: ["data-marsha"]
+    attributeFilter: ["data-marsha", "aria-checked", "hidden"]
   })
 
   chrome?.storage?.onChanged?.addListener((changes, area) => {
     if (area !== "local") return
     if (changes[MARRIOTT_VALUE_SETTINGS_KEY]) void refreshValueSettings()
-    else if (changes[MARRIOTT_STORAGE_KEY]) void refreshRatesFromStorage()
   })
 }
 
@@ -1266,24 +1307,26 @@ if (document.readyState === "loading") {
   startPlaceholderObserver()
 }
 
-chrome.runtime.onMessage.addListener((msg) => {
-  if (msg?.type === "MARRIOTT_PAGE_REPLAY") {
-    window.postMessage(
-      { __AV_MARRIOTT_DO_REPLAY__: true, payload: msg.payload },
-      "*"
-    )
-  }
-})
-
 window.addEventListener("message", (event) => {
   if (event.source !== window) return
 
   const data = event.data as Record<string, unknown> | undefined
+  if (acceptMarriottRooms(data)) {
+    scheduleUpdate()
+    return
+  }
 
   if (data?.__AV_MARRIOTT_SAVE__ === true) {
-    chrome.runtime.sendMessage({
-      type: "MARRIOTT_SAVE_CAPTURE",
-      payload: data.payload
-    })
+    const payload = data.payload as any
+    if (
+      typeof payload?.context !== "string" ||
+      marriottSearchContext(payload.context) !==
+        marriottSearchContext(location.href)
+    )
+      return
+    searchContext = marriottSearchContext(location.href)
+    latestSearch = payload
+    void refreshRatesFromStorage()
   }
 })
+installBudgetBridge("marriott")

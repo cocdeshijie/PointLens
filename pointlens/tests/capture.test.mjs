@@ -84,3 +84,105 @@ test("IHG observation returns fetch before body completion and preserves native 
   assert.equal(captured.responseBodyText, '{"hotels":[]}')
   dom.window.close()
 })
+
+test("Hilton observes Request bodies without delaying fetch or leaking guest metadata", async () => {
+  const dom = new JSDOM("<body></body>", {
+    url: "https://www.hilton.com/en/search/",
+    runScripts: "outside-only"
+  })
+  const w = dom.window
+  let controller
+  const response = new Response(
+    new ReadableStream({
+      start(c) {
+        controller = c
+      }
+    }),
+    { headers: { "content-type": "application/json" } }
+  )
+  let nativeCalls = 0
+  Object.assign(w, {
+    Request,
+    Response,
+    Headers,
+    AbortSignal,
+    fetch: async (request) => {
+      nativeCalls++
+      await request.text()
+      return response
+    }
+  })
+  w.eval(
+    await readFile(
+      new URL(
+        "../hotels/hilton/injected/hilton-fetch-hook.js",
+        import.meta.url
+      ),
+      "utf8"
+    )
+  )
+  const captured = new Promise((resolve) =>
+    w.addEventListener("message", (e) => {
+      if (e.data?.__AV_HILTON_PRICING__) resolve(e.data.payload)
+    })
+  )
+  const req = new Request(
+    "https://www.hilton.com/graphql/customer?originalOpName=shopMultiPropAvailPoints",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        operationName: "shopMultiPropAvail",
+        variables: {
+          ctyhocns: ["CHITDHX"],
+          input: {
+            arrivalDate: "2026-10-12",
+            departureDate: "2026-10-14",
+            guestId: "PRIVATE-GUEST",
+            specialRates: { hhonors: true }
+          }
+        },
+        query: "query search {}"
+      })
+    }
+  )
+  let timer
+  try {
+    assert.equal(
+      await Promise.race([
+        w.fetch(req),
+        new Promise((_, reject) => {
+          timer = setTimeout(
+            () => reject(Error("native response delayed")),
+            250
+          )
+        })
+      ]),
+      response
+    )
+    const data = {
+      data: {
+        shopMultiPropAvail: [
+          {
+            ctyhocn: "CHITDHX",
+            currencyCode: "USD",
+            summary: {
+              lowest: { rateAmount: 200, amountAfterTax: 480 },
+              hhonors: { dailyRmPointsRate: 50000 }
+            },
+            personalInfo: { email: "PRIVATE-EMAIL" }
+          }
+        ]
+      }
+    }
+    controller.enqueue(new TextEncoder().encode(JSON.stringify(data)))
+    controller.close()
+    assert.deepEqual(await response.json(), data)
+    const payload = await captured
+    assert.equal(payload.hotels[0].summary.hhonors.dailyRmPointsRate, 50000)
+    assert.ok(!JSON.stringify(payload).includes("PRIVATE"))
+    assert.equal(nativeCalls, 1)
+  } finally {
+    clearTimeout(timer)
+    dom.window.close()
+  }
+})
