@@ -3,6 +3,8 @@ import React from "react"
 import { createRoot } from "react-dom/client"
 import { CiCircleInfo } from "react-icons/ci"
 
+import { hasHostMutation, makeInfoAccessible } from "../../shared/dom"
+import { attachTooltip } from "../../shared/tooltip"
 import {
   DEFAULT_HILTON_VALUE_SETTINGS,
   HILTON_VALUE_SETTINGS_KEY,
@@ -181,7 +183,11 @@ const buildRatesFromStorage = (raw: unknown) => {
   }
 
   const parsed = raw as
-    | { shopMultiPropAvail?: unknown[]; arrivalDate?: unknown; departureDate?: unknown }
+    | {
+        shopMultiPropAvail?: unknown[]
+        arrivalDate?: unknown
+        departureDate?: unknown
+      }
     | unknown[]
     | Record<string, unknown>
 
@@ -195,7 +201,9 @@ const buildRatesFromStorage = (raw: unknown) => {
       : undefined
   const stayNights = computeStayNights(
     typeof payload?.arrivalDate === "string" ? payload.arrivalDate : undefined,
-    typeof payload?.departureDate === "string" ? payload.departureDate : undefined
+    typeof payload?.departureDate === "string"
+      ? payload.departureDate
+      : undefined
   )
 
   const items: unknown[] = Array.isArray(parsed)
@@ -241,7 +249,8 @@ const buildRatesFromStorage = (raw: unknown) => {
     const points = extractNumber(hhonors?.dailyRmPointsRate)
     const currency = record.currencyCode as string | undefined
     const ratePlanName =
-      (hhonors?.ratePlan as Record<string, unknown> | undefined)?.ratePlanName ??
+      (hhonors?.ratePlan as Record<string, unknown> | undefined)
+        ?.ratePlanName ??
       (lowest?.ratePlan as Record<string, unknown> | undefined)?.ratePlanName
 
     if (!cash || !points) {
@@ -282,7 +291,11 @@ const refreshRatesFromStorage = async () => {
 
   const stored = await chrome.storage.local.get([HILTON_STORAGE_KEY])
   const payload = stored[HILTON_STORAGE_KEY] as
-    | { shopMultiPropAvail?: unknown[]; arrivalDate?: unknown; departureDate?: unknown }
+    | {
+        shopMultiPropAvail?: unknown[]
+        arrivalDate?: unknown
+        departureDate?: unknown
+      }
     | undefined
 
   hiltonRatesByHotel = buildRatesFromStorage(payload)
@@ -331,7 +344,9 @@ const refreshValueSettings = async () => {
 
   const stored = await chrome.storage.local.get([HILTON_VALUE_SETTINGS_KEY])
   hiltonValueSettings = normalizeHiltonValueSettings(
-    stored[HILTON_VALUE_SETTINGS_KEY] as Partial<typeof hiltonValueSettings> | undefined
+    stored[HILTON_VALUE_SETTINGS_KEY] as
+      | Partial<typeof hiltonValueSettings>
+      | undefined
   )
   // Rebuild rates so CPP + the badge total reflect the (possibly changed) tax
   // basis; this also re-pushes authoritative rates to the map overlay.
@@ -395,7 +410,9 @@ const buildTooltipContent = (info: HiltonRateInfo, showCpp: boolean) => {
   const headerValue = document.createElement("div")
   headerValue.className = "pointlens-tooltip-cell pointlens-tooltip-cell--value"
   headerValue.textContent =
-    info.stayNights !== undefined && info.stayNights > 1 ? "Price per night" : "Price"
+    info.stayNights !== undefined && info.stayNights > 1
+      ? "Price per night"
+      : "Price"
   headerRow.appendChild(headerLabel)
   headerRow.appendChild(headerValue)
   grid.appendChild(headerRow)
@@ -430,7 +447,10 @@ const buildTooltipContent = (info: HiltonRateInfo, showCpp: boolean) => {
 
   const pointsLabel = formatPoints(info.points)
   const premiumCpp =
-    !showCpp && lowestCash !== undefined && Number.isFinite(lowestCash) && info.points
+    !showCpp &&
+    lowestCash !== undefined &&
+    Number.isFinite(lowestCash) &&
+    info.points
       ? (lowestCash / info.points) * 100
       : undefined
   const cppLabel = showCpp ? formatCpp(info.cpp) : formatCpp(premiumCpp)
@@ -597,6 +617,7 @@ const ensurePlaceholderContents = (placeholder: HTMLElement) => {
   if (!iconWrapper) {
     iconWrapper = document.createElement("span")
     iconWrapper.className = PLACEHOLDER_ICON_CLASS
+    makeInfoAccessible(iconWrapper)
 
     const iconTarget = document.createElement("span")
     iconTarget.className = "pointlens-icon"
@@ -606,6 +627,7 @@ const ensurePlaceholderContents = (placeholder: HTMLElement) => {
     tooltip.className = "pointlens-tooltip"
     tooltip.textContent = "Awaiting Hilton response"
     iconWrapper.appendChild(tooltip)
+    attachTooltip(iconWrapper)
 
     placeholder.appendChild(iconWrapper)
     const root = createRoot(iconTarget)
@@ -642,7 +664,9 @@ const setSkeleton = (placeholder: HTMLElement) => {
 const updatePlaceholderText = (placeholder: HTMLElement) => {
   let hotelId = placeholder.dataset.hotelId
   if (!hotelId) {
-    const card = placeholder.closest<HTMLElement>('[data-testid^="hotel-card-"]')
+    const card = placeholder.closest<HTMLElement>(
+      '[data-testid^="hotel-card-"]'
+    )
     if (card) {
       hotelId = getHotelIdFromCard(card) ?? undefined
       if (hotelId) {
@@ -725,7 +749,15 @@ function getRateButton(card: HTMLElement) {
 }
 
 function ensurePlaceholder(card: HTMLElement) {
-  if (card.querySelector(`.${PLACEHOLDER_CLASS}`)) return
+  const existing = card.querySelector<HTMLElement>(`.${PLACEHOLDER_CLASS}`)
+  if (existing) {
+    const id = normalizeHotelId(getHotelIdFromCard(card))
+    if (id && existing.dataset.hotelId !== id) {
+      existing.dataset.hotelId = id
+      updatePlaceholderText(existing)
+    }
+    return
+  }
 
   const rateButton = getRateButton(card)
   if (!rateButton) return
@@ -753,7 +785,9 @@ function refreshPlaceholders() {
 }
 
 const updateExistingPlaceholders = () => {
-  const placeholders = document.querySelectorAll<HTMLElement>(`.${PLACEHOLDER_CLASS}`)
+  const placeholders = document.querySelectorAll<HTMLElement>(
+    `.${PLACEHOLDER_CLASS}`
+  )
   placeholders.forEach((placeholder) => updatePlaceholderText(placeholder))
 }
 
@@ -871,12 +905,12 @@ function startPlaceholderObserver() {
   if (!document.body) return
   refreshPlaceholders()
   refreshDialogPlaceholder()
-  void refreshRatesFromStorage()
   void refreshValueSettings()
   // The map overlay churns hundreds of marker nodes; coalesce mutations so we
   // don't re-scan the DOM on every one (that was making the page laggy).
   let scanScheduled = false
-  const observer = new MutationObserver(() => {
+  const observer = new MutationObserver((mutations) => {
+    if (!hasHostMutation(mutations)) return
     if (scanScheduled) return
     scanScheduled = true
     setTimeout(() => {
@@ -885,11 +919,17 @@ function startPlaceholderObserver() {
       refreshDialogPlaceholder()
     }, 250)
   })
-  observer.observe(document.body, { childList: true, subtree: true })
+  observer.observe(document.body, {
+    childList: true,
+    subtree: true,
+    attributes: true,
+    attributeFilter: ["data-testid"]
+  })
 
-  chrome?.storage?.onChanged?.addListener(() => {
-    void refreshRatesFromStorage()
-    void refreshValueSettings()
+  chrome?.storage?.onChanged?.addListener((changes, area) => {
+    if (area !== "local") return
+    if (changes[HILTON_VALUE_SETTINGS_KEY]) void refreshValueSettings()
+    else if (changes[HILTON_STORAGE_KEY]) void refreshRatesFromStorage()
   })
 }
 
@@ -904,10 +944,7 @@ if (document.readyState === "loading") {
 // Bridge messages
 chrome.runtime.onMessage.addListener((msg) => {
   if (msg?.type === "HILTON_CAPTURE_PRINT") {
-    window.postMessage(
-      { __AV_HILTON_PRINT__: true, payload: msg.payload },
-      "*"
-    )
+    window.postMessage({ __AV_HILTON_PRINT__: true, payload: msg.payload }, "*")
   }
 
   if (msg?.type === "HILTON_PAGE_REPLAY") {

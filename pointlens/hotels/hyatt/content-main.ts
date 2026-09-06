@@ -44,6 +44,12 @@ type RateOut = {
 // soft update that returns only the changed hotels still merges with what we
 // already learned on load.
 const ratesByHotel = new Map<string, RateOut>()
+let ratesContext = location.href
+const syncContext = () => {
+  if (ratesContext === location.href) return
+  ratesContext = location.href
+  ratesByHotel.clear()
+}
 
 // Balance-extract the `{...}` object that follows each `"leadingRate":` in `text`,
 // JSON.parse it, and fold into `ratesByHotel`. Returns how many NEW/updated.
@@ -51,12 +57,17 @@ const extractInto = (text: string): number => {
   if (!text || typeof text !== "string" || text.indexOf("leadingRate") < 0) {
     return 0
   }
+  syncContext()
   const KEY = '"leadingRate":'
   let changed = 0
   let idx = 0
   while ((idx = text.indexOf(KEY, idx)) >= 0) {
-    let i = text.indexOf("{", idx + KEY.length)
-    if (i < 0) break
+    let i = idx + KEY.length
+    while (/\s/.test(text[i] ?? "") && i < text.length) i++
+    if (text[i] !== "{") {
+      idx = i
+      continue
+    }
     let depth = 0
     let end = -1
     let inStr = false
@@ -82,15 +93,18 @@ const extractInto = (text: string): number => {
       const o = JSON.parse(text.slice(i, end)) as LeadingRate
       const spirit = o?.spiritCode?.toLowerCase()
       if (spirit) {
-        ratesByHotel.set(spirit, {
+        const next = {
           rate: typeof o.rate === "number" ? o.rate : undefined,
           rateAfterTax:
             typeof o.rateAfterTax === "number" ? o.rateAfterTax : undefined,
           points: typeof o.points === "number" ? o.points : undefined,
           currency: o.currencyCode,
           status: o.status
-        })
-        changed++
+        }
+        if (JSON.stringify(ratesByHotel.get(spirit)) !== JSON.stringify(next)) {
+          ratesByHotel.set(spirit, next)
+          changed++
+        }
       }
     } catch {
       /* ignore a malformed / partially-streamed object */
@@ -110,12 +124,24 @@ const postRates = () => {
     if (ratesByHotel.size === 0) return
     const rates: Record<string, RateOut> = {}
     for (const [k, v] of ratesByHotel) rates[k] = v
-    window.postMessage({ [MESSAGE_FLAG]: true, rates }, "*")
+    window.postMessage(
+      { [MESSAGE_FLAG]: true, rates, context: ratesContext },
+      location.origin
+    )
   })
 }
 
 // Join all `__next_f` flight chunks and extract from the full buffer (a single
 // leadingRate object can be split across chunks, so always scan the whole thing).
+let scanScheduled = false
+const scheduleScan = () => {
+  if (scanScheduled) return
+  scanScheduled = true
+  queueMicrotask(() => {
+    scanScheduled = false
+    scanNextF()
+  })
+}
 const scanNextF = () => {
   const nf = (window as unknown as { __next_f?: unknown[] }).__next_f
   if (!Array.isArray(nf)) return
@@ -139,7 +165,7 @@ const hookNextF = () => {
     const origPush = arr.push.bind(arr)
     arr.push = (...args: unknown[]) => {
       const r = origPush(...args)
-      scanNextF()
+      scheduleScan()
       return r
     }
     return arr
@@ -168,17 +194,27 @@ const hookNextF = () => {
 const hookFetch = () => {
   const orig = window.fetch
   window.fetch = function (...args: Parameters<typeof fetch>) {
+    const context = location.href
     return orig.apply(this, args).then((res) => {
+      // Only Flight responses contain leadingRate data. Never buffer images,
+      // analytics, or unrelated API bodies on the site's critical path.
+      if (
+        !res.ok ||
+        !(res.headers.get("content-type") ?? "").includes("text/x-component")
+      ) {
+        return res
+      }
       try {
-        res
+        void res
           .clone()
           .text()
-          .then((t) => {
-            if (extractInto(t) > 0) postRates()
+          .then((text) => {
+            if (location.href !== context) return
+            if (extractInto(text) > 0) postRates()
           })
           .catch(() => {})
       } catch {
-        /* opaque / unreadable response */
+        /* Unreadable response. */
       }
       return res
     })

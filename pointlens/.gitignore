@@ -31,3 +31,7 @@ dist/
 
 # typescript
 .tsbuildinfo
+
+# Browser verification output
+/test-results/
+/playwright-report/

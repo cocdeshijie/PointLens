@@ -3,6 +3,12 @@ import React from "react"
 import { createRoot } from "react-dom/client"
 import { CiCircleInfo } from "react-icons/ci"
 
+import { hasHostMutation, makeInfoAccessible } from "../../shared/dom"
+import { attachTooltip } from "../../shared/tooltip"
+import { calculateCpp } from "../../shared/value"
+import { getIhgPaymentMode } from "./payment-mode"
+import { acceptIhgRoomRates, initIhgRoomView } from "./room-view"
+import { extractSearchSignature } from "./search"
 import {
   DEFAULT_IHG_VALUE_SETTINGS,
   IHG_VALUE_SETTINGS_KEY,
@@ -17,6 +23,8 @@ const REPLAY_FLAG = "__AWARD_VIEWER_IHG_REPLAY__"
 const PLACEHOLDER_CLASS = "pointlens-price-placeholder"
 const PLACEHOLDER_ICON_CLASS = "pointlens-cpp-icon"
 const PLACEHOLDER_VALUE_CLASS = "pointlens-cpp-value"
+const PRICE_SELECTOR =
+  'app-hotel-price, .ihg-ui-hotel-quick-view [data-testid="rate-details"]'
 const PLACEHOLDER_STYLE_ID = "pointlens-placeholder-style"
 const IHG_API_KEY = "se9ym5iAzaW8pxfBjkmgbuGjJcr3Pj6Y"
 const USD_CURRENCY = "USD"
@@ -110,7 +118,6 @@ let ihgRatesByHotel = new Map<string, IhgRateInfo>()
 let ihgRateErrorsByHotel = new Map<string, string>()
 let ihgLastRateError: string | null = null
 let ihgLastRateSource: string | null = null
-let ihgShowPointsWithCpp = false
 
 type IhgStayDetails = {
   status: "loading" | "ok" | "none" | "error"
@@ -124,6 +131,7 @@ type IhgStayDetails = {
 // Full-stay reward totals incl. "every 4th reward night free" — fetched lazily
 // per hotel (on tooltip hover) since the search-results summary lacks them.
 const ihgRateDetailsByHotel = new Map<string, IhgStayDetails>()
+const ihgDetailsRetryAfter = new Map<string, number>()
 let ihgSearchNights = 0
 let ihgRateDetailsSignature: string | null = null
 
@@ -136,6 +144,7 @@ const MAP_CPP_CLASS = "pointlens-map-cpp"
 // hotels share the price → ambiguous, skip).
 type IhgMapValue = number | "none"
 const ihgMapCppByCash = new Map<number, IhgMapValue | null>()
+const ihgMapCppByMixed = new Map<string, IhgMapValue | null>()
 const ihgMapCppByPoints = new Map<number, IhgMapValue | null>() // keyed by exact points
 // Same price keys -> hotel mnemonic, to resolve the pin-click details dialog
 // (which exposes no hotel id, only the "156 USD" price). null = ambiguous.
@@ -148,8 +157,14 @@ const computeNights = (bodyText?: string | null) => {
     return 0
   }
   try {
-    const parsed = JSON.parse(bodyText) as { startDate?: unknown; endDate?: unknown }
-    if (typeof parsed.startDate === "string" && typeof parsed.endDate === "string") {
+    const parsed = JSON.parse(bodyText) as {
+      startDate?: unknown
+      endDate?: unknown
+    }
+    if (
+      typeof parsed.startDate === "string" &&
+      typeof parsed.endDate === "string"
+    ) {
       const ms = Date.parse(parsed.endDate) - Date.parse(parsed.startDate)
       return ms > 0 ? Math.round(ms / 86_400_000) : 0
     }
@@ -200,7 +215,8 @@ const detectBookingType = (bodyText: string | null): IhgBookingType => {
     if (
       Array.isArray(products) &&
       products.some(
-        (product) => product.guestCounts !== undefined || product.quantity !== undefined
+        (product) =>
+          product.guestCounts !== undefined || product.quantity !== undefined
       )
     ) {
       return "cash"
@@ -249,6 +265,8 @@ const handleMessage = async (event: MessageEvent) => {
     timestamp: data.timestamp as number | undefined
   }
 
+  acceptIhgRoomRates(payload)
+
   try {
     chrome.runtime.sendMessage({
       type: "ihg-capture",
@@ -257,38 +275,25 @@ const handleMessage = async (event: MessageEvent) => {
   } catch {
     // ignore send errors
   }
-
-  if (!chrome?.storage?.local) {
-    return
-  }
-
-  const existing = await chrome.storage.local.get(IHG_STORAGE_KEY)
-  const existingPayload = existing[IHG_STORAGE_KEY] as IhgMessagePayload | undefined
-
-  chrome.storage.local.set({
-    [IHG_STORAGE_KEY]: {
-      ...existingPayload,
-      ...payload,
-      receivedAt: new Date().toISOString()
-    }
-  })
 }
 
 window.addEventListener("message", handleMessage)
 
-chrome.runtime.onMessage.addListener((message: { type?: string; payload?: IhgReplayPayload }) => {
-  if (message?.type !== "ihg-replay") {
-    return
-  }
+chrome.runtime.onMessage.addListener(
+  (message: { type?: string; payload?: IhgReplayPayload }) => {
+    if (message?.type !== "ihg-replay") {
+      return
+    }
 
-  window.postMessage(
-    {
-      [REPLAY_FLAG]: true,
-      ...message.payload
-    },
-    "*"
-  )
-})
+    window.postMessage(
+      {
+        [REPLAY_FLAG]: true,
+        ...message.payload
+      },
+      "*"
+    )
+  }
+)
 
 const getHotelIdFromElement = (element: Element): string | null => {
   const candidates = [
@@ -363,7 +368,9 @@ const formatPointsCompact = (points?: number) => {
   }
   if (points >= 1000) {
     const k = points / 1000
-    const text = Number.isInteger(k) ? String(k) : k.toFixed(2).replace(/\.?0+$/, "")
+    const text = Number.isInteger(k)
+      ? String(k)
+      : k.toFixed(2).replace(/\.?0+$/, "")
     return `${text}K pts`
   }
   return `${points} pts`
@@ -439,11 +446,19 @@ const createCell = (text: string, className: string) => {
   return cell
 }
 
-const buildTooltipRow = (label: string, lowValue: string, highValue: string) => {
+const buildTooltipRow = (
+  label: string,
+  lowValue: string,
+  highValue: string
+) => {
   const row = document.createElement("div")
   row.className = "pointlens-tooltip-row"
-  row.appendChild(createCell(label, "pointlens-tooltip-cell pointlens-tooltip-cell--label"))
-  row.appendChild(createCell(lowValue, "pointlens-tooltip-cell pointlens-tooltip-cell--value"))
+  row.appendChild(
+    createCell(label, "pointlens-tooltip-cell pointlens-tooltip-cell--label")
+  )
+  row.appendChild(
+    createCell(lowValue, "pointlens-tooltip-cell pointlens-tooltip-cell--value")
+  )
   row.appendChild(
     createCell(
       highValue,
@@ -511,7 +526,10 @@ const setTooltipDetails = (
     buildTooltipRow(
       "Points",
       options?.pointsLabel ??
-        formatPointsWithCpp(info.lowestPoints ?? info.points, info.cppLow ?? info.cpp),
+        formatPointsWithCpp(
+          info.lowestPoints ?? info.points,
+          info.cppLow ?? info.cpp
+        ),
       options?.pointsLabel ??
         formatPointsWithCpp(
           info.highestPoints ?? info.points,
@@ -519,12 +537,17 @@ const setTooltipDetails = (
         )
     )
   )
-  if (info.lowestPointsAndCash || info.highestPointsAndCash) {
+  if (
+    isMixedPayment() &&
+    (info.lowestPointsAndCash || info.highestPointsAndCash)
+  ) {
     grid.appendChild(
       buildTooltipRow(
         "Pts + Cash",
-        formatPointsCash(info.lowestPointsAndCash, info.currency),
-        formatPointsCash(info.highestPointsAndCash, info.currency)
+        formatPointsCash(info.lowestPointsAndCash, info.currency) +
+          formatCppSuffix(mixedCpp(info)),
+        formatPointsCash(info.highestPointsAndCash, info.currency) +
+          formatCppSuffix(mixedCpp(info, true))
       )
     )
   }
@@ -538,7 +561,8 @@ const setTooltipDetails = (
       grid.appendChild(buildTooltipRow(stayLabel, "…", ""))
     } else if (stay.status === "ok" && stay.totalPoints !== undefined) {
       const discounted =
-        stay.originalTotalPoints !== undefined && stay.originalTotalPoints > stay.totalPoints
+        stay.originalTotalPoints !== undefined &&
+        stay.originalTotalPoints > stay.totalPoints
       grid.appendChild(
         buildTooltipRow(
           stayLabel,
@@ -557,10 +581,18 @@ const setTooltipDetails = (
     note.textContent = "No award nights available"
     content.appendChild(note)
   }
-  if (stay && stay.status === "ok" && (stay.freeNightCount ?? 0) > 0 && stay.savedPoints) {
+  if (
+    stay &&
+    stay.status === "ok" &&
+    (stay.freeNightCount ?? 0) > 0 &&
+    stay.savedPoints
+  ) {
     const benefit = document.createElement("div")
     benefit.className = "pointlens-tooltip-benefit"
-    const nights = stay.freeNightCount === 1 ? "4th night free" : `${stay.freeNightCount} free nights`
+    const nights =
+      stay.freeNightCount === 1
+        ? "4th night free"
+        : `${stay.freeNightCount} free nights`
     benefit.textContent = `★ ${nights} — saved ${formatPoints(stay.savedPoints)}`
     content.appendChild(benefit)
   }
@@ -572,12 +604,17 @@ const maybeFetchRateDetails = async (placeholder: HTMLElement) => {
     return // 4th-night-free only applies to stays of 4+ nights
   }
   const hotelId = placeholder.dataset.hotelId
-  if (!hotelId || ihgRateDetailsByHotel.has(hotelId)) {
+  if (
+    !hotelId ||
+    ihgRateDetailsByHotel.has(hotelId) ||
+    (ihgDetailsRetryAfter.get(hotelId) ?? 0) > Date.now()
+  ) {
     return // already fetched or in flight
   }
   if (!chrome?.runtime?.sendMessage) {
     return
   }
+  const searchSignature = ihgRateDetailsSignature
   ihgRateDetailsByHotel.set(hotelId, { status: "loading" })
   updatePlaceholderText(placeholder)
   let result: IhgStayDetails | undefined
@@ -589,11 +626,13 @@ const maybeFetchRateDetails = async (placeholder: HTMLElement) => {
   } catch {
     result = undefined
   }
+  if (searchSignature !== ihgRateDetailsSignature) return
   if (result && (result.status === "ok" || result.status === "none")) {
     ihgRateDetailsByHotel.set(hotelId, result)
   } else {
-    // Transient failure (no response / HTTP error) — drop it so a later hover
-    // or refresh retries instead of caching a permanent blank.
+    // A dialog eagerly refreshes its value after completion. Back off so a
+    // failed response cannot immediately trigger another request in a loop.
+    ihgDetailsRetryAfter.set(hotelId, Date.now() + 60_000)
     ihgRateDetailsByHotel.delete(hotelId)
   }
   updatePlaceholderText(placeholder)
@@ -606,6 +645,7 @@ const ensurePlaceholderContents = (placeholder: HTMLElement) => {
   if (!iconWrapper) {
     iconWrapper = document.createElement("span")
     iconWrapper.className = PLACEHOLDER_ICON_CLASS
+    makeInfoAccessible(iconWrapper)
 
     const iconTarget = document.createElement("span")
     iconTarget.className = "pointlens-icon"
@@ -615,6 +655,7 @@ const ensurePlaceholderContents = (placeholder: HTMLElement) => {
     tooltip.className = "pointlens-tooltip"
     tooltip.textContent = "Awaiting points response"
     iconWrapper.appendChild(tooltip)
+    attachTooltip(iconWrapper)
 
     placeholder.appendChild(iconWrapper)
     const root = createRoot(iconTarget)
@@ -622,9 +663,11 @@ const ensurePlaceholderContents = (placeholder: HTMLElement) => {
     iconRoots.set(iconTarget, root)
     // Hovering to read the tooltip lazily pulls the full-stay reward total
     // (incl. 4th-night-free) for 4+ night stays.
-    iconWrapper.addEventListener("mouseenter", () => {
+    const loadDetails = () => {
       void maybeFetchRateDetails(placeholder)
-    })
+    }
+    iconWrapper.addEventListener("mouseenter", loadDetails)
+    iconWrapper.addEventListener("focusin", loadDetails)
   }
 
   let valueEl = placeholder.querySelector<HTMLElement>(
@@ -653,11 +696,32 @@ const setSkeleton = (placeholder: HTMLElement) => {
   valueEl.appendChild(skeleton)
 }
 
+const isMixedPayment = () => getIhgPaymentMode() === "mixed"
+const mixedCpp = (info: IhgRateInfo, high = false) => {
+  const cash = getUsdEquivalent(
+    getCashTotal(high ? info.highestCash : info.lowestCash),
+    info.currency
+  )
+  const mixed = high ? info.highestPointsAndCash : info.lowestPointsAndCash
+  const copay = getUsdEquivalent(mixed?.cash, info.currency)
+  return cash !== null && copay !== null
+    ? calculateCpp(cash, mixed?.points, copay)
+    : undefined
+}
+
 const updatePlaceholderText = (placeholder: HTMLElement) => {
   let hotelId = placeholder.dataset.hotelId
+  const dialog = placeholder.closest(".ihg-ui-hotel-quick-view")
+  if (dialog) {
+    const resolved = resolveHotelIdByPrice(placeholder)
+    if (resolved) {
+      hotelId = resolved
+      placeholder.dataset.hotelId = resolved
+    }
+  }
   if (!hotelId) {
     const sibling = placeholder.previousElementSibling
-    if (sibling?.matches("app-hotel-price")) {
+    if (sibling?.matches(PRICE_SELECTOR)) {
       const siblingId = getHotelIdFromElement(sibling)
       if (siblingId) {
         hotelId = siblingId
@@ -682,7 +746,7 @@ const updatePlaceholderText = (placeholder: HTMLElement) => {
   // (maybeFetchRateDetails self-guards: fetches once, only for 4+ night stays.)
   if (
     placeholder.closest(
-      "app-hotel-details-info-card, .p-dialog-content, .ui-dialog-content"
+      "app-hotel-details-info-card, [role=dialog], .p-dialog-content, .ui-dialog-content"
     )
   ) {
     void maybeFetchRateDetails(placeholder)
@@ -692,7 +756,9 @@ const updatePlaceholderText = (placeholder: HTMLElement) => {
   const { iconWrapper, valueEl } = ensurePlaceholderContents(placeholder)
   const tooltip = iconWrapper.querySelector<HTMLElement>(".pointlens-tooltip")
   const errorMessage =
-    ihgRateErrorsByHotel.get(hotelId) ?? ihgLastRateError ?? "Awaiting points response"
+    ihgRateErrorsByHotel.get(hotelId) ??
+    ihgLastRateError ??
+    "Awaiting points response"
   const hasCashRates =
     info !== undefined &&
     (info.lowestCash !== undefined ||
@@ -706,25 +772,37 @@ const updatePlaceholderText = (placeholder: HTMLElement) => {
   const pointsUnavailable = hasCashRates && !hasPointsRates
 
   const displayCpp =
-    info?.cppLow !== undefined && Number.isFinite(info.cppLow)
-      ? info.cppLow
-      : info?.cpp
+    isMixedPayment() && info
+      ? mixedCpp(info)
+      : info?.cppLow !== undefined && Number.isFinite(info.cppLow)
+        ? info.cppLow
+        : info?.cpp
 
   updateValueClass(valueEl, displayCpp)
 
-  if (info?.cpp !== undefined && Number.isFinite(info.cpp)) {
+  if (info && displayCpp !== undefined && Number.isFinite(displayCpp)) {
     placeholder.classList.remove("is-loading")
     const lowestTotal = getCashTotal(info.lowestCash)
     const usdTotal = getUsdEquivalent(lowestTotal, info.currency)
-    const usdSuffix = usdTotal !== null ? ` (${formatUsdAmount(usdTotal)})` : ""
-    const pointsValue = ihgShowPointsWithCpp
-      ? formatPoints(info.lowestPoints ?? info.points)
-      : ""
-    const pointsSuffix = pointsValue ? ` (${pointsValue})` : ""
-    valueEl.textContent = `${formatCpp(displayCpp)}${pointsSuffix}${usdSuffix}`
+    const counterpart =
+      getIhgPaymentMode() === "cash"
+        ? formatPoints(info.lowestPoints ?? info.points)
+        : usdTotal !== null
+          ? formatUsdAmount(usdTotal)
+          : ""
+    valueEl.textContent = `${formatCpp(displayCpp)}${isMixedPayment() ? " · Points + Cash" : ""}${counterpart ? ` · ${counterpart}` : ""}`
     if (tooltip) {
-      setTooltipDetails(tooltip, info, { stay: ihgRateDetailsByHotel.get(hotelId) })
+      setTooltipDetails(tooltip, info, {
+        stay: ihgRateDetailsByHotel.get(hotelId)
+      })
     }
+    return
+  }
+
+  if (isMixedPayment() && info && hasPointsRates) {
+    placeholder.classList.remove("is-loading")
+    valueEl.textContent = "Points + Cash value unavailable"
+    if (tooltip) setTooltipDetails(tooltip, info)
     return
   }
 
@@ -761,6 +839,7 @@ const addByPrice = <T>(map: Map<number, T | null>, key: number, value: T) => {
 const rebuildMapCppLookup = () => {
   ihgMapCppByCash.clear()
   ihgMapCppByPoints.clear()
+  ihgMapCppByMixed.clear()
   ihgHotelIdByCash.clear()
   ihgHotelIdByPoints.clear()
   // Mark "no rewards" only when the dataset actually carries reward info (at
@@ -769,6 +848,14 @@ const rebuildMapCppLookup = () => {
   let anyRewards = false
   const noneKeys: number[] = []
   for (const [hotelId, info] of ihgRatesByHotel.entries()) {
+    const mixed = info.lowestPointsAndCash
+    const mixedValue = mixedCpp(info)
+    if (mixed?.points && mixed.cash !== undefined && mixedValue !== undefined) {
+      const key = `${Math.round(mixed.points)}|${mixed.cash}`
+      if (!ihgMapCppByMixed.has(key)) ihgMapCppByMixed.set(key, mixedValue)
+      else if (ihgMapCppByMixed.get(key) !== mixedValue)
+        ihgMapCppByMixed.set(key, null)
+    }
     const cpp = info.cppLow ?? info.cpp
     const hasCpp = cpp !== undefined && Number.isFinite(cpp)
     const points = info.lowestPoints ?? info.points
@@ -806,7 +893,9 @@ const resolveHotelIdByPrice = (element: Element): string | null => {
   // Scope to the OUTER dialog content: the price sits in .right-column
   // (app-hotel-details-info-card) but the hotel-detail link lives in the
   // sibling .left-column, so the inner card alone wouldn't see the link.
-  const dialog = element.closest(".ui-dialog-content, .p-dialog-content")
+  const dialog = element.closest(
+    "[role=dialog], .ui-dialog-content, .p-dialog-content"
+  )
   if (!dialog) {
     return null
   }
@@ -867,17 +956,25 @@ const updateMapMarkers = () => {
   // Iterate the price box (.item-text) directly — it exists in both the white
   // (.marker-container) and the brand-colored hover (.marker-container--xx)
   // bubble, both under .map-marker-container. The CPP label lives inside it.
-  const boxes = document.querySelectorAll<HTMLElement>(".map-marker-container .item-text")
+  const boxes = document.querySelectorAll<HTMLElement>(
+    ".map-marker-container .item-text"
+  )
   boxes.forEach((box) => {
     // Read the price from IHG's .amount span, never from our own label.
     const amountEl = box.querySelector<HTMLElement>(".amount") ?? box
     const parsed = parseMarkerValue(amountEl.textContent)
     let label = box.querySelector<HTMLElement>(`:scope > .${MAP_CPP_CLASS}`)
-    const value = parsed
-      ? parsed.isPoints
-        ? ihgMapCppByPoints.get(Math.round(parsed.value))
-        : ihgMapCppByCash.get(Math.round(parsed.value))
-      : undefined
+    const copay = parseMarkerValue((amountEl.textContent ?? "").split("+")[1])
+    const value =
+      parsed && isMixedPayment() && parsed.isPoints
+        ? copay
+          ? ihgMapCppByMixed.get(`${Math.round(parsed.value)}|${copay.value}`)
+          : undefined
+        : parsed
+          ? parsed.isPoints
+            ? ihgMapCppByPoints.get(Math.round(parsed.value))
+            : ihgMapCppByCash.get(Math.round(parsed.value))
+          : undefined
     if (value === undefined || value === null) {
       label?.remove() // unknown price or ambiguous (shared price)
       return
@@ -891,6 +988,14 @@ const updateMapMarkers = () => {
       const mnem = ihgHotelIdByCash.get(Math.round(parsed.value))
       const pInfo = mnem ? ihgRatesByHotel.get(mnem) : undefined
       ptsText = formatPointsCompact(pInfo?.lowestPoints ?? pInfo?.points)
+    } else if (!noRewards && parsed?.isPoints && !isMixedPayment()) {
+      const mnem = ihgHotelIdByPoints.get(Math.round(parsed.value))
+      const pInfo = mnem ? ihgRatesByHotel.get(mnem) : undefined
+      const amount = getUsdEquivalent(
+        getCashTotal(pInfo?.lowestCash),
+        pInfo?.currency
+      )
+      if (amount !== null) ptsText = formatUsdAmount(amount)
     }
     if (!label) {
       label = document.createElement("span")
@@ -945,6 +1050,8 @@ const schedulePlaceholderRefresh = () => {
   requestAnimationFrame(() => {
     ihgPlaceholderRefreshScheduled = false
     updateExistingPlaceholders()
+    rebuildMapCppLookup()
+    scheduleMapUpdate()
   })
 }
 
@@ -971,12 +1078,14 @@ const ensurePlaceholder = (priceElement: Element) => {
 }
 
 const updatePlaceholders = (root: ParentNode = document) => {
-  const priceElements = root.querySelectorAll("app-hotel-price")
+  const priceElements = root.querySelectorAll(PRICE_SELECTOR)
   priceElements.forEach((element) => ensurePlaceholder(element))
 }
 
 const updateExistingPlaceholders = () => {
-  const placeholders = document.querySelectorAll<HTMLElement>(`.${PLACEHOLDER_CLASS}`)
+  const placeholders = document.querySelectorAll<HTMLElement>(
+    `.${PLACEHOLDER_CLASS}`
+  )
   placeholders.forEach((placeholder) => updatePlaceholderText(placeholder))
 }
 
@@ -1093,49 +1202,6 @@ const getHotelCollection = (data: Record<string, unknown>): unknown[] => {
   return findHotelCollection(data)
 }
 
-const extractSearchSignature = (body: unknown) => {
-  if (!body) {
-    return null
-  }
-
-  let parsed: Record<string, unknown> | null = null
-  if (typeof body === "string") {
-    try {
-      parsed = JSON.parse(body) as Record<string, unknown>
-    } catch {
-      return null
-    }
-  } else if (typeof body === "object") {
-    parsed = body as Record<string, unknown>
-  }
-
-  if (!parsed) {
-    return null
-  }
-
-  const startDate =
-    typeof parsed.startDate === "string" ? parsed.startDate : undefined
-  const endDate = typeof parsed.endDate === "string" ? parsed.endDate : undefined
-  const geo =
-    Array.isArray(parsed.geoLocation) && parsed.geoLocation.length > 0
-      ? parsed.geoLocation[0]
-      : null
-  const lat =
-    geo && typeof geo === "object" && "latitude" in geo
-      ? String((geo as { latitude?: number }).latitude ?? "")
-      : ""
-  const lng =
-    geo && typeof geo === "object" && "longitude" in geo
-      ? String((geo as { longitude?: number }).longitude ?? "")
-      : ""
-
-  if (!startDate || !endDate || !lat || !lng) {
-    return null
-  }
-
-  return `${startDate}|${endDate}|${lat}|${lng}`
-}
-
 const hasPointsRates = (hotel: Record<string, unknown>) => {
   const pointsPaths = [
     ["summary", "rateRanges", "lowestPointsOnlyCost", "points"],
@@ -1182,7 +1248,14 @@ const extractHotelIdsFromResponse = (responseBodyText: string | null) => {
 }
 
 const getHotelIdentifiers = (hotel: Record<string, unknown>) => {
-  const keys = ["hotelCode", "hotelId", "propertyCode", "hotelMnemonic", "code", "id"]
+  const keys = [
+    "hotelCode",
+    "hotelId",
+    "propertyCode",
+    "hotelMnemonic",
+    "code",
+    "id"
+  ]
   const identifiers = new Set<string>()
 
   for (const key of keys) {
@@ -1204,10 +1277,7 @@ const getHotelIdentifiers = (hotel: Record<string, unknown>) => {
   return Array.from(identifiers)
 }
 
-const getRateValue = (
-  hotel: Record<string, unknown>,
-  paths: string[][]
-) => {
+const getRateValue = (hotel: Record<string, unknown>, paths: string[][]) => {
   for (const path of paths) {
     const raw = getValueByPath(hotel, path)
     const parsed = extractNumber(raw)
@@ -1227,7 +1297,9 @@ const normalizeCashCost = (value: unknown): IhgCashCost | undefined => {
   const record = value as Record<string, unknown>
   const baseAmount = extractNumber(record.baseAmount)
   const amountAfterTax = extractNumber(record.amountAfterTax)
-  const basePlusExcludedFeesAmount = extractNumber(record.basePlusExcludedFeesAmount)
+  const basePlusExcludedFeesAmount = extractNumber(
+    record.basePlusExcludedFeesAmount
+  )
 
   // Fees/taxes on top of the base rate. The offers response no longer carries a
   // single `excludedFeeSubTotal`; it itemizes `feeTaxSubTotals[]` and rolls the
@@ -1248,7 +1320,9 @@ const normalizeCashCost = (value: unknown): IhgCashCost | undefined => {
   const feeOnlySubTotal = feeTaxSubTotals.length
     ? feeTaxSubTotals.reduce(
         (sum, entry) =>
-          entry.otaCodeType === "FEE" ? sum + (extractNumber(entry.amount) ?? 0) : sum,
+          entry.otaCodeType === "FEE"
+            ? sum + (extractNumber(entry.amount) ?? 0)
+            : sum,
         0
       )
     : undefined
@@ -1299,9 +1373,7 @@ const getCashTotal = (cost?: IhgCashCost) => {
     return cost.basePlusExcludedFeesAmount ?? cost.amountAfterTax
   }
   return (
-    cost.amountAfterTax ??
-    cost.basePlusExcludedFeesAmount ??
-    cost.baseAmount
+    cost.amountAfterTax ?? cost.basePlusExcludedFeesAmount ?? cost.baseAmount
   )
 }
 
@@ -1447,8 +1519,14 @@ const parseRateMap = (responseBodyText: string | null) => {
     const highestCash = getCashCostByPath(record, highestCashPaths)
     const lowestPoints = getPointsCostByPath(record, lowestPointsPaths)
     const highestPoints = getPointsCostByPath(record, highestPointsPaths)
-    const lowestPointsAndCash = getPointsCashByPath(record, lowestPointsAndCashPaths)
-    const highestPointsAndCash = getPointsCashByPath(record, highestPointsAndCashPaths)
+    const lowestPointsAndCash = getPointsCashByPath(
+      record,
+      lowestPointsAndCashPaths
+    )
+    const highestPointsAndCash = getPointsCashByPath(
+      record,
+      highestPointsAndCashPaths
+    )
     const rewardNightAvailable =
       typeof record.rewardNightAvailable === "boolean"
         ? record.rewardNightAvailable
@@ -1484,21 +1562,26 @@ const parseRateMap = (responseBodyText: string | null) => {
         : usdCashAmount === undefined
           ? "Missing cash rate"
           : points === undefined || points <= 0
-        ? "Missing points rate"
-        : null
+            ? "Missing points rate"
+            : null
 
     const cppLow =
-      usdLowestCash !== undefined && lowestPoints !== undefined && lowestPoints > 0
+      usdLowestCash !== undefined &&
+      lowestPoints !== undefined &&
+      lowestPoints > 0
         ? (usdLowestCash / lowestPoints) * 100
         : undefined
     const cppHigh =
-      usdHighestCash !== undefined && highestPoints !== undefined && highestPoints > 0
+      usdHighestCash !== undefined &&
+      highestPoints !== undefined &&
+      highestPoints > 0
         ? (usdHighestCash / highestPoints) * 100
         : undefined
     const cppCandidates = [cppLow, cppHigh].filter(
       (value): value is number => value !== undefined && Number.isFinite(value)
     )
-    const cpp = cppCandidates.length > 0 ? Math.min(...cppCandidates) : undefined
+    const cpp =
+      cppCandidates.length > 0 ? Math.min(...cppCandidates) : undefined
 
     hotelIds.forEach((hotelId) => {
       if (errorMessage) {
@@ -1658,20 +1741,19 @@ const fetchConversionRate = async (currencyCode: string) => {
       }
 
       const parsedBody =
-        responsePayload.bodyParsed && typeof responsePayload.bodyParsed === "object"
+        responsePayload.bodyParsed &&
+        typeof responsePayload.bodyParsed === "object"
           ? (responsePayload.bodyParsed as {
               results?: Array<{ result?: number }>
             })
           : null
       const rate = selectConversionRate(
-        parsedBody?.results as
-          | Array<{
-              from?: number
-              result?: number
-              source?: string
-              brand?: unknown
-            }>
-          | null
+        parsedBody?.results as Array<{
+          from?: number
+          result?: number
+          source?: string
+          brand?: unknown
+        }> | null
       )
       if (typeof rate === "number" && Number.isFinite(rate)) {
         currencyRates.set(currencyCode, rate)
@@ -1714,7 +1796,9 @@ const getPointsResponseText = (
       : null
   const lastSignature = extractSearchSignature(lastRequest?.bodyText ?? null)
   const sentSignature = extractSearchSignature(
-    sentRequest?.request?.body ?? sentParsedText ?? sentRequest?.response?.bodyText
+    sentRequest?.request?.body ??
+      sentParsedText ??
+      sentRequest?.response?.bodyText
   )
   const candidates = [
     {
@@ -1723,16 +1807,24 @@ const getPointsResponseText = (
       signature: lastSignature
     },
     {
-      responseBodyText: sentParsedText ?? sentRequest?.response?.bodyText ?? null,
+      responseBodyText:
+        sentParsedText ?? sentRequest?.response?.bodyText ?? null,
       source: "sent",
       signature: sentSignature
     }
   ]
 
-  const withMeta = candidates.map((candidate) => {
-    const meta = extractHotelIdsFromResponse(candidate.responseBodyText)
-    return { ...candidate, ...meta }
-  })
+  const withMeta = candidates
+    .filter(
+      (candidate) =>
+        candidate.source !== "sent" ||
+        !lastSignature ||
+        candidate.signature === lastSignature
+    )
+    .map((candidate) => {
+      const meta = extractHotelIdsFromResponse(candidate.responseBodyText)
+      return { ...candidate, ...meta }
+    })
 
   if (currentHotelIds && currentHotelIds.size > 0) {
     const matchingWithPoints = withMeta.find(
@@ -1763,7 +1855,9 @@ const getPointsResponseText = (
     }
   }
 
-  const sentCandidate = withMeta.find((candidate) => candidate.source === "sent")
+  const sentCandidate = withMeta.find(
+    (candidate) => candidate.source === "sent"
+  )
   if (
     sentCandidate?.responseBodyText &&
     sentCandidate.hasPoints &&
@@ -1790,7 +1884,9 @@ const getPointsResponseText = (
   if (fallbackWithPoints) {
     return {
       responseBodyText: fallbackWithPoints.responseBodyText,
-      error: currentHotelIds?.size ? "Points response does not match current search" : null,
+      error: currentHotelIds?.size
+        ? "Points response does not match current search"
+        : null,
       source: fallbackWithPoints.source
     }
   }
@@ -1819,16 +1915,16 @@ const refreshRatesFromStorage = async () => {
 
   const lastRequest = stored[IHG_STORAGE_KEY] as IhgStoredPayload | undefined
   const sentRequest = stored[IHG_SENT_STORAGE_KEY] as IhgSentRequest | undefined
-  const lastBookingType =
-    lastRequest?.bookingType ?? detectBookingType(lastRequest?.bodyText ?? null)
-  ihgShowPointsWithCpp = lastBookingType !== "points"
 
   // Track stay length + invalidate per-hotel rateDetails when the search changes.
   ihgSearchNights = computeNights(lastRequest?.bodyText)
-  const rateDetailsSignature = extractSearchSignature(lastRequest?.bodyText ?? null)
+  const rateDetailsSignature = extractSearchSignature(
+    lastRequest?.bodyText ?? null
+  )
   if (rateDetailsSignature !== ihgRateDetailsSignature) {
     ihgRateDetailsSignature = rateDetailsSignature
     ihgRateDetailsByHotel.clear()
+    ihgDetailsRetryAfter.clear()
   }
 
   const hotelIdElements = document.querySelectorAll(
@@ -1842,7 +1938,11 @@ const refreshRatesFromStorage = async () => {
     }
   })
 
-  const selected = getPointsResponseText(lastRequest, sentRequest, currentHotelIds)
+  const selected = getPointsResponseText(
+    lastRequest,
+    sentRequest,
+    currentHotelIds
+  )
   if (!selected.responseBodyText) {
     ihgRatesByHotel = new Map<string, IhgRateInfo>()
     ihgRateErrorsByHotel = new Map<string, string>()
@@ -1881,7 +1981,9 @@ const refreshValueSettings = async () => {
 
   const stored = await chrome.storage.local.get([IHG_VALUE_SETTINGS_KEY])
   ihgValueSettings = normalizeIhgValueSettings(
-    stored[IHG_VALUE_SETTINGS_KEY] as Partial<typeof ihgValueSettings> | undefined
+    stored[IHG_VALUE_SETTINGS_KEY] as
+      | Partial<typeof ihgValueSettings>
+      | undefined
   )
   // Rebuild rates so CPP + the badge total reflect the (possibly changed) tax basis.
   await refreshRatesFromStorage()
@@ -2085,17 +2187,20 @@ const observePriceCards = () => {
   }
 
   updatePlaceholders()
+  initIhgRoomView()
   void refreshRatesFromStorage()
   void refreshValueSettings()
 
   const observer = new MutationObserver((mutations) => {
     for (const mutation of mutations) {
+      if (!hasHostMutation([mutation])) continue
+      schedulePlaceholderRefresh()
       mutation.addedNodes.forEach((node) => {
         if (!(node instanceof HTMLElement)) {
           return
         }
 
-        if (node.matches("app-hotel-price")) {
+        if (node.matches(PRICE_SELECTOR)) {
           ensurePlaceholder(node)
         }
 
@@ -2105,7 +2210,7 @@ const observePriceCards = () => {
         // price) — re-resolve placeholders when price nodes settle.
         if (
           node.matches?.("app-hotel-price, app-hotel-cash, .price") ||
-          node.querySelector?.("app-hotel-price")
+          node.querySelector?.(PRICE_SELECTOR)
         ) {
           schedulePlaceholderRefresh()
         }
@@ -2125,8 +2230,11 @@ const observePriceCards = () => {
 
   observer.observe(document.documentElement, {
     childList: true,
-    subtree: true
+    subtree: true,
+    attributes: true,
+    attributeFilter: ["aria-pressed", "aria-selected", "aria-valuetext"]
   })
+  window.addEventListener("popstate", schedulePlaceholderRefresh)
 }
 
 if (chrome?.storage?.onChanged) {
@@ -2151,7 +2259,9 @@ if (chrome?.storage?.onChanged) {
 }
 
 if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", observePriceCards, { once: true })
+  document.addEventListener("DOMContentLoaded", observePriceCards, {
+    once: true
+  })
 } else {
   observePriceCards()
 }

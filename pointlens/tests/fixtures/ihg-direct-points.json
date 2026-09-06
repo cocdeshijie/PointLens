@@ -1,0 +1,370 @@
+{
+  "request": {
+    "startDate": "2026-09-09",
+    "endDate": "2026-09-10",
+    "hotelMnemonics": [
+      "ORDHA"
+    ],
+    "rates": {
+      "ratePlanCodes": [
+        {
+          "internal": "IVAN1"
+        },
+        {
+          "internal": "IVAN3"
+        },
+        {
+          "internal": "IVAN5"
+        },
+        {
+          "internal": "IVAN6"
+        },
+        {
+          "internal": "IVAN7"
+        },
+        {
+          "internal": "IVANI"
+        }
+      ]
+    },
+    "products": [
+      {
+        "productCode": "SR",
+        "startDate": "2026-09-09",
+        "endDate": "2026-09-10",
+        "quantity": 1,
+        "guestCounts": [
+          {
+            "otaCode": "AQC10",
+            "count": 1
+          }
+        ]
+      }
+    ],
+    "options": {
+      "disabilityMode": "ACCESSIBLE_AND_NON_ACCESSIBLE",
+      "returnAdditionalRatePlanDescriptions": true,
+      "rateDetails": {
+        "includePackageDetails": true,
+        "returnDetailedTaxDescriptions": true
+      }
+    }
+  },
+  "response": {
+    "hotels": [
+      {
+        "hotelMnemonic": "ORDHA",
+        "propertyCurrency": "USD",
+        "productDefinitions": [
+          {
+            "inventoryTypeCode": "CDXG",
+            "inventoryTypeName": "Premium Room"
+          },
+          {
+            "inventoryTypeCode": "KAJN",
+            "inventoryTypeName": "1 King Classic City View Grand Tower"
+          }
+        ],
+        "ratePlanDefinitions": [
+          {
+            "code": "IVANI",
+            "name": "REWARD NIGHTS",
+            "isLoyaltyIdRequired": true,
+            "isRewardNight": true,
+            "isIdRequired": false,
+            "areAmountsConfidential": true
+          },
+          {
+            "code": "IKME7",
+            "name": "IHG1R 2000 PTS BFST",
+            "isPackage": true,
+            "isLoyaltyIdRequired": true,
+            "isIdRequired": false,
+            "areAmountsConfidential": false
+          },
+          {
+            "code": "IDKLT",
+            "name": "LIMITED TIME OFFER",
+            "isLoyaltyIdRequired": false,
+            "isIdRequired": false,
+            "areAmountsConfidential": false
+          }
+        ],
+        "rateDetails": {
+          "feeTaxDefinitions": [
+            {
+              "id": 4,
+              "computationType": "PERCENT"
+            },
+            {
+              "id": 2,
+              "computationType": "PERCENT"
+            },
+            {
+              "id": 1,
+              "computationType": "PERCENT"
+            },
+            {
+              "id": 5,
+              "computationType": "FLAT"
+            },
+            {
+              "id": 3,
+              "computationType": "FLAT"
+            },
+            {
+              "id": 0,
+              "computationType": "PERCENT"
+            }
+          ],
+          "offers": [
+            {
+              "ratePlanCode": "IVANI",
+              "availableStatus": "AVAILABLE",
+              "productUses": [
+                {
+                  "inventoryTypeCode": "CDXG",
+                  "quantity": 1,
+                  "isMainProduct": true,
+                  "period": {
+                    "start": "2026-09-09",
+                    "end": "2026-09-10"
+                  }
+                }
+              ],
+              "totalRate": {
+                "amountAfterTax": "100.07",
+                "basePlusExcludedFeesAmount": "85.36",
+                "feeTaxSubTotals": [
+                  {
+                    "amount": "30.63",
+                    "otaCodeType": "FEE",
+                    "isIncludedInRate": false,
+                    "feeTaxGroups": [
+                      {
+                        "amount": "0.82",
+                        "feeTaxDefIds": [
+                          0
+                        ]
+                      },
+                      {
+                        "amount": "29.81",
+                        "feeTaxDefIds": [
+                          5
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "amount": "14.71",
+                    "otaCodeType": "TAX",
+                    "isIncludedInRate": false,
+                    "feeTaxGroups": [
+                      {
+                        "amount": "2.46",
+                        "feeTaxDefIds": [
+                          1
+                        ]
+                      },
+                      {
+                        "amount": "0.55",
+                        "feeTaxDefIds": [
+                          2
+                        ]
+                      },
+                      {
+                        "amount": "5.19",
+                        "feeTaxDefIds": [
+                          3
+                        ]
+                      },
+                      {
+                        "amount": "6.51",
+                        "feeTaxDefIds": [
+                          4
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              "policies": {
+                "isRefundable": true
+              },
+              "rewardNights": {
+                "pointsOnly": {
+                  "totalPoints": 70000,
+                  "averageDailyPoints": 70000,
+                  "originalAverageDailyPoints": 70000,
+                  "originalTotalPoints": 70000,
+                  "daily": [
+                    {
+                      "stayDate": "2026-09-09",
+                      "points": 70000,
+                      "originalPoints": 70000
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "ratePlanCode": "IVANI",
+              "availableStatus": "AVAILABLE",
+              "productUses": [
+                {
+                  "inventoryTypeCode": "KAJN",
+                  "quantity": 1,
+                  "isMainProduct": true,
+                  "period": {
+                    "start": "2026-09-09",
+                    "end": "2026-09-10"
+                  }
+                }
+              ],
+              "totalRate": {
+                "amountAfterTax": "70.67",
+                "basePlusExcludedFeesAmount": "60.26",
+                "feeTaxSubTotals": [
+                  {
+                    "amount": "30.26",
+                    "otaCodeType": "FEE",
+                    "isIncludedInRate": false,
+                    "feeTaxGroups": [
+                      {
+                        "amount": "0.45",
+                        "feeTaxDefIds": [
+                          0
+                        ]
+                      },
+                      {
+                        "amount": "29.81",
+                        "feeTaxDefIds": [
+                          5
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "amount": "10.41",
+                    "otaCodeType": "TAX",
+                    "isIncludedInRate": false,
+                    "feeTaxGroups": [
+                      {
+                        "amount": "1.35",
+                        "feeTaxDefIds": [
+                          1
+                        ]
+                      },
+                      {
+                        "amount": "0.30",
+                        "feeTaxDefIds": [
+                          2
+                        ]
+                      },
+                      {
+                        "amount": "5.19",
+                        "feeTaxDefIds": [
+                          3
+                        ]
+                      },
+                      {
+                        "amount": "3.57",
+                        "feeTaxDefIds": [
+                          4
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              "policies": {
+                "isRefundable": true
+              },
+              "rewardNights": {
+                "pointsOnly": {
+                  "totalPoints": 60000,
+                  "averageDailyPoints": 60000,
+                  "originalAverageDailyPoints": 60000,
+                  "originalTotalPoints": 60000,
+                  "daily": [
+                    {
+                      "stayDate": "2026-09-09",
+                      "points": 60000,
+                      "originalPoints": 60000
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "ratePlanCode": "IKME7",
+              "availableStatus": "AVAILABLE",
+              "productUses": [
+                {
+                  "inventoryTypeCode": "CDXG",
+                  "quantity": 1,
+                  "isMainProduct": true,
+                  "period": {
+                    "start": "2026-09-09",
+                    "end": "2026-09-10"
+                  }
+                }
+              ],
+              "totalRate": {
+                "amountAfterTax": "497.48",
+                "basePlusExcludedFeesAmount": "424.61"
+              },
+              "policies": {
+                "isRefundable": true
+              }
+            },
+            {
+              "ratePlanCode": "IKME7",
+              "availableStatus": "AVAILABLE",
+              "productUses": [
+                {
+                  "inventoryTypeCode": "KAJN",
+                  "quantity": 1,
+                  "isMainProduct": true,
+                  "period": {
+                    "start": "2026-09-09",
+                    "end": "2026-09-10"
+                  }
+                }
+              ],
+              "totalRate": {
+                "amountAfterTax": "487.10",
+                "basePlusExcludedFeesAmount": "415.75"
+              },
+              "policies": {
+                "isRefundable": true
+              }
+            },
+            {
+              "ratePlanCode": "IDKLT",
+              "availableStatus": "AVAILABLE",
+              "productUses": [
+                {
+                  "inventoryTypeCode": "CDXG",
+                  "quantity": 1,
+                  "isMainProduct": true,
+                  "period": {
+                    "start": "2026-09-09",
+                    "end": "2026-09-10"
+                  }
+                }
+              ],
+              "totalRate": {
+                "amountAfterTax": "340.87",
+                "basePlusExcludedFeesAmount": "290.92"
+              },
+              "policies": {
+                "isRefundable": false
+              }
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

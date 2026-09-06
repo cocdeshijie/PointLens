@@ -7,7 +7,11 @@
   "scripts": {
     "dev": "plasmo dev",
     "build": "plasmo build",
-    "package": "plasmo package"
+    "package": "plasmo package",
+    "typecheck": "tsc --noEmit",
+    "test:unit": "node --test tests/*.test.mjs",
+    "test:browser": "playwright test",
+    "test": "npm run test:unit && npm run test:browser"
   },
   "dependencies": {
     "jotai": "^2.20.1",
@@ -18,11 +22,13 @@
   },
   "devDependencies": {
     "@ianvs/prettier-plugin-sort-imports": "4.1.1",
+    "@playwright/test": "^1.63.0",
     "@types/chrome": "0.0.258",
     "@types/node": "20.11.5",
     "@types/react": "18.2.48",
     "@types/react-dom": "18.2.18",
     "javascript-obfuscator": "^5.4.3",
+    "jsdom": "^30.0.1",
     "prettier": "3.2.4",
     "typescript": "5.3.3"
   },

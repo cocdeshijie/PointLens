@@ -1,0 +1,978 @@
+{
+  "request": {
+    "startDate": "2026-10-12",
+    "endDate": "2026-10-16",
+    "hotelMnemonics": [
+      "ORDHA"
+    ],
+    "rates": {
+      "ratePlanCodes": [
+        {
+          "internal": "IVAN1"
+        },
+        {
+          "internal": "IVAN3"
+        },
+        {
+          "internal": "IVAN5"
+        },
+        {
+          "internal": "IVAN6"
+        },
+        {
+          "internal": "IVAN7"
+        },
+        {
+          "internal": "IVANI"
+        }
+      ]
+    },
+    "products": [
+      {
+        "productCode": "SR",
+        "startDate": "2026-10-12",
+        "endDate": "2026-10-16",
+        "quantity": 1,
+        "guestCounts": [
+          {
+            "otaCode": "AQC10",
+            "count": 1
+          }
+        ]
+      }
+    ],
+    "options": {
+      "disabilityMode": "ACCESSIBLE_AND_NON_ACCESSIBLE",
+      "returnAdditionalRatePlanDescriptions": true,
+      "rateDetails": {
+        "includePackageDetails": true,
+        "returnDetailedTaxDescriptions": true
+      }
+    }
+  },
+  "response": {
+    "hotels": [
+      {
+        "hotelMnemonic": "ORDHA",
+        "propertyCurrency": "USD",
+        "productDefinitions": [
+          {
+            "inventoryTypeCode": "KABN",
+            "inventoryTypeName": "1 King Premium City View Executive Tower"
+          },
+          {
+            "inventoryTypeCode": "KSUG",
+            "inventoryTypeName": "1 King Premium Executive Tower "
+          }
+        ],
+        "ratePlanDefinitions": [
+          {
+            "code": "IVANI",
+            "name": "REWARD NIGHTS",
+            "isLoyaltyIdRequired": true,
+            "isRewardNight": true,
+            "isIdRequired": false
+          },
+          {
+            "code": "IKME6",
+            "name": "IHG1R 2000 PTS NT",
+            "isPackage": true,
+            "isLoyaltyIdRequired": true,
+            "isIdRequired": false
+          },
+          {
+            "code": "IKME7",
+            "name": "IHG1R 2000 PTS BFST",
+            "isPackage": true,
+            "isLoyaltyIdRequired": true,
+            "isIdRequired": false
+          },
+          {
+            "code": "IKME8",
+            "name": "IHG1R 3000 PTS NT",
+            "isPackage": true,
+            "isLoyaltyIdRequired": true,
+            "isIdRequired": false
+          },
+          {
+            "code": "IKME9",
+            "name": "IHG1R 3000 PTS BFST",
+            "isPackage": true,
+            "isLoyaltyIdRequired": true,
+            "isIdRequired": false
+          },
+          {
+            "code": "IKM5K",
+            "name": "IHG1R 5000 PTS NT",
+            "isPackage": true,
+            "isLoyaltyIdRequired": true,
+            "isIdRequired": false
+          },
+          {
+            "code": "IGCOR",
+            "name": "BEST FLEXIBLE RATE",
+            "isLoyaltyIdRequired": false,
+            "isIdRequired": false
+          },
+          {
+            "code": "IKPRK",
+            "name": "DAILY PARKING PKG",
+            "isPackage": true,
+            "isLoyaltyIdRequired": false,
+            "isIdRequired": false
+          },
+          {
+            "code": "IKPCM",
+            "name": "1000 IHG1R BONUS POINTS NT",
+            "isPackage": true,
+            "isLoyaltyIdRequired": false,
+            "isIdRequired": false
+          },
+          {
+            "code": "IKPET",
+            "name": "PET GETAWAY",
+            "isPackage": true,
+            "isLoyaltyIdRequired": false,
+            "isIdRequired": false
+          },
+          {
+            "code": "IYSLF",
+            "name": "STAY LONGER & SAVE",
+            "isLoyaltyIdRequired": false,
+            "isIdRequired": false
+          },
+          {
+            "code": "IDME0",
+            "name": "IHG1R BEST FLEXIBLE",
+            "isLoyaltyIdRequired": true,
+            "isIdRequired": false
+          },
+          {
+            "code": "IKME3",
+            "name": "IHG1R 1000 PTS NT",
+            "isLoyaltyIdRequired": true,
+            "isIdRequired": false
+          },
+          {
+            "code": "IYMSF",
+            "name": "IHG1R STAY LONGER & SAVE",
+            "isLoyaltyIdRequired": true,
+            "isIdRequired": false
+          },
+          {
+            "code": "IGBBB",
+            "name": "BEST FLEX WITH BKFST",
+            "isLoyaltyIdRequired": false,
+            "isIdRequired": false
+          },
+          {
+            "code": "ISHD1",
+            "name": "SPECIAL BREAKFAST PROMOTION",
+            "isPackage": true,
+            "isLoyaltyIdRequired": false,
+            "isIdRequired": false
+          },
+          {
+            "code": "IKHD3",
+            "name": "AMERICAN GIRL PACKAGE",
+            "isPackage": true,
+            "isLoyaltyIdRequired": false,
+            "isIdRequired": false
+          },
+          {
+            "code": "IKBB1",
+            "name": "1000 IHG1R PTS NT BKFST",
+            "isPackage": true,
+            "isLoyaltyIdRequired": false,
+            "isIdRequired": false
+          },
+          {
+            "code": "IYSLB",
+            "name": "STAY LONGER & SAVE BKFST",
+            "isLoyaltyIdRequired": false,
+            "isIdRequired": false
+          },
+          {
+            "code": "IDKLT",
+            "name": "LIMITED TIME OFFER",
+            "isLoyaltyIdRequired": false,
+            "isIdRequired": false
+          },
+          {
+            "code": "IKME0",
+            "name": "IHG1R BREAKFAST BB",
+            "isLoyaltyIdRequired": true,
+            "isIdRequired": false
+          },
+          {
+            "code": "IKME4",
+            "name": "IHG1R 1000 POINTS BREAKFAST",
+            "isPackage": true,
+            "isLoyaltyIdRequired": true,
+            "isIdRequired": false
+          },
+          {
+            "code": "IYMSB",
+            "name": "IHG1R STAY LONGER BKFST",
+            "isLoyaltyIdRequired": true,
+            "isIdRequired": false
+          },
+          {
+            "code": "ID2G1"
+          },
+          {
+            "code": "ID3G1"
+          },
+          {
+            "code": "IDCVG"
+          },
+          {
+            "code": "IDIG2"
+          },
+          {
+            "code": "IDMFS"
+          },
+          {
+            "code": "IKMES"
+          },
+          {
+            "code": "IVAN1"
+          },
+          {
+            "code": "IVAN3"
+          },
+          {
+            "code": "IVAN5"
+          },
+          {
+            "code": "IVAN6"
+          },
+          {
+            "code": "IVAN7"
+          },
+          {
+            "code": "IDCG2"
+          },
+          {
+            "code": "IDDDD"
+          },
+          {
+            "code": "IDJG2"
+          },
+          {
+            "code": "IDMA1"
+          },
+          {
+            "code": "IDMBR"
+          },
+          {
+            "code": "IDMCM"
+          },
+          {
+            "code": "IDME1"
+          },
+          {
+            "code": "IDMGC"
+          },
+          {
+            "code": "IDMMA"
+          },
+          {
+            "code": "IDMME"
+          },
+          {
+            "code": "IKMCM"
+          },
+          {
+            "code": "IKMGC"
+          },
+          {
+            "code": "ISGAS"
+          }
+        ],
+        "rateDetails": {
+          "feeTaxDefinitions": [
+            {
+              "id": 4,
+              "computationType": "PERCENT"
+            },
+            {
+              "id": 2,
+              "computationType": "PERCENT"
+            },
+            {
+              "id": 1,
+              "computationType": "PERCENT"
+            },
+            {
+              "id": 5,
+              "computationType": "FLAT"
+            },
+            {
+              "id": 3,
+              "computationType": "FLAT"
+            },
+            {
+              "id": 0,
+              "computationType": "PERCENT"
+            }
+          ],
+          "offers": [
+            {
+              "ratePlanCode": "IVANI",
+              "availableStatus": "AVAILABLE",
+              "productUses": [
+                {
+                  "inventoryTypeCode": "KABN",
+                  "quantity": 1,
+                  "isMainProduct": true,
+                  "period": {
+                    "start": "2026-10-12",
+                    "end": "2026-10-16"
+                  }
+                }
+              ],
+              "totalRate": {
+                "amountAfterTax": "565.52",
+                "basePlusExcludedFeesAmount": "482.49",
+                "feeTaxSubTotals": [
+                  {
+                    "amount": "124.6",
+                    "otaCodeType": "FEE",
+                    "isIncludedInRate": false,
+                    "feeTaxGroups": [
+                      {
+                        "amount": "5.36",
+                        "feeTaxDefIds": [
+                          0
+                        ]
+                      },
+                      {
+                        "amount": "119.24",
+                        "feeTaxDefIds": [
+                          5
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "amount": "83.03",
+                    "otaCodeType": "TAX",
+                    "isIncludedInRate": false,
+                    "feeTaxGroups": [
+                      {
+                        "amount": "16.10",
+                        "feeTaxDefIds": [
+                          1
+                        ]
+                      },
+                      {
+                        "amount": "3.58",
+                        "feeTaxDefIds": [
+                          2
+                        ]
+                      },
+                      {
+                        "amount": "20.76",
+                        "feeTaxDefIds": [
+                          3
+                        ]
+                      },
+                      {
+                        "amount": "42.59",
+                        "feeTaxDefIds": [
+                          4
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              "policies": {
+                "isRefundable": true
+              },
+              "rewardNights": {
+                "pointsOnly": {
+                  "totalPoints": 477000,
+                  "averageDailyPoints": 119250,
+                  "originalAverageDailyPoints": 119250,
+                  "originalTotalPoints": 477000,
+                  "daily": [
+                    {
+                      "stayDate": "2026-10-12",
+                      "points": 90000,
+                      "originalPoints": 90000
+                    },
+                    {
+                      "stayDate": "2026-10-13",
+                      "points": 153000,
+                      "originalPoints": 153000
+                    },
+                    {
+                      "stayDate": "2026-10-14",
+                      "points": 110000,
+                      "originalPoints": 110000
+                    },
+                    {
+                      "stayDate": "2026-10-15",
+                      "points": 124000,
+                      "originalPoints": 124000
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "ratePlanCode": "IVANI",
+              "availableStatus": "AVAILABLE",
+              "productUses": [
+                {
+                  "inventoryTypeCode": "KSUG",
+                  "quantity": 1,
+                  "isMainProduct": true,
+                  "period": {
+                    "start": "2026-10-12",
+                    "end": "2026-10-16"
+                  }
+                }
+              ],
+              "totalRate": {
+                "amountAfterTax": "491.14",
+                "basePlusExcludedFeesAmount": "419",
+                "feeTaxSubTotals": [
+                  {
+                    "amount": "123.68",
+                    "otaCodeType": "FEE",
+                    "isIncludedInRate": false,
+                    "feeTaxGroups": [
+                      {
+                        "amount": "4.44",
+                        "feeTaxDefIds": [
+                          0
+                        ]
+                      },
+                      {
+                        "amount": "119.24",
+                        "feeTaxDefIds": [
+                          5
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "amount": "72.14",
+                    "otaCodeType": "TAX",
+                    "isIncludedInRate": false,
+                    "feeTaxGroups": [
+                      {
+                        "amount": "13.28",
+                        "feeTaxDefIds": [
+                          1
+                        ]
+                      },
+                      {
+                        "amount": "2.96",
+                        "feeTaxDefIds": [
+                          2
+                        ]
+                      },
+                      {
+                        "amount": "20.76",
+                        "feeTaxDefIds": [
+                          3
+                        ]
+                      },
+                      {
+                        "amount": "35.14",
+                        "feeTaxDefIds": [
+                          4
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              "policies": {
+                "isRefundable": true
+              },
+              "rewardNights": {
+                "pointsOnly": {
+                  "totalPoints": 453000,
+                  "averageDailyPoints": 113250,
+                  "originalAverageDailyPoints": 113250,
+                  "originalTotalPoints": 453000,
+                  "daily": [
+                    {
+                      "stayDate": "2026-10-12",
+                      "points": 85000,
+                      "originalPoints": 85000
+                    },
+                    {
+                      "stayDate": "2026-10-13",
+                      "points": 145000,
+                      "originalPoints": 145000
+                    },
+                    {
+                      "stayDate": "2026-10-14",
+                      "points": 105000,
+                      "originalPoints": 105000
+                    },
+                    {
+                      "stayDate": "2026-10-15",
+                      "points": 118000,
+                      "originalPoints": 118000
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "ratePlanCode": "IKME6",
+              "availableStatus": "AVAILABLE",
+              "productUses": [
+                {
+                  "inventoryTypeCode": "KABN",
+                  "quantity": 1,
+                  "isMainProduct": true,
+                  "period": {
+                    "start": "2026-10-12",
+                    "end": "2026-10-16"
+                  }
+                }
+              ],
+              "totalRate": {
+                "amountAfterTax": "3092.52",
+                "basePlusExcludedFeesAmount": "2639.69",
+                "feeTaxSubTotals": [
+                  {
+                    "amount": "156.49",
+                    "otaCodeType": "FEE",
+                    "isIncludedInRate": false,
+                    "feeTaxGroups": [
+                      {
+                        "amount": "37.25",
+                        "feeTaxDefIds": [
+                          0
+                        ]
+                      },
+                      {
+                        "amount": "119.24",
+                        "feeTaxDefIds": [
+                          5
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "amount": "452.83",
+                    "otaCodeType": "TAX",
+                    "isIncludedInRate": false,
+                    "feeTaxGroups": [
+                      {
+                        "amount": "111.74",
+                        "feeTaxDefIds": [
+                          1
+                        ]
+                      },
+                      {
+                        "amount": "24.83",
+                        "feeTaxDefIds": [
+                          2
+                        ]
+                      },
+                      {
+                        "amount": "20.76",
+                        "feeTaxDefIds": [
+                          3
+                        ]
+                      },
+                      {
+                        "amount": "295.50",
+                        "feeTaxDefIds": [
+                          4
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              "policies": {
+                "isRefundable": true
+              }
+            },
+            {
+              "ratePlanCode": "IKME6",
+              "availableStatus": "AVAILABLE",
+              "productUses": [
+                {
+                  "inventoryTypeCode": "KSUG",
+                  "quantity": 1,
+                  "isMainProduct": true,
+                  "period": {
+                    "start": "2026-10-12",
+                    "end": "2026-10-16"
+                  }
+                }
+              ],
+              "totalRate": {
+                "amountAfterTax": "2989.89",
+                "basePlusExcludedFeesAmount": "2552.07",
+                "feeTaxSubTotals": [
+                  {
+                    "amount": "155.2",
+                    "otaCodeType": "FEE",
+                    "isIncludedInRate": false,
+                    "feeTaxGroups": [
+                      {
+                        "amount": "35.96",
+                        "feeTaxDefIds": [
+                          0
+                        ]
+                      },
+                      {
+                        "amount": "119.24",
+                        "feeTaxDefIds": [
+                          5
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "amount": "437.82",
+                    "otaCodeType": "TAX",
+                    "isIncludedInRate": false,
+                    "feeTaxGroups": [
+                      {
+                        "amount": "107.86",
+                        "feeTaxDefIds": [
+                          1
+                        ]
+                      },
+                      {
+                        "amount": "23.97",
+                        "feeTaxDefIds": [
+                          2
+                        ]
+                      },
+                      {
+                        "amount": "20.76",
+                        "feeTaxDefIds": [
+                          3
+                        ]
+                      },
+                      {
+                        "amount": "285.23",
+                        "feeTaxDefIds": [
+                          4
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              "policies": {
+                "isRefundable": true
+              }
+            },
+            {
+              "ratePlanCode": "IGCOR",
+              "availableStatus": "AVAILABLE",
+              "productUses": [
+                {
+                  "inventoryTypeCode": "KABN",
+                  "quantity": 1,
+                  "isMainProduct": true,
+                  "period": {
+                    "start": "2026-10-12",
+                    "end": "2026-10-16"
+                  }
+                }
+              ],
+              "totalRate": {
+                "amountAfterTax": "3136.30",
+                "basePlusExcludedFeesAmount": "2677.05",
+                "feeTaxSubTotals": [
+                  {
+                    "amount": "157.05",
+                    "otaCodeType": "FEE",
+                    "isIncludedInRate": false,
+                    "feeTaxGroups": [
+                      {
+                        "amount": "37.81",
+                        "feeTaxDefIds": [
+                          0
+                        ]
+                      },
+                      {
+                        "amount": "119.24",
+                        "feeTaxDefIds": [
+                          5
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "amount": "459.25",
+                    "otaCodeType": "TAX",
+                    "isIncludedInRate": false,
+                    "feeTaxGroups": [
+                      {
+                        "amount": "113.41",
+                        "feeTaxDefIds": [
+                          1
+                        ]
+                      },
+                      {
+                        "amount": "25.20",
+                        "feeTaxDefIds": [
+                          2
+                        ]
+                      },
+                      {
+                        "amount": "20.76",
+                        "feeTaxDefIds": [
+                          3
+                        ]
+                      },
+                      {
+                        "amount": "299.88",
+                        "feeTaxDefIds": [
+                          4
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              "policies": {
+                "isRefundable": true
+              }
+            },
+            {
+              "ratePlanCode": "IGCOR",
+              "availableStatus": "AVAILABLE",
+              "productUses": [
+                {
+                  "inventoryTypeCode": "KSUG",
+                  "quantity": 1,
+                  "isMainProduct": true,
+                  "period": {
+                    "start": "2026-10-12",
+                    "end": "2026-10-16"
+                  }
+                }
+              ],
+              "totalRate": {
+                "amountAfterTax": "3030.47",
+                "basePlusExcludedFeesAmount": "2586.71",
+                "feeTaxSubTotals": [
+                  {
+                    "amount": "155.71",
+                    "otaCodeType": "FEE",
+                    "isIncludedInRate": false,
+                    "feeTaxGroups": [
+                      {
+                        "amount": "36.47",
+                        "feeTaxDefIds": [
+                          0
+                        ]
+                      },
+                      {
+                        "amount": "119.24",
+                        "feeTaxDefIds": [
+                          5
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "amount": "443.76",
+                    "otaCodeType": "TAX",
+                    "isIncludedInRate": false,
+                    "feeTaxGroups": [
+                      {
+                        "amount": "109.40",
+                        "feeTaxDefIds": [
+                          1
+                        ]
+                      },
+                      {
+                        "amount": "24.31",
+                        "feeTaxDefIds": [
+                          2
+                        ]
+                      },
+                      {
+                        "amount": "20.76",
+                        "feeTaxDefIds": [
+                          3
+                        ]
+                      },
+                      {
+                        "amount": "289.29",
+                        "feeTaxDefIds": [
+                          4
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              "policies": {
+                "isRefundable": true
+              }
+            },
+            {
+              "ratePlanCode": "IYMSF",
+              "availableStatus": "AVAILABLE",
+              "productUses": [
+                {
+                  "inventoryTypeCode": "KABN",
+                  "quantity": 1,
+                  "isMainProduct": true,
+                  "period": {
+                    "start": "2026-10-12",
+                    "end": "2026-10-16"
+                  }
+                }
+              ],
+              "totalRate": {
+                "amountAfterTax": "2661.14",
+                "basePlusExcludedFeesAmount": "2271.45",
+                "feeTaxSubTotals": [
+                  {
+                    "amount": "151.05",
+                    "otaCodeType": "FEE",
+                    "isIncludedInRate": false,
+                    "feeTaxGroups": [
+                      {
+                        "amount": "31.81",
+                        "feeTaxDefIds": [
+                          0
+                        ]
+                      },
+                      {
+                        "amount": "119.24",
+                        "feeTaxDefIds": [
+                          5
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "amount": "389.69",
+                    "otaCodeType": "TAX",
+                    "isIncludedInRate": false,
+                    "feeTaxGroups": [
+                      {
+                        "amount": "95.41",
+                        "feeTaxDefIds": [
+                          1
+                        ]
+                      },
+                      {
+                        "amount": "21.20",
+                        "feeTaxDefIds": [
+                          2
+                        ]
+                      },
+                      {
+                        "amount": "20.76",
+                        "feeTaxDefIds": [
+                          3
+                        ]
+                      },
+                      {
+                        "amount": "252.32",
+                        "feeTaxDefIds": [
+                          4
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              "policies": {
+                "isRefundable": false
+              }
+            },
+            {
+              "ratePlanCode": "IYMSF",
+              "availableStatus": "AVAILABLE",
+              "productUses": [
+                {
+                  "inventoryTypeCode": "KSUG",
+                  "quantity": 1,
+                  "isMainProduct": true,
+                  "period": {
+                    "start": "2026-10-12",
+                    "end": "2026-10-16"
+                  }
+                }
+              ],
+              "totalRate": {
+                "amountAfterTax": "2573.06",
+                "basePlusExcludedFeesAmount": "2196.24",
+                "feeTaxSubTotals": [
+                  {
+                    "amount": "149.94",
+                    "otaCodeType": "FEE",
+                    "isIncludedInRate": false,
+                    "feeTaxGroups": [
+                      {
+                        "amount": "30.70",
+                        "feeTaxDefIds": [
+                          0
+                        ]
+                      },
+                      {
+                        "amount": "119.24",
+                        "feeTaxDefIds": [
+                          5
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "amount": "376.82",
+                    "otaCodeType": "TAX",
+                    "isIncludedInRate": false,
+                    "feeTaxGroups": [
+                      {
+                        "amount": "92.08",
+                        "feeTaxDefIds": [
+                          1
+                        ]
+                      },
+                      {
+                        "amount": "20.47",
+                        "feeTaxDefIds": [
+                          2
+                        ]
+                      },
+                      {
+                        "amount": "20.76",
+                        "feeTaxDefIds": [
+                          3
+                        ]
+                      },
+                      {
+                        "amount": "243.51",
+                        "feeTaxDefIds": [
+                          4
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              "policies": {
+                "isRefundable": false
+              }
+            }
+          ]
+        }
+      }
+    ]
+  }
+}
