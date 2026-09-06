@@ -3,6 +3,8 @@ import React from "react"
 import { createRoot } from "react-dom/client"
 import { CiCircleInfo } from "react-icons/ci"
 
+import { hasHostMutation, makeInfoAccessible } from "../../shared/dom"
+import { attachTooltip as attachSmartTooltip } from "../../shared/tooltip"
 import {
   DEFAULT_HYATT_VALUE_SETTINGS,
   HYATT_VALUE_SETTINGS_KEY,
@@ -15,9 +17,8 @@ export const config: PlasmoCSConfig = {
 }
 
 const MESSAGE_FLAG = "__AV_HYATT_RATES__"
-// Rates also persisted to storage so they survive a full SSR navigation (date /
-// points toggle reload the page; the MAIN hook re-extracts, but seeding from
-// storage avoids a flash of "loading" on every nav).
+// Diagnostic capture only. UI rates always come from this page's live stream;
+// a previous search or another tab must never seed the current page's prices.
 const HYATT_STORAGE_KEY = "pointlens:hyatt-rates"
 
 const PLACEHOLDER_CLASS = "pointlens-hyatt-price-placeholder"
@@ -42,6 +43,7 @@ type HyattRateInfo = {
 
 const iconRoots = new WeakMap<HTMLElement, ReturnType<typeof createRoot>>()
 let hyattRatesByHotel = new Map<string, HyattRateInfo>()
+let ratesContext = location.href
 let hyattValueSettings = DEFAULT_HYATT_VALUE_SETTINGS
 
 // Currency -> USD-per-unit. CPP thresholds are USD cents, so non-USD cash is
@@ -49,23 +51,34 @@ let hyattValueSettings = DEFAULT_HYATT_VALUE_SETTINGS
 // ¢/pt ratio is normalized.
 const usdRateByCurrency = new Map<string, number>([["USD", 1]])
 const fxInflight = new Set<string>()
+const fxRetryAfter = new Map<string, number>()
 
 const ensureFxRate = (currency: string) => {
   const cur = currency.toUpperCase()
-  if (cur === "USD" || usdRateByCurrency.has(cur) || fxInflight.has(cur)) {
+  if (
+    cur === "USD" ||
+    usdRateByCurrency.has(cur) ||
+    fxInflight.has(cur) ||
+    (fxRetryAfter.get(cur) ?? 0) > Date.now()
+  ) {
     return
   }
   fxInflight.add(cur)
   try {
-    chrome.runtime.sendMessage({ type: "HYATT_FETCH_FX", currency: cur }, (resp) => {
-      fxInflight.delete(cur)
-      const rate = (resp as { rate?: number } | undefined)?.rate
-      if (typeof rate === "number" && Number.isFinite(rate) && rate > 0) {
-        usdRateByCurrency.set(cur, rate)
-        recomputeCpp()
-        scheduleUpdate()
+    chrome.runtime.sendMessage(
+      { type: "HYATT_FETCH_FX", currency: cur },
+      (resp) => {
+        fxInflight.delete(cur)
+        void chrome.runtime.lastError
+        fxRetryAfter.set(cur, Date.now() + 60_000)
+        const rate = (resp as { rate?: number } | undefined)?.rate
+        if (typeof rate === "number" && Number.isFinite(rate) && rate > 0) {
+          usdRateByCurrency.set(cur, rate)
+          recomputeCpp()
+          scheduleUpdate()
+        }
       }
-    })
+    )
   } catch {
     fxInflight.delete(cur)
   }
@@ -78,7 +91,7 @@ const toUsd = (amount: number | undefined, currency?: string) => {
   const rate = usdRateByCurrency.get(cur)
   if (rate !== undefined) return amount * rate
   ensureFxRate(cur)
-  return amount
+  return undefined
 }
 
 const normalizeId = (id: string | null | undefined) => {
@@ -154,7 +167,13 @@ const persistRates = () => {
   const obj: Record<string, HyattRateInfo> = {}
   for (const [k, v] of hyattRatesByHotel) obj[k] = v
   try {
-    chrome.storage.local.set({ [HYATT_STORAGE_KEY]: obj })
+    chrome.storage.local.set({
+      [HYATT_STORAGE_KEY]: {
+        context: ratesContext,
+        capturedAt: Date.now(),
+        rates: obj
+      }
+    })
   } catch {
     /* storage may be unavailable mid-teardown */
   }
@@ -212,7 +231,9 @@ const isPointsView = () => {
   if (new URLSearchParams(location.search).get("rateFilter") === "woh") {
     return true
   }
-  const sw = document.querySelector('button[role="switch"]')
+  const sw = document.querySelector(
+    '[role="switch"][aria-label="Points"], button[role="switch"]'
+  )
   return sw?.getAttribute("aria-checked") === "true"
 }
 
@@ -239,76 +260,6 @@ const valueTier = (cpp?: number) => {
 }
 
 // ---- shared singleton tooltip (escapes transformed/overflow ancestors) ------
-let sharedTooltip: HTMLElement | null = null
-let activeTipIcon: HTMLElement | null = null
-const hideSharedTooltip = () => {
-  if (sharedTooltip) sharedTooltip.style.opacity = "0"
-  activeTipIcon = null
-}
-const positionSharedTooltip = (icon: HTMLElement) => {
-  const tip = getSharedTooltip()
-  const ir = icon.getBoundingClientRect()
-  const tw = tip.offsetWidth || 260
-  const th = tip.offsetHeight || 120
-  const m = 8
-  let left = ir.left + ir.width / 2 - tw / 2
-  left = Math.max(m, Math.min(left, window.innerWidth - tw - m))
-  let top = ir.top - th - m
-  if (top < m) top = ir.bottom + m // flip below when no room above
-  if (top + th > window.innerHeight - m) {
-    top = Math.max(m, window.innerHeight - th - m)
-  }
-  tip.style.left = `${left}px`
-  tip.style.top = `${top}px`
-}
-const getSharedTooltip = () => {
-  if (sharedTooltip && sharedTooltip.isConnected) return sharedTooltip
-  sharedTooltip = document.createElement("div")
-  sharedTooltip.className = "pointlens-tooltip pointlens-shared-tooltip"
-  document.body.appendChild(sharedTooltip)
-  document.addEventListener(
-    "mousemove",
-    (e) => {
-      if (!activeTipIcon) return
-      const r = activeTipIcon.getBoundingClientRect()
-      if (r.width === 0 && r.height === 0) {
-        hideSharedTooltip()
-        return
-      }
-      const pad = 6
-      const inside =
-        e.clientX >= r.left - pad &&
-        e.clientX <= r.right + pad &&
-        e.clientY >= r.top - pad &&
-        e.clientY <= r.bottom + pad
-      if (!inside) hideSharedTooltip()
-    },
-    true
-  )
-  window.addEventListener("scroll", hideSharedTooltip, true)
-  return sharedTooltip
-}
-const attachSmartTooltip = (iconWrapper: HTMLElement) => {
-  if (iconWrapper.dataset.avSmartTip) return
-  const source = iconWrapper.querySelector<HTMLElement>(".pointlens-tooltip")
-  if (!source) return
-  iconWrapper.dataset.avSmartTip = "1"
-  const show = () => {
-    const tip = getSharedTooltip()
-    if (activeTipIcon !== iconWrapper) {
-      activeTipIcon = iconWrapper
-      tip.replaceChildren(
-        ...Array.from(source.childNodes).map((n) => n.cloneNode(true))
-      )
-    }
-    positionSharedTooltip(iconWrapper)
-    tip.style.opacity = "1"
-  }
-  iconWrapper.addEventListener("mouseenter", show)
-  iconWrapper.addEventListener("focusin", show)
-  iconWrapper.addEventListener("focusout", hideSharedTooltip)
-}
-
 const buildTooltipContent = (info: HyattRateInfo) => {
   const wrapper = document.createElement("div")
   wrapper.className = "pointlens-tooltip-content"
@@ -319,12 +270,10 @@ const buildTooltipContent = (info: HyattRateInfo) => {
     const row = document.createElement("div")
     row.className = "pointlens-tooltip-row"
     const labelEl = document.createElement("div")
-    labelEl.className =
-      "pointlens-tooltip-cell pointlens-tooltip-cell--label"
+    labelEl.className = "pointlens-tooltip-cell pointlens-tooltip-cell--label"
     labelEl.textContent = label
     const valueEl = document.createElement("div")
-    valueEl.className =
-      "pointlens-tooltip-cell pointlens-tooltip-cell--value"
+    valueEl.className = "pointlens-tooltip-cell pointlens-tooltip-cell--value"
     valueEl.textContent = value
     row.appendChild(labelEl)
     row.appendChild(valueEl)
@@ -376,6 +325,7 @@ const ensurePlaceholderContents = (placeholder: HTMLElement) => {
   if (!iconWrapper) {
     iconWrapper = document.createElement("span")
     iconWrapper.className = PLACEHOLDER_ICON_CLASS
+    makeInfoAccessible(iconWrapper)
     const iconTarget = document.createElement("span")
     iconTarget.className = "pointlens-icon"
     iconWrapper.appendChild(iconTarget)
@@ -435,7 +385,12 @@ const updatePlaceholderText = (placeholder: HTMLElement) => {
     placeholder.classList.remove("is-loading")
     iconWrapper.style.removeProperty("display")
     updateValueClass(valueEl, info.cpp)
-    valueEl.textContent = `${formatCpp(info.cpp)} · ${secondaryTextFull(info)}`
+    valueEl.textContent = [
+      formatCpp(info.cpp) || "USD conversion unavailable",
+      secondaryTextFull(info)
+    ]
+      .filter(Boolean)
+      .join(" · ")
     if (tooltip) tooltip.replaceChildren(buildTooltipContent(info))
     return
   }
@@ -474,6 +429,11 @@ const ensurePlaceholder = (card: HTMLElement) => {
     if (hotelId) placeholder.dataset.hotelId = hotelId
     ensurePlaceholderContents(placeholder)
     updatePlaceholderText(placeholder)
+  }
+
+  const hotelId = normalizeId(card.getAttribute("data-spirit-code"))
+  if (hotelId && placeholder.dataset.hotelId !== hotelId) {
+    placeholder.dataset.hotelId = hotelId
   }
 
   // Keep the badge directly BELOW the fee notice (idempotent reposition). The
@@ -573,7 +533,12 @@ const updatePopovers = () => {
       return
     }
     const tier = valueTier(info.cpp)
-    const text = `${formatCpp(info.cpp)} · ${secondaryText(info)}`
+    const text = [
+      formatCpp(info.cpp) || "USD conversion unavailable",
+      secondaryText(info)
+    ]
+      .filter(Boolean)
+      .join(" · ")
     if (!chip) {
       chip = document.createElement("div")
       container.appendChild(chip)
@@ -594,6 +559,10 @@ const scheduleUpdate = () => {
   updateScheduled = true
   requestAnimationFrame(() => {
     updateScheduled = false
+    if (ratesContext !== location.href) {
+      ratesContext = location.href
+      hyattRatesByHotel.clear()
+    }
     refreshPlaceholders()
     updateExistingPlaceholders()
     updateMapPins()
@@ -608,13 +577,6 @@ const refreshValueSettings = async () => {
     result?.[HYATT_VALUE_SETTINGS_KEY]
   )
   recomputeCpp() // tax-basis may have changed → CPP must be recomputed
-  scheduleUpdate()
-}
-
-const seedRatesFromStorage = async () => {
-  if (!chrome?.storage?.local) return
-  const result = await chrome.storage.local.get(HYATT_STORAGE_KEY)
-  mergeRates(result?.[HYATT_STORAGE_KEY] as Record<string, unknown> | undefined)
   scheduleUpdate()
 }
 
@@ -758,14 +720,20 @@ const ensureStyles = () => {
 // ---- bootstrap --------------------------------------------------------------
 const start = () => {
   if (!document.body) return
-  void seedRatesFromStorage()
   void refreshValueSettings()
   refreshPlaceholders()
-  const observer = new MutationObserver(scheduleUpdate)
-  observer.observe(document.body, { childList: true, subtree: true })
+  const observer = new MutationObserver((mutations) => {
+    if (hasHostMutation(mutations)) scheduleUpdate()
+  })
+  observer.observe(document.body, {
+    childList: true,
+    subtree: true,
+    attributes: true,
+    attributeFilter: ["data-spirit-code", "aria-checked", "data-locator"]
+  })
 
-  chrome?.storage?.onChanged?.addListener((_changes, area) => {
-    if (area !== "local") return
+  chrome?.storage?.onChanged?.addListener((changes, area) => {
+    if (area !== "local" || !changes[HYATT_VALUE_SETTINGS_KEY]) return
     void refreshValueSettings()
   })
 }
@@ -781,6 +749,11 @@ window.addEventListener("message", (event) => {
   if (event.source !== window) return
   const data = event.data as Record<string, unknown> | undefined
   if (data?.[MESSAGE_FLAG] !== true) return
+  if (data.context !== location.href) return
+  if (ratesContext !== data.context) {
+    ratesContext = data.context as string
+    hyattRatesByHotel.clear()
+  }
   mergeRates(data.rates as Record<string, unknown> | undefined)
   persistRates()
   scheduleUpdate()

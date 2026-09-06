@@ -1,3 +1,26 @@
+import { fetchUsdRate } from "../../shared/fx"
+import { createIhgRequestBudget } from "./request-budget"
+import { extractSearchSignature } from "./search"
+
+const cooldownKey = "pointlens:ihg-request-cooldown"
+const ihgRequests = createIhgRequestBudget({
+  fetch: (input, init) => fetch(input, init),
+  loadCooldown: async () =>
+    (await chrome.storage.session?.get(cooldownKey))?.[cooldownKey] ?? 0,
+  saveCooldown: async (until) => {
+    await chrome.storage.session?.set({ [cooldownKey]: until })
+  }
+})
+
+chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (message?.type !== "IHG_FETCH_FX" || typeof message.currency !== "string")
+    return
+  fetchUsdRate(message.currency)
+    .then((rate) => sendResponse({ rate }))
+    .catch(() => sendResponse({ rate: null }))
+  return true
+})
+
 const IHG_STORAGE_KEY = "pointlens:ihg-last-request"
 const IHG_SENT_STORAGE_KEY = "pointlens:ihg-sent-request"
 const IHG_TARGET_URL = "https://apis.ihg.com/availability/v3/hotels/offers"
@@ -13,36 +36,20 @@ const requestMap = new Map<
     searchSignature?: string | null
   }
 >()
-const replaySent = new Set<string>()
 const backgroundSent = new Set<string>()
 let maxSearchRadius = 0
 let lastSearchSignature: string | null = null
+// Public application headers only. Member/session headers come exclusively
+// from the current search request; never ship a captured member token.
 const MIN_HEADERS = {
   "content-type": "application/json; charset=UTF-8",
   "X-CDC-API-KEY": "4_jpzahMO4CBnl9Elopzfr0A",
-  "x-ihg-api-key": "se9ym5iAzaW8pxfBjkmgbuGjJcr3Pj6Y",
-  "IHG-SessionId": "83770c05-7e86-4353-bebc-cc795c282872",
-  "X-IHG-SSO-TOKEN":
-    "REDACTED_EXPIRED_MEMBER_TOKEN"
+  "x-ihg-api-key": "se9ym5iAzaW8pxfBjkmgbuGjJcr3Pj6Y"
 }
-const MIN_BODY = {
-  radius: 30,
-  distanceType: "STRAIGHT_LINE",
-  startDate: "2026-02-09",
-  endDate: "2026-02-10",
-  geoLocation: [{ latitude: 45.464699, longitude: -98.486099 }],
-  products: [
-    { productCode: "SR", startDate: "2026-02-09", endDate: "2026-02-10" }
-  ],
-  rates: {
-    // IHG's live search requests only the consolidated reward plan `IVANI`,
-    // which returns the full points / points+cash response on its own. The
-    // older IVAN1/3/5/6/7 codes are redundant (confirmed 2026-06 capture).
-    ratePlanCodes: [{ internal: "IVANI" }]
-  }
-}
+const REWARD_RATE_PLANS = [{ internal: "IVANI" }]
 
 type IhgStoredPayload = {
+  bodyText?: string | null
   responseBodyText?: string | null
 }
 
@@ -103,7 +110,8 @@ const detectBookingType = (bodyText: string | null): IhgBookingType => {
     if (
       Array.isArray(products) &&
       products.some(
-        (product) => product.guestCounts !== undefined || product.quantity !== undefined
+        (product) =>
+          product.guestCounts !== undefined || product.quantity !== undefined
       )
     ) {
       return "cash"
@@ -124,35 +132,6 @@ const parseBody = (bodyText: string | null) => {
   } catch {
     return null
   }
-}
-
-const extractSearchSignature = (bodyText: string | null) => {
-  const parsed = parseBody(bodyText)
-  if (!parsed) {
-    return null
-  }
-
-  const startDate =
-    typeof parsed.startDate === "string" ? parsed.startDate : undefined
-  const endDate = typeof parsed.endDate === "string" ? parsed.endDate : undefined
-  const geo =
-    Array.isArray(parsed.geoLocation) && parsed.geoLocation.length > 0
-      ? parsed.geoLocation[0]
-      : null
-  const lat =
-    geo && typeof geo === "object" && "latitude" in geo
-      ? String((geo as { latitude?: number }).latitude ?? "")
-      : ""
-  const lng =
-    geo && typeof geo === "object" && "longitude" in geo
-      ? String((geo as { longitude?: number }).longitude ?? "")
-      : ""
-
-  if (!startDate || !endDate || !lat || !lng) {
-    return null
-  }
-
-  return `${startDate}|${endDate}|${lat}|${lng}`
 }
 
 const extractSearchRadius = (bodyText: string | null) => {
@@ -185,7 +164,9 @@ const decodeRawBody = (raw: RawBodyItem[]) => {
   }
 }
 
-const extractRequestBody = (details: chrome.webRequest.WebRequestBodyDetails) => {
+const extractRequestBody = (
+  details: chrome.webRequest.WebRequestBodyDetails
+) => {
   const { requestBody } = details
   if (!requestBody) {
     return { bodyType: "null", bodyText: null }
@@ -272,6 +253,11 @@ const handleIhgRequestHeaders = (
 const handleIhgCompleted = async (
   details: chrome.webRequest.WebResponseCacheDetails
 ) => {
+  ihgRequests.limited(
+    details.statusCode,
+    details.responseHeaders?.find((h) => h.name.toLowerCase() === "retry-after")
+      ?.value
+  )
   const entry = requestMap.get(details.requestId)
   if (!entry) {
     return
@@ -282,7 +268,9 @@ const handleIhgCompleted = async (
   }
 
   const existing = await chrome.storage.local.get(IHG_STORAGE_KEY)
-  const existingPayload = existing[IHG_STORAGE_KEY] as IhgStoredPayload | undefined
+  const existingPayload = existing[IHG_STORAGE_KEY] as
+    | IhgStoredPayload
+    | undefined
   const searchRadius = entry.searchRadius ?? 0
   const isLargestSearch = searchRadius >= maxSearchRadius
 
@@ -299,49 +287,24 @@ const handleIhgCompleted = async (
         requestHeaders: entry.requestHeaders ?? [],
         statusCode: details.statusCode,
         responseHeaders: details.responseHeaders ?? [],
-        responseBodyText: existingPayload?.responseBodyText ?? null,
+        responseBodyText:
+          existingPayload?.bodyText === entry.bodyText
+            ? existingPayload?.responseBodyText ?? null
+            : null,
         completedAt: new Date().toISOString()
       }
     })
   }
 
-  if (
-    isLargestSearch &&
-    !replaySent.has(details.requestId) &&
-    !existingPayload?.responseBodyText
-  ) {
-    replaySent.add(details.requestId)
-    const replayPayload = {
-      type: "ihg-replay",
-      payload: {
-        url: entry.url,
-        method: entry.method,
-        bodyType: entry.bodyType,
-        bodyText: entry.bodyText,
-        requestHeaders: entry.requestHeaders ?? []
-      }
-    }
-
-    if (details.tabId >= 0) {
-      chrome.tabs.sendMessage(details.tabId, replayPayload, () => {
-        void chrome.runtime.lastError
-      })
-    } else {
-      chrome.tabs.query({ url: "https://www.ihg.com/*" }, (tabs) => {
-        const targetTab = tabs.find((tab) => tab.active) ?? tabs[0]
-        if (targetTab?.id !== undefined) {
-          chrome.tabs.sendMessage(targetTab.id, replayPayload, () => {
-            void chrome.runtime.lastError
-          })
-        }
-      })
-    }
-  }
+  // MAIN-world fetch/XHR hooks already capture the response. Replaying cash
+  // here races their async body read and duplicates both cash and award calls.
 
   if (
     details.url ===
       "https://apis.ihg.com/availability/v3/hotels/offers?fieldset=summary,summary.rateRanges" &&
     !backgroundSent.has(details.requestId) &&
+    details.statusCode >= 200 &&
+    details.statusCode < 300 &&
     !details.initiator?.startsWith("chrome-extension://")
   ) {
     const bookingType = detectBookingType(entry.bodyText)
@@ -384,48 +347,54 @@ export const registerIhgWebRequestListeners = () => {
   )
 }
 
-chrome.runtime.onMessage.addListener((message: { type?: string; payload?: IhgMessagePayload }) => {
-  if (message?.type !== "ihg-capture") {
-    return
-  }
+chrome.runtime.onMessage.addListener(
+  (message: { type?: string; payload?: IhgMessagePayload }) => {
+    if (message?.type !== "ihg-capture") {
+      return
+    }
 
-  if (!chrome?.storage?.local) {
-    return
-  }
+    if (!chrome?.storage?.local) {
+      return
+    }
 
-  const payload = message.payload ?? {}
-  const bookingType = detectBookingType(payload.bodyText ?? null)
-  chrome.storage.local.get(IHG_STORAGE_KEY).then((existing) => {
-    const existingPayload = existing[IHG_STORAGE_KEY] as IhgMessagePayload | undefined
-    chrome.storage.local.set({
-      [IHG_STORAGE_KEY]: {
-        ...existingPayload,
-        ...payload,
-        bookingType,
-        receivedAt: new Date().toISOString()
-      }
+    const payload = message.payload ?? {}
+    const bookingType = detectBookingType(payload.bodyText ?? null)
+    chrome.storage.local.get(IHG_STORAGE_KEY).then((existing) => {
+      const existingPayload = existing[IHG_STORAGE_KEY] as
+        | IhgMessagePayload
+        | undefined
+      chrome.storage.local.set({
+        [IHG_STORAGE_KEY]: {
+          ...existingPayload,
+          ...payload,
+          bookingType,
+          receivedAt: new Date().toISOString()
+        }
+      })
     })
-  })
-})
+  }
+)
 
 const buildPointsBodyFromText = (bodyText?: string | null) => {
   if (!bodyText) {
-    return MIN_BODY
+    return null
   }
 
   try {
     const parsed = JSON.parse(bodyText) as Record<string, unknown>
 
+    if (!parsed.startDate || !parsed.endDate || !Array.isArray(parsed.products))
+      return null
     const rates = parsed.rates as { ratePlanCodes?: unknown } | undefined
     return {
       ...parsed,
       rates: {
         ...rates,
-        ratePlanCodes: MIN_BODY.rates.ratePlanCodes
+        ratePlanCodes: REWARD_RATE_PLANS
       }
     }
   } catch {
-    return MIN_BODY
+    return null
   }
 }
 
@@ -463,7 +432,9 @@ const runBackgroundRequest = async (
   rawRequestHeaders?: chrome.webRequest.HttpHeader[]
 ) => {
   const existing = await chrome.storage.local.get(IHG_STORAGE_KEY)
-  const existingPayload = existing[IHG_STORAGE_KEY] as IhgMessagePayload | undefined
+  const existingPayload = existing[IHG_STORAGE_KEY] as
+    | IhgMessagePayload
+    | undefined
   if (
     existingPayload?.url !==
     "https://apis.ihg.com/availability/v3/hotels/offers?fieldset=summary,summary.rateRanges"
@@ -471,8 +442,14 @@ const runBackgroundRequest = async (
     return
   }
 
+  const pointsBody = buildPointsBodyFromText(
+    bodyText ?? existingPayload?.bodyText
+  )
+  if (!pointsBody) {
+    backgroundSent.delete(requestId)
+    return
+  }
   try {
-    const pointsBody = buildPointsBodyFromText(bodyText ?? existingPayload?.bodyText)
     const derivedHeaders = toHeaderRecord(
       rawRequestHeaders ?? existingPayload?.requestHeaders
     )
@@ -481,7 +458,7 @@ const runBackgroundRequest = async (
       ...derivedHeaders,
       "content-type": "application/json; charset=UTF-8"
     }
-    const response = await fetch(
+    const response = await ihgRequests.request(
       "https://apis.ihg.com/availability/v3/hotels/offers?fieldset=summary,summary.rateRanges",
       {
         method: "POST",
@@ -513,7 +490,6 @@ const runBackgroundRequest = async (
       [IHG_SENT_STORAGE_KEY]: sentRequest
     })
   } catch (error) {
-    const pointsBody = buildPointsBodyFromText(bodyText ?? existingPayload?.bodyText)
     const derivedHeaders = toHeaderRecord(
       rawRequestHeaders ?? existingPayload?.requestHeaders
     )
@@ -568,12 +544,21 @@ type IhgStayDetails = {
 }
 
 // hotelMnemonic + search signature -> result (avoid refetching the heavy call)
-const rateDetailsCache = new Map<string, IhgStayDetails>()
+const rateDetailsCache = new Map<
+  string,
+  { result: IhgStayDetails; ts: number }
+>()
+const rateDetailsPending = new Map<string, Promise<IhgStayDetails>>()
 
-const buildRateDetailsBody = (baseBodyText: string | null, hotelMnemonic: string) => {
+const buildRateDetailsBody = (
+  baseBodyText: string | null,
+  hotelMnemonic: string
+) => {
   let base: Record<string, unknown> = {}
   try {
-    base = baseBodyText ? (JSON.parse(baseBodyText) as Record<string, unknown>) : {}
+    base = baseBodyText
+      ? (JSON.parse(baseBodyText) as Record<string, unknown>)
+      : {}
   } catch {
     base = {}
   }
@@ -587,7 +572,8 @@ const buildRateDetailsBody = (baseBodyText: string | null, hotelMnemonic: string
 
 const parseRewardNights = (responseBodyText: string): IhgStayDetails => {
   const parsed = JSON.parse(responseBodyText) as Record<string, unknown>
-  const hotels = (parsed.hotels as Array<Record<string, unknown>> | undefined) ?? []
+  const hotels =
+    (parsed.hotels as Array<Record<string, unknown>> | undefined) ?? []
   const offers =
     ((hotels[0]?.rateDetails as Record<string, unknown> | undefined)?.offers as
       | Array<Record<string, unknown>>
@@ -600,7 +586,8 @@ const parseRewardNights = (responseBodyText: string): IhgStayDetails => {
   if (!pointsOnly) {
     return { status: "none" }
   }
-  const daily = (pointsOnly.daily as Array<Record<string, unknown>> | undefined) ?? []
+  const daily =
+    (pointsOnly.daily as Array<Record<string, unknown>> | undefined) ?? []
   const freeNightCount = daily.filter((d) => Number(d.points) === 0).length
   const totalPoints = Number(pointsOnly.totalPoints)
   const originalTotalPoints = Number(pointsOnly.originalTotalPoints)
@@ -608,7 +595,9 @@ const parseRewardNights = (responseBodyText: string): IhgStayDetails => {
     status: "ok",
     nights: daily.length,
     totalPoints: Number.isFinite(totalPoints) ? totalPoints : undefined,
-    originalTotalPoints: Number.isFinite(originalTotalPoints) ? originalTotalPoints : undefined,
+    originalTotalPoints: Number.isFinite(originalTotalPoints)
+      ? originalTotalPoints
+      : undefined,
     savedPoints:
       Number.isFinite(originalTotalPoints) && Number.isFinite(totalPoints)
         ? originalTotalPoints - totalPoints
@@ -621,50 +610,78 @@ const parseRewardNights = (responseBodyText: string): IhgStayDetails => {
   }
 }
 
-const runRateDetailsRequest = async (hotelMnemonic: string): Promise<IhgStayDetails> => {
+const runRateDetailsRequest = async (
+  hotelMnemonic: string
+): Promise<IhgStayDetails> => {
   const stored = await chrome.storage.local.get(IHG_STORAGE_KEY)
   const last = stored[IHG_STORAGE_KEY] as
-    | { bodyText?: string | null; requestHeaders?: chrome.webRequest.HttpHeader[]; bookingType?: string }
+    | {
+        bodyText?: string | null
+        requestHeaders?: chrome.webRequest.HttpHeader[]
+        bookingType?: string
+      }
     | undefined
-  const sig = extractSearchSignature(last?.bodyText ?? null)
-  const cacheKey = `${hotelMnemonic}|${sig ?? ""}`
-  const cached = rateDetailsCache.get(cacheKey)
-  if (cached) {
-    return cached
+  if (!last?.bodyText || !buildPointsBodyFromText(last.bodyText)) {
+    return { status: "error", error: "Run a hotel search first" }
   }
-
-  const body = buildRateDetailsBody(last?.bodyText ?? null, hotelMnemonic)
+  const body = buildRateDetailsBody(last.bodyText, hotelMnemonic)
+  // Include occupancy and current member headers, not just dates/location.
+  const cacheKey = JSON.stringify([body, last.requestHeaders])
+  const cached = rateDetailsCache.get(cacheKey)
+  if (cached && Date.now() - cached.ts < 60_000) return cached.result
+  const pending = rateDetailsPending.get(cacheKey)
+  if (pending) return pending
   const headers = {
     ...MIN_HEADERS,
     ...toHeaderRecord(last?.requestHeaders),
     "content-type": "application/json; charset=UTF-8"
   }
-  try {
-    const response = await fetch(IHG_RATEDETAILS_URL, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(body),
-      credentials: "include"
-    })
-    const text = await response.text()
-    const result = response.ok ? parseRewardNights(text) : { status: "error" as const, error: `HTTP ${response.status}` }
-    rateDetailsCache.set(cacheKey, result)
-    return result
-  } catch (error) {
-    const result: IhgStayDetails = {
-      status: "error",
-      error: error instanceof Error ? error.message : "rateDetails request failed"
+  const request = (async (): Promise<IhgStayDetails> => {
+    try {
+      const response = await ihgRequests.request(IHG_RATEDETAILS_URL, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(15_000),
+        credentials: "include"
+      })
+      const text = await response.text()
+      const result = response.ok
+        ? parseRewardNights(text)
+        : { status: "error" as const, error: `HTTP ${response.status}` }
+      if (result.status !== "error") {
+        if (rateDetailsCache.size >= 100)
+          rateDetailsCache.delete(rateDetailsCache.keys().next().value)
+        rateDetailsCache.set(cacheKey, { result, ts: Date.now() })
+      }
+      return result
+    } catch (error) {
+      const result: IhgStayDetails = {
+        status: "error",
+        error:
+          error instanceof Error ? error.message : "rateDetails request failed"
+      }
+      return result
     }
-    return result
-  }
+  })().finally(() => rateDetailsPending.delete(cacheKey))
+  rateDetailsPending.set(cacheKey, request)
+  return request
 }
 
 chrome.runtime.onMessage.addListener(
-  (message: { type?: string; hotelMnemonic?: string }, _sender, sendResponse) => {
+  (
+    message: { type?: string; hotelMnemonic?: string },
+    _sender,
+    sendResponse
+  ) => {
     if (message?.type !== "ihg-rate-details" || !message.hotelMnemonic) {
       return undefined
     }
-    runRateDetailsRequest(message.hotelMnemonic).then(sendResponse)
+    runRateDetailsRequest(message.hotelMnemonic)
+      .then(sendResponse)
+      .catch(() =>
+        sendResponse({ status: "error", error: "Rate details unavailable" })
+      )
     return true // async sendResponse
   }
 )

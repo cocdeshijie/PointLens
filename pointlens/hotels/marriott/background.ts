@@ -1,3 +1,5 @@
+import { fetchUsdRate } from "../../shared/fx"
+
 type Pending = {
   url: string
   method: string
@@ -44,9 +46,9 @@ function bytesToText(
   }
 }
 
-function normalizeHeaders(
-  hs?: chrome.webRequest.HttpHeader[]
-): { headers: Record<string, string> } {
+function normalizeHeaders(hs?: chrome.webRequest.HttpHeader[]): {
+  headers: Record<string, string>
+} {
   const out: Record<string, string> = {}
 
   for (const h of hs ?? []) {
@@ -92,48 +94,6 @@ function tryEmit(requestId: string) {
 
   requestPageReplay(p)
   pending.delete(requestId)
-}
-
-const FX_TTL_MS = 24 * 60 * 60 * 1000
-const FX_KEY = (cur: string) => `pointlens:fx-usd:${cur}`
-
-// Fetch "USD per 1 unit of <currency>" from a free, no-key FX API. Runs in the
-// background (extension origin) so it isn't subject to page CORS. Cached in
-// storage for a day. Returns null on failure (caller falls back to raw cash).
-async function fetchUsdRate(currency: string): Promise<number | null> {
-  const cur = currency.toUpperCase()
-  if (cur === "USD") return 1
-
-  const key = FX_KEY(cur)
-  try {
-    const cached = (await chrome.storage.local.get(key))?.[key] as
-      | { rate?: number; ts?: number }
-      | undefined
-    if (
-      cached &&
-      typeof cached.rate === "number" &&
-      typeof cached.ts === "number" &&
-      Date.now() - cached.ts < FX_TTL_MS
-    ) {
-      return cached.rate
-    }
-  } catch {
-    /* fall through to network */
-  }
-
-  try {
-    const res = await fetch(`https://open.er-api.com/v6/latest/${cur}`)
-    if (!res.ok) return null
-    const json = (await res.json()) as { rates?: Record<string, number> }
-    const rate = json?.rates?.USD
-    if (typeof rate === "number" && Number.isFinite(rate) && rate > 0) {
-      await chrome.storage.local.set({ [key]: { rate, ts: Date.now() } })
-      return rate
-    }
-  } catch {
-    /* network/parse error */
-  }
-  return null
 }
 
 export const registerMarriottListeners = () => {

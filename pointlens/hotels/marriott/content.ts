@@ -3,6 +3,8 @@ import React from "react"
 import { createRoot } from "react-dom/client"
 import { CiCircleInfo } from "react-icons/ci"
 
+import { hasHostMutation, makeInfoAccessible } from "../../shared/dom"
+import { attachTooltip as attachSmartTooltip } from "../../shared/tooltip"
 import {
   DEFAULT_MARRIOTT_VALUE_SETTINGS,
   MARRIOTT_VALUE_SETTINGS_KEY,
@@ -50,29 +52,39 @@ let marriottValueSettings = DEFAULT_MARRIOTT_VALUE_SETTINGS
 // tooltip stays in the local currency; only the ¢/pt ratio is normalized.
 const usdRateByCurrency = new Map<string, number>([["USD", 1]])
 const fxInflight = new Set<string>()
+const fxRetryAfter = new Map<string, number>()
 
 const ensureFxRate = (currency: string) => {
   const cur = currency.toUpperCase()
-  if (cur === "USD" || usdRateByCurrency.has(cur) || fxInflight.has(cur)) {
+  if (
+    cur === "USD" ||
+    usdRateByCurrency.has(cur) ||
+    fxInflight.has(cur) ||
+    (fxRetryAfter.get(cur) ?? 0) > Date.now()
+  ) {
     return
   }
   fxInflight.add(cur)
   try {
-    chrome.runtime.sendMessage({ type: "MARRIOTT_FETCH_FX", currency: cur }, (resp) => {
-      fxInflight.delete(cur)
-      const rate = (resp as { rate?: number } | undefined)?.rate
-      if (typeof rate === "number" && Number.isFinite(rate) && rate > 0) {
-        usdRateByCurrency.set(cur, rate)
-        void refreshRatesFromStorage() // recompute CPP now that the rate is known
+    chrome.runtime.sendMessage(
+      { type: "MARRIOTT_FETCH_FX", currency: cur },
+      (resp) => {
+        fxInflight.delete(cur)
+        void chrome.runtime.lastError
+        fxRetryAfter.set(cur, Date.now() + 60_000)
+        const rate = (resp as { rate?: number } | undefined)?.rate
+        if (typeof rate === "number" && Number.isFinite(rate) && rate > 0) {
+          usdRateByCurrency.set(cur, rate)
+          void refreshRatesFromStorage() // recompute CPP now that the rate is known
+        }
       }
-    })
+    )
   } catch {
     fxInflight.delete(cur)
   }
 }
 
-// Convert an amount in `currency` to USD. Returns the raw amount (and kicks off a
-// one-time rate fetch) until the rate is known, so CPP self-corrects on arrival.
+// Do not label a foreign amount as USD while its conversion is unavailable.
 const toUsd = (amount: number | undefined, currency?: string) => {
   if (amount === undefined) {
     return undefined
@@ -86,7 +98,7 @@ const toUsd = (amount: number | undefined, currency?: string) => {
     return amount * rate
   }
   ensureFxRate(cur)
-  return amount
+  return undefined
 }
 
 function inject(src: string) {
@@ -301,12 +313,13 @@ const buildRatesFromStorage = (raw: unknown) => {
     const standardRate = Array.isArray(rates)
       ? rates.find(
           (rate) =>
-            (rate?.rateCategory as Record<string, unknown> | undefined)?.code ===
-            "StandardRates"
+            (rate?.rateCategory as Record<string, unknown> | undefined)
+              ?.code === "StandardRates"
         )
       : undefined
-    const standardRateModes = (standardRate?.rateModes ??
-      undefined) as Record<string, unknown> | undefined
+    const standardRateModes = (standardRate?.rateModes ?? undefined) as
+      | Record<string, unknown>
+      | undefined
     const standardLowestAverageRate = (standardRateModes?.lowestAverageRate ??
       undefined) as Record<string, unknown> | undefined
 
@@ -334,9 +347,12 @@ const buildRatesFromStorage = (raw: unknown) => {
     })()
 
     const currency =
-      ((standardLowestAverageRate?.amount as Record<string, unknown> | undefined)
-        ?.currency as string | undefined) ??
-      (!Array.isArray(rates) ? (rates.currency as string | undefined) : undefined) ??
+      ((
+        standardLowestAverageRate?.amount as Record<string, unknown> | undefined
+      )?.currency as string | undefined) ??
+      (!Array.isArray(rates)
+        ? (rates.currency as string | undefined)
+        : undefined) ??
       (property?.currency as string | undefined) ??
       ((property?.basicInformation as Record<string, unknown> | undefined)
         ?.currency as string | undefined) ??
@@ -479,15 +495,23 @@ const updateMapPins = () => {
 // nycof-...`, so we read the hotel id from there.
 // ----------------------------------------------------------------------------
 const marshaFromModal = (root: ParentNode): string | null => {
-  const byCode = root.querySelector<HTMLAnchorElement>("a[href*='propertyCode=']")
+  const byCode = root.querySelector<HTMLAnchorElement>(
+    "a[href*='propertyCode=']"
+  )
   if (byCode) {
-    const m = /propertyCode=([A-Za-z0-9]+)/.exec(byCode.getAttribute("href") || "")
+    const m = /propertyCode=([A-Za-z0-9]+)/.exec(
+      byCode.getAttribute("href") || ""
+    )
     const id = m ? normalizeHotelId(m[1]) : null
     if (id) return id
   }
-  const byPath = root.querySelector<HTMLAnchorElement>("a[href*='/hotels/travel/']")
+  const byPath = root.querySelector<HTMLAnchorElement>(
+    "a[href*='/hotels/travel/']"
+  )
   if (byPath) {
-    const m = /\/hotels\/travel\/([A-Za-z0-9]+)-/.exec(byPath.getAttribute("href") || "")
+    const m = /\/hotels\/travel\/([A-Za-z0-9]+)-/.exec(
+      byPath.getAttribute("href") || ""
+    )
     const id = m ? normalizeHotelId(m[1]) : null
     if (id) return id
   }
@@ -515,90 +539,10 @@ const formatPointsK = (points?: number) => {
 // descendant of a transformed element is positioned relative to THAT element,
 // not the viewport — which mis-placed the tooltip in the popups). On hover we
 // clone the icon's stored content into it and position it against the viewport.
-let sharedTooltip: HTMLElement | null = null
-// The icon the tooltip currently belongs to. Hide is driven by the real pointer
-// POSITION (mousemove vs the icon's rect), NOT by mouseout/mouseleave events —
-// the popups re-render the badge under the cursor, which fires spurious
-// mouseout/mouseover and made the tooltip flicker. Position-based hide ignores
-// DOM churn and only reacts to genuine pointer movement.
-let activeTipIcon: HTMLElement | null = null
-const hideSharedTooltip = () => {
-  if (sharedTooltip) sharedTooltip.style.opacity = "0"
-  activeTipIcon = null
-}
-const positionSharedTooltip = (icon: HTMLElement) => {
-  const tip = getSharedTooltip()
-  const ir = icon.getBoundingClientRect()
-  const tw = tip.offsetWidth || 260
-  const th = tip.offsetHeight || 120
-  const m = 8
-  let left = ir.left + ir.width / 2 - tw / 2
-  left = Math.max(m, Math.min(left, window.innerWidth - tw - m))
-  let top = ir.top - th - m
-  if (top < m) top = ir.bottom + m // flip below when no room above
-  if (top + th > window.innerHeight - m) {
-    top = Math.max(m, window.innerHeight - th - m)
-  }
-  tip.style.left = `${left}px`
-  tip.style.top = `${top}px`
-}
-const getSharedTooltip = () => {
-  if (sharedTooltip && sharedTooltip.isConnected) return sharedTooltip
-  sharedTooltip = document.createElement("div")
-  sharedTooltip.className = "pointlens-tooltip pointlens-shared-tooltip"
-  document.body.appendChild(sharedTooltip)
-  document.addEventListener(
-    "mousemove",
-    (e) => {
-      if (!activeTipIcon) return
-      const r = activeTipIcon.getBoundingClientRect()
-      if (r.width === 0 && r.height === 0) {
-        hideSharedTooltip() // icon gone
-        return
-      }
-      const pad = 6
-      const inside =
-        e.clientX >= r.left - pad &&
-        e.clientX <= r.right + pad &&
-        e.clientY >= r.top - pad &&
-        e.clientY <= r.bottom + pad
-      if (!inside) hideSharedTooltip()
-    },
-    true
-  )
-  window.addEventListener("scroll", hideSharedTooltip, true)
-  return sharedTooltip
-}
-
-const attachSmartTooltip = (iconWrapper: HTMLElement) => {
-  if (iconWrapper.dataset.avSmartTip) return
-  const source = iconWrapper.querySelector<HTMLElement>(".pointlens-tooltip")
-  if (!source) return
-  iconWrapper.dataset.avSmartTip = "1"
-
-  const show = () => {
-    const tip = getSharedTooltip()
-    // Only (re)fill + reset when switching to a different icon — re-showing the
-    // SAME icon must not reset opacity (that restarts the fade and flickers).
-    if (activeTipIcon !== iconWrapper) {
-      activeTipIcon = iconWrapper
-      tip.replaceChildren(
-        ...Array.from(source.childNodes).map((n) => n.cloneNode(true))
-      )
-    }
-    positionSharedTooltip(iconWrapper)
-    tip.style.opacity = "1"
-  }
-  iconWrapper.addEventListener("mouseenter", show)
-  iconWrapper.addEventListener("focusin", show)
-  iconWrapper.addEventListener("focusout", hideSharedTooltip)
-}
-
-// The detail "info" button (hover -> cash/points breakdown), reused from the
-// list placeholder so it sits to the LEFT of the badge.
 const buildInfoIcon = (info: MarriottRateInfo) => {
   const iconWrapper = document.createElement("span")
   iconWrapper.className = PLACEHOLDER_ICON_CLASS
+  makeInfoAccessible(iconWrapper)
   const iconTarget = document.createElement("span")
   iconTarget.className = "pointlens-icon"
   iconWrapper.appendChild(iconTarget)
@@ -622,7 +566,8 @@ const buildCppBadgeContents = (info: MarriottRateInfo, hasReward: boolean) => {
   const cpp = document.createElement("span")
   cpp.className = "av-cpp"
   if (hasReward) {
-    cpp.textContent = info.cpp !== undefined ? `${info.cpp.toFixed(2)}¢/pt` : "—"
+    cpp.textContent =
+      info.cpp !== undefined ? `${info.cpp.toFixed(2)}¢/pt` : "—"
     frag.appendChild(cpp)
     const sub = document.createElement("span")
     sub.className = "av-sub"
@@ -665,7 +610,7 @@ const renderCppBadge = (
   }
 
   const tier = hasReward ? pinValueTier(info.cpp) || "is-mid" : "is-none"
-  const sig = `${key ?? ""}|${hasReward ? info.cpp?.toFixed(2) : "none"}|${tier}|${compact ? "c" : "f"}`
+  const sig = JSON.stringify([key, info, tier, compact])
   if (badge && badge.dataset.av === sig) {
     // Content already correct — just make sure it's at the desired position
     // (moving a node doesn't rebuild its React icon, so no churn).
@@ -717,7 +662,9 @@ const feeAnchor = (
 }
 
 const updateDetailModal = () => {
-  const rateContainer = document.querySelector<HTMLElement>(".hqv-rate-container")
+  const rateContainer = document.querySelector<HTMLElement>(
+    ".hqv-rate-container"
+  )
   if (!rateContainer || !rateContainer.parentElement) return
 
   const scope: Element =
@@ -1027,12 +974,16 @@ const buildTooltipContent = (info: MarriottRateInfo) => {
     const headerRow = document.createElement("div")
     headerRow.className = "pointlens-tooltip-row"
     const headerLabel = document.createElement("div")
-    headerLabel.className = "pointlens-tooltip-cell pointlens-tooltip-cell--label"
+    headerLabel.className =
+      "pointlens-tooltip-cell pointlens-tooltip-cell--label"
     headerLabel.textContent = "Lowest cash"
     const headerValue = document.createElement("div")
-    headerValue.className = "pointlens-tooltip-cell pointlens-tooltip-cell--value"
+    headerValue.className =
+      "pointlens-tooltip-cell pointlens-tooltip-cell--value"
     headerValue.textContent =
-      info.stayNights !== undefined && info.stayNights > 1 ? "Price per night" : "Price"
+      info.stayNights !== undefined && info.stayNights > 1
+        ? "Price per night"
+        : "Price"
     headerRow.appendChild(headerLabel)
     headerRow.appendChild(headerValue)
     grid.appendChild(headerRow)
@@ -1090,6 +1041,7 @@ const ensurePlaceholderContents = (placeholder: HTMLElement) => {
   if (!iconWrapper) {
     iconWrapper = document.createElement("span")
     iconWrapper.className = PLACEHOLDER_ICON_CLASS
+    makeInfoAccessible(iconWrapper)
 
     const iconTarget = document.createElement("span")
     iconTarget.className = "pointlens-icon"
@@ -1191,7 +1143,7 @@ const updatePlaceholderText = (placeholder: HTMLElement) => {
       info.points !== undefined
         ? info.points / info.stayNights
         : info.points
-    valueEl.textContent = `${formatCpp(info.cpp)} · ${formatPointsK(ptsPerNight)} pts`
+    valueEl.textContent = `${formatCpp(info.cpp) || "USD conversion unavailable"} · ${formatPointsK(ptsPerNight)} pts`
     if (tooltip) {
       tooltip.replaceChildren(buildTooltipContent(info))
     }
@@ -1229,7 +1181,9 @@ const getRateLink = (card: HTMLElement) => {
 // plain `.mandatory-fee-section` in list-only mode — match both, visible, with
 // fee wording, outside a hover tooltip.
 const cardFeeNotice = (card: HTMLElement) =>
-  [...card.querySelectorAll<HTMLElement>("[class*='mandatory-fee-section']")].find(
+  [
+    ...card.querySelectorAll<HTMLElement>("[class*='mandatory-fee-section']")
+  ].find(
     (e) =>
       e.offsetParent !== null &&
       FEE_TEXT_RE.test(e.textContent || "") &&
@@ -1255,6 +1209,12 @@ const ensurePlaceholder = (card: HTMLElement) => {
     updatePlaceholderText(placeholder)
   }
 
+  const currentId = normalizeHotelId(getHotelIdFromCard(card))
+  if (currentId && placeholder.dataset.hotelId !== currentId) {
+    placeholder.dataset.hotelId = currentId
+    updatePlaceholderText(placeholder)
+  }
+
   // Keep the badge directly BELOW the fee notice. The fee can load AFTER the
   // placeholder is first inserted (and its class differs per view), so re-check
   // each pass — idempotent: moves only when not already right after the fee.
@@ -1271,21 +1231,30 @@ const refreshPlaceholders = () => {
 }
 
 const updateExistingPlaceholders = () => {
-  const placeholders = document.querySelectorAll<HTMLElement>(`.${PLACEHOLDER_CLASS}`)
+  const placeholders = document.querySelectorAll<HTMLElement>(
+    `.${PLACEHOLDER_CLASS}`
+  )
   placeholders.forEach((placeholder) => updatePlaceholderText(placeholder))
 }
 
 const startPlaceholderObserver = () => {
   if (!document.body) return
   refreshPlaceholders()
-  void refreshRatesFromStorage()
   void refreshValueSettings()
-  const observer = new MutationObserver(scheduleUpdate)
-  observer.observe(document.body, { childList: true, subtree: true })
+  const observer = new MutationObserver((mutations) => {
+    if (hasHostMutation(mutations)) scheduleUpdate()
+  })
+  observer.observe(document.body, {
+    childList: true,
+    subtree: true,
+    attributes: true,
+    attributeFilter: ["data-marsha"]
+  })
 
-  chrome?.storage?.onChanged?.addListener(() => {
-    void refreshRatesFromStorage()
-    void refreshValueSettings()
+  chrome?.storage?.onChanged?.addListener((changes, area) => {
+    if (area !== "local") return
+    if (changes[MARRIOTT_VALUE_SETTINGS_KEY]) void refreshValueSettings()
+    else if (changes[MARRIOTT_STORAGE_KEY]) void refreshRatesFromStorage()
   })
 }
 
