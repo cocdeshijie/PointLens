@@ -63,6 +63,9 @@ layouts and available pricing data vary by site.
   are labeled.
 - **Your definition of good value.** Set good and poor CPP thresholds and
   choose before-tax or after-tax comparisons separately for each program.
+- **Update reminders.** A notice at the bottom of the popup links to the newest
+  GitHub release page when a newer version is available. Checks run at most once
+  a day when you open the popup; updates are installed manually.
 - **Light, dark, or system appearance.** Choose the extension popup theme you prefer.
 - **Accessible details.** Open comparison tooltips with a mouse, keyboard, or click.
 - **Limited extra requests.** Reuse pricing already loaded by hotel websites.
@@ -104,7 +107,9 @@ PointLens reads supported hotel pages and their pricing responses, and stores
 preferences and cached data in browser storage. Its current manifest requests
 HTTPS site access, plus `scripting`, `webRequest`, `tabs`, and `storage` for the
 page integrations and popup. Currency conversion makes requests to
-`open.er-api.com` and caches successful rates for 24 hours.
+`open.er-api.com` and caches successful rates for 24 hours. Update checks request
+public release metadata from `api.github.com` without credentials and cache
+the result locally.
 
 Hotel websites change frequently. A missing badge can mean pricing is still
 loading, an award is unavailable, a request failed, or a page layout needs an
