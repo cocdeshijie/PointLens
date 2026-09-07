@@ -17,11 +17,11 @@ module.exports = () => {
   const directory = process.env.PLASMO_BUILD_DIR || path.resolve("build")
   const filename = path.join(directory, `${target}-${tag}`, "manifest.json")
   const manifest = JSON.parse(fs.readFileSync(filename, "utf8"))
-  for (const brand of ["hyatt", "ihg", "marriott", "wyndham"]) {
+  for (const brand of ["hyatt", "ihg", "marriott", "wyndham", "choice"]) {
     const entries = manifest.content_scripts.filter(
       (entry) =>
         entry.matches?.includes(
-          `https://www.${brand === "wyndham" ? "wyndhamhotels" : brand}.com/*`
+          `https://www.${brand === "wyndham" ? "wyndhamhotels" : brand === "choice" ? "choicehotels" : brand}.com/*`
         ) && entry.js?.some((file) => /^content-main\.[\w]+\.js$/.test(file))
     )
     if (entries.length !== 1)

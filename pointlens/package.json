@@ -2,7 +2,7 @@
   "name": "point-lens",
   "displayName": "Point Lens",
   "version": "1.0.8",
-  "description": "See hotel award point value (cents per point) at a glance on Hilton, IHG, Marriott, Hyatt, and Wyndham search results.",
+  "description": "See hotel award point value (cents per point) at a glance on Hilton, IHG, Marriott, Hyatt, Wyndham, and Choice search results.",
   "author": "cocdeshijie",
   "scripts": {
     "dev": "POST_BUILD_SCRIPT=./scripts/finalize-main-world.cjs plasmo dev",
@@ -76,6 +76,15 @@
         ],
         "js": [
           "../hotels/wyndham/content-main.ts"
+        ],
+        "run_at": "document_start"
+      },
+      {
+        "matches": [
+          "https://www.choicehotels.com/*"
+        ],
+        "js": [
+          "../hotels/choice/content-main.ts"
         ],
         "run_at": "document_start"
       }

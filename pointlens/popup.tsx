@@ -1,3 +1,5 @@
+import choiceIcon from "data-base64:~assets/choice.svg"
+import ChoicePopup from "./hotels/choice/Popup"
 import appIcon from "data-base64:~assets/icon.png"
 import hiltonIcon from "data-base64:~assets/hilton.png"
 import hyattIcon from "data-base64:~assets/hyatt.png"
@@ -32,6 +34,7 @@ const SUPPORTED_SITES: readonly Site[] = [
   { id: "marriott", name: "Marriott", domain: "marriott.com", accent: "#9A1C36", icon: marriottIcon },
   { id: "hyatt", name: "Hyatt", domain: "hyatt.com", accent: "#0072CE", icon: hyattIcon },
   { id: "wyndham", name: "Wyndham", domain: "wyndhamhotels.com", accent: "#003c5a", icon: wyndhamIcon },
+  { id: "choice", name: "Choice Hotels", domain: "choicehotels.com", accent: "#ec6b24", icon: choiceIcon },
 ] as const
 
 function IndexPopup() {
@@ -101,6 +104,8 @@ function IndexPopup() {
       icon: site.icon
     }
     switch (site.id) {
+      case "choice":
+        return <ChoicePopup onBack={goHome} site={meta} />
       case "wyndham":
         return <WyndhamPopup onBack={goHome} site={meta} />
       case "ihg":

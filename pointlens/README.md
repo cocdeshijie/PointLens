@@ -99,3 +99,15 @@ remaining limitations and request findings.
 ## Submit to the webstores
 
 The easiest way to deploy your Plasmo extension is to use the built-in [bpp](https://bpp.browser.market) GitHub action. Prior to using this action however, make sure to build your extension and upload the first version to the store to establish the basic credentials. Then, simply follow [this setup instruction](https://docs.plasmo.com/framework/workflows/submit) and you should be on your way for automated submission!
+
+## Choice Hotels
+
+Choice supports cash/points search, map pins, sidebar cards and hotel previews, property room lists, exact room
+rate plans, and room/rate details. Badges use the same compact CPP and opposite
+payment amount, with a loading state and explicit unavailable awards. Choice has
+its own popup settings, including tax basis and value thresholds.
+
+The adapter reuses native GraphQL responses and direct-page pricing hydration.
+Missing comparison rates use a batched, rate-limited supplement; it does not
+request each hotel separately. See [Choice request findings](../findings/choicehotels-com/network.md)
+for sources, fee treatment and live coverage.
