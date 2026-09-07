@@ -4,6 +4,8 @@
 
 # PointLens
 
+**English** | [简体中文](README.zh-CN.md)
+
 **Hotel points value, at a glance.**
 
 PointLens is a Chrome extension that shows how much value you get from hotel
