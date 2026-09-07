@@ -1,0 +1,447 @@
+{
+  "data": {
+    "getHotelAvailabilityLowestRate": [
+      {
+        "hotelCode": "IL715",
+        "brandCode": "RB",
+        "startDate": "2026-09-18",
+        "endDate": "2026-09-20",
+        "nights": 2,
+        "rank": 1198.3393625235367,
+        "policyStatus": null,
+        "lowestRate": {
+          "defaultRate": {
+            "ratePlanCode": "SMFLX",
+            "currencyCode": "USD",
+            "amountBeforeTaxFees": 1043.1,
+            "amountAfterTaxFees": 1292.24,
+            "avgNightlyAmount": 555.37,
+            "avgNightlyAmountBeforeTaxFees": 521.55,
+            "avgNightlyAmountAfterTaxFees": 646.12,
+            "points": 0.0,
+            "avgNightlyPoints": 0.0,
+            "avgNightlyTaxes": {
+              "total": 90.75,
+              "itemizedValues": {
+                "HOTEL_TAX": 90.75
+              }
+            },
+            "avgNightlyFees": {
+              "total": 33.82,
+              "itemizedValues": {
+                "HOTEL_DESTINATION_FEE": 7.82,
+                "HOTEL_URBAN_FEE": 26.0
+              }
+            },
+            "taxInclusive": false,
+            "discountPercentage": 5,
+            "strikethroughDetails": {
+              "avgNightlyAmount": 583.24,
+              "avgNightlyPoints": null,
+              "ratePlanCode": "RACK",
+              "currencyCode": "USD"
+            },
+            "roomPolicy": null,
+            "ratePlanCategories": [
+              "SMFLX",
+              "Corporate"
+            ]
+          },
+          "memberRate": {
+            "ratePlanCode": "SMFLXM",
+            "currencyCode": "USD",
+            "amountBeforeTaxFees": 978.32,
+            "amountAfterTaxFees": 1215.22,
+            "avgNightlyAmount": 522.5,
+            "avgNightlyAmountBeforeTaxFees": 489.16,
+            "avgNightlyAmountAfterTaxFees": 607.61,
+            "points": 0.0,
+            "avgNightlyPoints": 0.0,
+            "avgNightlyTaxes": {
+              "total": 85.12,
+              "itemizedValues": {
+                "HOTEL_TAX": 85.12
+              }
+            },
+            "avgNightlyFees": {
+              "total": 33.34,
+              "itemizedValues": {
+                "HOTEL_DESTINATION_FEE": 7.34,
+                "HOTEL_URBAN_FEE": 26.0
+              }
+            },
+            "taxInclusive": false,
+            "discountPercentage": 10,
+            "strikethroughDetails": {
+              "avgNightlyAmount": 583.24,
+              "avgNightlyPoints": null,
+              "ratePlanCode": "RACK",
+              "currencyCode": "USD"
+            },
+            "roomPolicy": null,
+            "ratePlanCategories": [
+              "FENCD",
+              "SMFLX",
+              "Corporate"
+            ]
+          }
+        },
+        "requestedRates": [
+          {
+            "defaultRate": {
+              "ratePlanCode": "RACK",
+              "currencyCode": "USD",
+              "amountBeforeTaxFees": 1098.0,
+              "amountAfterTaxFees": 1357.54,
+              "avgNightlyAmount": 583.24,
+              "avgNightlyAmountBeforeTaxFees": 549.0,
+              "avgNightlyAmountAfterTaxFees": 678.77,
+              "points": 0.0,
+              "avgNightlyPoints": 0.0,
+              "avgNightlyTaxes": {
+                "total": 95.53,
+                "itemizedValues": {
+                  "HOTEL_TAX": 95.53
+                }
+              },
+              "avgNightlyFees": {
+                "total": 34.24,
+                "itemizedValues": {
+                  "HOTEL_DESTINATION_FEE": 8.24,
+                  "HOTEL_URBAN_FEE": 26.0
+                }
+              },
+              "taxInclusive": false,
+              "discountPercentage": 0,
+              "strikethroughDetails": null,
+              "roomPolicy": null
+            }
+          },
+          {
+            "defaultRate": {
+              "ratePlanCode": "SRD",
+              "currencyCode": "XLY",
+              "amountBeforeTaxFees": 0.0,
+              "amountAfterTaxFees": 0.0,
+              "avgNightlyAmount": 0.0,
+              "avgNightlyAmountBeforeTaxFees": 0.0,
+              "avgNightlyAmountAfterTaxFees": 0.0,
+              "points": 100000.0,
+              "avgNightlyPoints": 50000.0,
+              "avgNightlyTaxes": {
+                "total": 0,
+                "itemizedValues": {}
+              },
+              "avgNightlyFees": {
+                "total": 0,
+                "itemizedValues": {}
+              },
+              "taxInclusive": false,
+              "discountPercentage": 0,
+              "strikethroughDetails": null,
+              "roomPolicy": null
+            }
+          }
+        ],
+        "taxes": [
+          {
+            "startDate": "2026-09-18",
+            "endDate": "2026-09-20",
+            "currencyCode": "",
+            "frequency": "",
+            "amount": 0.0,
+            "percentage": 17.4
+          }
+        ],
+        "fees": [
+          {
+            "startDate": "2026-09-18",
+            "endDate": "2026-09-20",
+            "currencyCode": "USD",
+            "frequency": "PER_ROOM_PER_NIGHT",
+            "amount": 26.0,
+            "percentage": 0.0
+          },
+          {
+            "startDate": "2026-09-18",
+            "endDate": "2026-09-20",
+            "currencyCode": "",
+            "frequency": "",
+            "amount": 0.0,
+            "percentage": 1.5
+          }
+        ]
+      },
+      {
+        "hotelCode": "IL514",
+        "brandCode": "BR",
+        "startDate": "2026-09-18",
+        "endDate": "2026-09-20",
+        "nights": 2,
+        "rank": 1129.4647591862254,
+        "policyStatus": null,
+        "lowestRate": {
+          "defaultRate": {
+            "ratePlanCode": "S10M2M",
+            "currencyCode": "USD",
+            "amountBeforeTaxFees": 887.5,
+            "amountAfterTaxFees": 1055.23,
+            "avgNightlyAmount": 450.41,
+            "avgNightlyAmountBeforeTaxFees": 443.75,
+            "avgNightlyAmountAfterTaxFees": 527.62,
+            "points": 0.0,
+            "avgNightlyPoints": 0.0,
+            "avgNightlyTaxes": {
+              "total": 77.21,
+              "itemizedValues": {
+                "HOTEL_TAX": 77.21
+              }
+            },
+            "avgNightlyFees": {
+              "total": 6.66,
+              "itemizedValues": {
+                "HOTEL_DESTINATION_FEE": 6.66
+              }
+            },
+            "taxInclusive": false,
+            "discountPercentage": 5,
+            "strikethroughDetails": {
+              "avgNightlyAmount": 476.04,
+              "avgNightlyPoints": null,
+              "ratePlanCode": "RACK",
+              "currencyCode": "USD"
+            },
+            "roomPolicy": null,
+            "ratePlanCategories": [
+              "PROMO",
+              "FENCD",
+              "Corporate"
+            ]
+          },
+          "memberRate": null
+        },
+        "requestedRates": [
+          {
+            "defaultRate": {
+              "ratePlanCode": "RACK",
+              "currencyCode": "USD",
+              "amountBeforeTaxFees": 938.0,
+              "amountAfterTaxFees": 1115.3,
+              "avgNightlyAmount": 476.04,
+              "avgNightlyAmountBeforeTaxFees": 469.0,
+              "avgNightlyAmountAfterTaxFees": 557.65,
+              "points": 0.0,
+              "avgNightlyPoints": 0.0,
+              "avgNightlyTaxes": {
+                "total": 81.61,
+                "itemizedValues": {
+                  "HOTEL_TAX": 81.61
+                }
+              },
+              "avgNightlyFees": {
+                "total": 7.04,
+                "itemizedValues": {
+                  "HOTEL_DESTINATION_FEE": 7.04
+                }
+              },
+              "taxInclusive": false,
+              "discountPercentage": 0,
+              "strikethroughDetails": null,
+              "roomPolicy": null
+            }
+          },
+          {
+            "defaultRate": {
+              "ratePlanCode": "SRD",
+              "currencyCode": "XLY",
+              "amountBeforeTaxFees": 0.0,
+              "amountAfterTaxFees": 0.0,
+              "avgNightlyAmount": 0.0,
+              "avgNightlyAmountBeforeTaxFees": 0.0,
+              "avgNightlyAmountAfterTaxFees": 0.0,
+              "points": 80000.0,
+              "avgNightlyPoints": 40000.0,
+              "avgNightlyTaxes": {
+                "total": 0,
+                "itemizedValues": {}
+              },
+              "avgNightlyFees": {
+                "total": 0,
+                "itemizedValues": {}
+              },
+              "taxInclusive": false,
+              "discountPercentage": 0,
+              "strikethroughDetails": null,
+              "roomPolicy": null
+            }
+          }
+        ],
+        "taxes": [
+          {
+            "startDate": "2026-09-18",
+            "endDate": "2026-09-20",
+            "currencyCode": "",
+            "frequency": "",
+            "amount": 0.0,
+            "percentage": 17.4
+          }
+        ],
+        "fees": [
+          {
+            "startDate": "2026-09-18",
+            "endDate": "2026-09-20",
+            "currencyCode": "",
+            "frequency": "",
+            "amount": 0.0,
+            "percentage": 1.5
+          }
+        ]
+      },
+      {
+        "hotelCode": "IL103",
+        "brandCode": "SL",
+        "startDate": "2026-09-18",
+        "endDate": "2026-09-20",
+        "nights": 2,
+        "rank": 1001.6341555595361,
+        "policyStatus": null,
+        "lowestRate": {
+          "defaultRate": {
+            "ratePlanCode": "SAPR1",
+            "currencyCode": "USD",
+            "amountBeforeTaxFees": 412.2,
+            "amountAfterTaxFees": 484.34,
+            "avgNightlyAmount": 206.1,
+            "avgNightlyAmountBeforeTaxFees": 206.1,
+            "avgNightlyAmountAfterTaxFees": 242.17,
+            "points": 0.0,
+            "avgNightlyPoints": 0.0,
+            "avgNightlyTaxes": {
+              "total": 36.07,
+              "itemizedValues": {
+                "HOTEL_TAX": 36.07
+              }
+            },
+            "avgNightlyFees": {
+              "total": 0,
+              "itemizedValues": {}
+            },
+            "taxInclusive": false,
+            "discountPercentage": 10,
+            "strikethroughDetails": {
+              "avgNightlyAmount": 229.0,
+              "avgNightlyPoints": null,
+              "ratePlanCode": "RACK",
+              "currencyCode": "USD"
+            },
+            "roomPolicy": null,
+            "ratePlanCategories": [
+              "PREPD",
+              "Corporate"
+            ]
+          },
+          "memberRate": {
+            "ratePlanCode": "SAPR1M",
+            "currencyCode": "USD",
+            "amountBeforeTaxFees": 370.98,
+            "amountAfterTaxFees": 435.9,
+            "avgNightlyAmount": 185.49,
+            "avgNightlyAmountBeforeTaxFees": 185.49,
+            "avgNightlyAmountAfterTaxFees": 217.95,
+            "points": 0.0,
+            "avgNightlyPoints": 0.0,
+            "avgNightlyTaxes": {
+              "total": 32.46,
+              "itemizedValues": {
+                "HOTEL_TAX": 32.46
+              }
+            },
+            "avgNightlyFees": {
+              "total": 0,
+              "itemizedValues": {}
+            },
+            "taxInclusive": false,
+            "discountPercentage": 19,
+            "strikethroughDetails": {
+              "avgNightlyAmount": 229.0,
+              "avgNightlyPoints": null,
+              "ratePlanCode": "RACK",
+              "currencyCode": "USD"
+            },
+            "roomPolicy": null,
+            "ratePlanCategories": [
+              "FENCD",
+              "PREPD",
+              "Corporate"
+            ]
+          }
+        },
+        "requestedRates": [
+          {
+            "defaultRate": {
+              "ratePlanCode": "RACK",
+              "currencyCode": "USD",
+              "amountBeforeTaxFees": 458.0,
+              "amountAfterTaxFees": 538.15,
+              "avgNightlyAmount": 229.0,
+              "avgNightlyAmountBeforeTaxFees": 229.0,
+              "avgNightlyAmountAfterTaxFees": 269.08,
+              "points": 0.0,
+              "avgNightlyPoints": 0.0,
+              "avgNightlyTaxes": {
+                "total": 40.08,
+                "itemizedValues": {
+                  "HOTEL_TAX": 40.08
+                }
+              },
+              "avgNightlyFees": {
+                "total": 0,
+                "itemizedValues": {}
+              },
+              "taxInclusive": false,
+              "discountPercentage": 0,
+              "strikethroughDetails": null,
+              "roomPolicy": null
+            }
+          },
+          {
+            "defaultRate": {
+              "ratePlanCode": "SRD",
+              "currencyCode": "XLY",
+              "amountBeforeTaxFees": 0.0,
+              "amountAfterTaxFees": 0.0,
+              "avgNightlyAmount": 0.0,
+              "avgNightlyAmountBeforeTaxFees": 0.0,
+              "avgNightlyAmountAfterTaxFees": 0.0,
+              "points": 50000.0,
+              "avgNightlyPoints": 25000.0,
+              "avgNightlyTaxes": {
+                "total": 0,
+                "itemizedValues": {}
+              },
+              "avgNightlyFees": {
+                "total": 0,
+                "itemizedValues": {}
+              },
+              "taxInclusive": false,
+              "discountPercentage": 0,
+              "strikethroughDetails": null,
+              "roomPolicy": null
+            }
+          }
+        ],
+        "taxes": [
+          {
+            "startDate": "2026-09-18",
+            "endDate": "2026-09-20",
+            "currencyCode": "",
+            "frequency": "",
+            "amount": 0.0,
+            "percentage": 17.5
+          }
+        ],
+        "fees": []
+      }
+    ]
+  }
+}

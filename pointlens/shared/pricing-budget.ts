@@ -2,14 +2,16 @@ type BudgetDetails = { lease?: string; release?: string; retryAfter?: string }
 type BudgetDecision = { allowed: boolean; retryAt?: number }
 
 // A single serialized budget per brand across tabs and service-worker restarts.
-export function registerPricingBudget(brand: "hyatt" | "marriott" | "wyndham") {
+export function registerPricingBudget(
+  brand: "hyatt" | "marriott" | "wyndham" | "choice"
+) {
   let queue = Promise.resolve()
   const key = `pointlens:${brand}:pricing-budget`
   chrome.runtime.onMessage.addListener((msg, sender, reply) => {
     if (
       msg?.type !== `POINTLENS_${brand}_BUDGET` ||
       !sender.url?.startsWith(
-        `https://www.${brand === "wyndham" ? "wyndhamhotels" : brand}.com/`
+        `https://www.${brand === "wyndham" ? "wyndhamhotels" : brand === "choice" ? "choicehotels" : brand}.com/`
       )
     )
       return
@@ -71,7 +73,9 @@ export function registerPricingBudget(brand: "hyatt" | "marriott" | "wyndham") {
   })
 }
 
-export function installBudgetBridge(brand: "hyatt" | "marriott" | "wyndham") {
+export function installBudgetBridge(
+  brand: "hyatt" | "marriott" | "wyndham" | "choice"
+) {
   window.addEventListener("message", (event) => {
     if (
       event.source !== window ||
@@ -99,7 +103,7 @@ export function installBudgetBridge(brand: "hyatt" | "marriott" | "wyndham") {
 }
 
 export function requestPricingBudgetDecision(
-  brand: "hyatt" | "marriott" | "wyndham",
+  brand: "hyatt" | "marriott" | "wyndham" | "choice",
   status?: number,
   details: BudgetDetails = {}
 ): Promise<BudgetDecision> {
@@ -135,7 +139,7 @@ export function requestPricingBudgetDecision(
 }
 
 export async function requestPricingBudget(
-  brand: "hyatt" | "marriott" | "wyndham",
+  brand: "hyatt" | "marriott" | "wyndham" | "choice",
   status?: number,
   details: BudgetDetails = {}
 ): Promise<boolean> {

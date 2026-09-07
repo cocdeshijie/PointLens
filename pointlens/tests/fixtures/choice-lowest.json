@@ -1,0 +1,530 @@
+{
+  "data": {
+    "getHotelAvailabilityLowestRoomRates": {
+      "startDate": "2026-09-18",
+      "endDate": "2026-09-20",
+      "nights": 2,
+      "hotelCode": "IL514",
+      "brandCode": "BR",
+      "rooms": [
+        {
+          "key": "NK",
+          "value": {
+            "code": "NK",
+            "title": "1 King Bed, Nonsmoking"
+          }
+        },
+        {
+          "key": "NK1",
+          "value": {
+            "code": "NK1",
+            "title": "1 King Bed, Deluxe Room"
+          }
+        },
+        {
+          "key": "NQQ1",
+          "value": {
+            "code": "NQQ1",
+            "title": "2 Queen Beds, Deluxe Room"
+          }
+        },
+        {
+          "key": "NHK",
+          "value": {
+            "code": "NHK",
+            "title": "1 King Bed, Accessible, Deluxe Room"
+          }
+        }
+      ],
+      "roomRates": [
+        {
+          "key": "NQQ1",
+          "value": {
+            "lowestRoomRate": {
+              "defaultRate": {
+                "ratePlanCode": "S10M2M",
+                "roomCode": "NQQ1",
+                "availabilityStatus": "AVAILABLE",
+                "currencyCode": "USD",
+                "points": 0.0,
+                "amountAfterTaxFees": 1055.23,
+                "amountBeforeTaxFees": 887.5,
+                "amount": 900.81,
+                "fees": {
+                  "total": 13.31,
+                  "itemizedValues": {
+                    "HOTEL_DESTINATION_FEE": 13.31
+                  }
+                },
+                "avgNightlyPoints": 0.0,
+                "avgNightlyAmountAfterTaxFees": 527.62,
+                "avgNightlyAmountBeforeTaxFees": 443.75,
+                "avgNightlyAmount": 450.41
+              },
+              "memberRate": null
+            },
+            "requestedRoomRates": [
+              {
+                "defaultRate": {
+                  "ratePlanCode": "RACK",
+                  "roomCode": "NQQ1",
+                  "availabilityStatus": "AVAILABLE",
+                  "currencyCode": "USD",
+                  "points": 0.0,
+                  "amountAfterTaxFees": 1234.2,
+                  "amountBeforeTaxFees": 1038.0,
+                  "amount": 1053.58,
+                  "fees": {
+                    "total": 15.58,
+                    "itemizedValues": {
+                      "HOTEL_DESTINATION_FEE": 15.58
+                    }
+                  },
+                  "avgNightlyPoints": 0.0,
+                  "avgNightlyAmountAfterTaxFees": 617.1,
+                  "avgNightlyAmountBeforeTaxFees": 519.0,
+                  "avgNightlyAmount": 526.79
+                },
+                "memberRate": {
+                  "ratePlanCode": "SCPM",
+                  "roomCode": "NQQ1",
+                  "availabilityStatus": "AVAILABLE",
+                  "currencyCode": "USD",
+                  "points": 0.0,
+                  "amountAfterTaxFees": 1197.16,
+                  "amountBeforeTaxFees": 1006.86,
+                  "amount": 1021.97,
+                  "fees": {
+                    "total": 15.11,
+                    "itemizedValues": {
+                      "HOTEL_DESTINATION_FEE": 15.11
+                    }
+                  },
+                  "avgNightlyPoints": 0.0,
+                  "avgNightlyAmountAfterTaxFees": 598.58,
+                  "avgNightlyAmountBeforeTaxFees": 503.43,
+                  "avgNightlyAmount": 510.99
+                }
+              },
+              {
+                "defaultRate": {
+                  "ratePlanCode": "SRD",
+                  "roomCode": "NQQ1",
+                  "availabilityStatus": "AVAILABLE",
+                  "currencyCode": "XLY",
+                  "points": 96000.0,
+                  "amountAfterTaxFees": 0.0,
+                  "amountBeforeTaxFees": 0.0,
+                  "amount": 0.0,
+                  "fees": {
+                    "total": 0,
+                    "itemizedValues": {}
+                  },
+                  "avgNightlyPoints": 48000.0,
+                  "avgNightlyAmountAfterTaxFees": 0.0,
+                  "avgNightlyAmountBeforeTaxFees": 0.0,
+                  "avgNightlyAmount": 0.0
+                },
+                "memberRate": null
+              }
+            ]
+          }
+        },
+        {
+          "key": "NK",
+          "value": {
+            "lowestRoomRate": {
+              "defaultRate": {
+                "ratePlanCode": "SAPR1",
+                "roomCode": "NK",
+                "availabilityStatus": "AVAILABLE",
+                "currencyCode": "USD",
+                "points": 0.0,
+                "amountAfterTaxFees": 1059.52,
+                "amountBeforeTaxFees": 891.1,
+                "amount": 904.47,
+                "fees": {
+                  "total": 13.37,
+                  "itemizedValues": {
+                    "HOTEL_DESTINATION_FEE": 13.37
+                  }
+                },
+                "avgNightlyPoints": 0.0,
+                "avgNightlyAmountAfterTaxFees": 529.76,
+                "avgNightlyAmountBeforeTaxFees": 445.55,
+                "avgNightlyAmount": 452.24
+              },
+              "memberRate": null
+            },
+            "requestedRoomRates": [
+              {
+                "defaultRate": {
+                  "ratePlanCode": "RACK",
+                  "roomCode": "NK",
+                  "availabilityStatus": "AVAILABLE",
+                  "currencyCode": "USD",
+                  "points": 0.0,
+                  "amountAfterTaxFees": 1115.3,
+                  "amountBeforeTaxFees": 938.0,
+                  "amount": 952.08,
+                  "fees": {
+                    "total": 14.08,
+                    "itemizedValues": {
+                      "HOTEL_DESTINATION_FEE": 14.08
+                    }
+                  },
+                  "avgNightlyPoints": 0.0,
+                  "avgNightlyAmountAfterTaxFees": 557.65,
+                  "avgNightlyAmountBeforeTaxFees": 469.0,
+                  "avgNightlyAmount": 476.04
+                },
+                "memberRate": {
+                  "ratePlanCode": "SCPM",
+                  "roomCode": "NK",
+                  "availabilityStatus": "AVAILABLE",
+                  "currencyCode": "USD",
+                  "points": 0.0,
+                  "amountAfterTaxFees": 1081.83,
+                  "amountBeforeTaxFees": 909.86,
+                  "amount": 923.51,
+                  "fees": {
+                    "total": 13.65,
+                    "itemizedValues": {
+                      "HOTEL_DESTINATION_FEE": 13.65
+                    }
+                  },
+                  "avgNightlyPoints": 0.0,
+                  "avgNightlyAmountAfterTaxFees": 540.92,
+                  "avgNightlyAmountBeforeTaxFees": 454.93,
+                  "avgNightlyAmount": 461.76
+                }
+              },
+              {
+                "defaultRate": {
+                  "ratePlanCode": "SRD",
+                  "roomCode": "NK",
+                  "availabilityStatus": "AVAILABLE",
+                  "currencyCode": "XLY",
+                  "points": 80000.0,
+                  "amountAfterTaxFees": 0.0,
+                  "amountBeforeTaxFees": 0.0,
+                  "amount": 0.0,
+                  "fees": {
+                    "total": 0,
+                    "itemizedValues": {}
+                  },
+                  "avgNightlyPoints": 40000.0,
+                  "avgNightlyAmountAfterTaxFees": 0.0,
+                  "avgNightlyAmountBeforeTaxFees": 0.0,
+                  "avgNightlyAmount": 0.0
+                },
+                "memberRate": null
+              }
+            ]
+          }
+        },
+        {
+          "key": "NHK",
+          "value": {
+            "lowestRoomRate": {
+              "defaultRate": {
+                "ratePlanCode": "SAPR1",
+                "roomCode": "NHK",
+                "availabilityStatus": "AVAILABLE",
+                "currencyCode": "USD",
+                "points": 0.0,
+                "amountAfterTaxFees": 1104.7,
+                "amountBeforeTaxFees": 929.1,
+                "amount": 943.04,
+                "fees": {
+                  "total": 13.94,
+                  "itemizedValues": {
+                    "HOTEL_DESTINATION_FEE": 13.94
+                  }
+                },
+                "avgNightlyPoints": 0.0,
+                "avgNightlyAmountAfterTaxFees": 552.35,
+                "avgNightlyAmountBeforeTaxFees": 464.55,
+                "avgNightlyAmount": 471.52
+              },
+              "memberRate": {
+                "ratePlanCode": "SAPR1M",
+                "roomCode": "NHK",
+                "availabilityStatus": "AVAILABLE",
+                "currencyCode": "USD",
+                "points": 0.0,
+                "amountAfterTaxFees": 1071.56,
+                "amountBeforeTaxFees": 901.23,
+                "amount": 914.75,
+                "fees": {
+                  "total": 13.52,
+                  "itemizedValues": {
+                    "HOTEL_DESTINATION_FEE": 13.52
+                  }
+                },
+                "avgNightlyPoints": 0.0,
+                "avgNightlyAmountAfterTaxFees": 535.78,
+                "avgNightlyAmountBeforeTaxFees": 450.62,
+                "avgNightlyAmount": 457.38
+              }
+            },
+            "requestedRoomRates": [
+              {
+                "defaultRate": {
+                  "ratePlanCode": "RACK",
+                  "roomCode": "NHK",
+                  "availabilityStatus": "AVAILABLE",
+                  "currencyCode": "USD",
+                  "points": 0.0,
+                  "amountAfterTaxFees": 1162.86,
+                  "amountBeforeTaxFees": 978.0,
+                  "amount": 992.68,
+                  "fees": {
+                    "total": 14.68,
+                    "itemizedValues": {
+                      "HOTEL_DESTINATION_FEE": 14.68
+                    }
+                  },
+                  "avgNightlyPoints": 0.0,
+                  "avgNightlyAmountAfterTaxFees": 581.43,
+                  "avgNightlyAmountBeforeTaxFees": 489.0,
+                  "avgNightlyAmount": 496.34
+                },
+                "memberRate": {
+                  "ratePlanCode": "SCPM",
+                  "roomCode": "NHK",
+                  "availabilityStatus": "AVAILABLE",
+                  "currencyCode": "USD",
+                  "points": 0.0,
+                  "amountAfterTaxFees": 1127.96,
+                  "amountBeforeTaxFees": 948.66,
+                  "amount": 962.89,
+                  "fees": {
+                    "total": 14.23,
+                    "itemizedValues": {
+                      "HOTEL_DESTINATION_FEE": 14.23
+                    }
+                  },
+                  "avgNightlyPoints": 0.0,
+                  "avgNightlyAmountAfterTaxFees": 563.98,
+                  "avgNightlyAmountBeforeTaxFees": 474.33,
+                  "avgNightlyAmount": 481.45
+                }
+              },
+              {
+                "defaultRate": {
+                  "ratePlanCode": "SRD",
+                  "roomCode": "NHK",
+                  "availabilityStatus": "AVAILABLE",
+                  "currencyCode": "XLY",
+                  "points": 80000.0,
+                  "amountAfterTaxFees": 0.0,
+                  "amountBeforeTaxFees": 0.0,
+                  "amount": 0.0,
+                  "fees": {
+                    "total": 0,
+                    "itemizedValues": {}
+                  },
+                  "avgNightlyPoints": 40000.0,
+                  "avgNightlyAmountAfterTaxFees": 0.0,
+                  "avgNightlyAmountBeforeTaxFees": 0.0,
+                  "avgNightlyAmount": 0.0
+                },
+                "memberRate": null
+              }
+            ]
+          }
+        },
+        {
+          "key": "NK1",
+          "value": {
+            "lowestRoomRate": {
+              "defaultRate": {
+                "ratePlanCode": "SAPR1",
+                "roomCode": "NK1",
+                "availabilityStatus": "AVAILABLE",
+                "currencyCode": "USD",
+                "points": 0.0,
+                "amountAfterTaxFees": 1104.7,
+                "amountBeforeTaxFees": 929.1,
+                "amount": 943.04,
+                "fees": {
+                  "total": 13.94,
+                  "itemizedValues": {
+                    "HOTEL_DESTINATION_FEE": 13.94
+                  }
+                },
+                "avgNightlyPoints": 0.0,
+                "avgNightlyAmountAfterTaxFees": 552.35,
+                "avgNightlyAmountBeforeTaxFees": 464.55,
+                "avgNightlyAmount": 471.52
+              },
+              "memberRate": {
+                "ratePlanCode": "SAPR1M",
+                "roomCode": "NK1",
+                "availabilityStatus": "AVAILABLE",
+                "currencyCode": "USD",
+                "points": 0.0,
+                "amountAfterTaxFees": 1071.56,
+                "amountBeforeTaxFees": 901.23,
+                "amount": 914.75,
+                "fees": {
+                  "total": 13.52,
+                  "itemizedValues": {
+                    "HOTEL_DESTINATION_FEE": 13.52
+                  }
+                },
+                "avgNightlyPoints": 0.0,
+                "avgNightlyAmountAfterTaxFees": 535.78,
+                "avgNightlyAmountBeforeTaxFees": 450.62,
+                "avgNightlyAmount": 457.38
+              }
+            },
+            "requestedRoomRates": [
+              {
+                "defaultRate": {
+                  "ratePlanCode": "RACK",
+                  "roomCode": "NK1",
+                  "availabilityStatus": "AVAILABLE",
+                  "currencyCode": "USD",
+                  "points": 0.0,
+                  "amountAfterTaxFees": 1162.86,
+                  "amountBeforeTaxFees": 978.0,
+                  "amount": 992.68,
+                  "fees": {
+                    "total": 14.68,
+                    "itemizedValues": {
+                      "HOTEL_DESTINATION_FEE": 14.68
+                    }
+                  },
+                  "avgNightlyPoints": 0.0,
+                  "avgNightlyAmountAfterTaxFees": 581.43,
+                  "avgNightlyAmountBeforeTaxFees": 489.0,
+                  "avgNightlyAmount": 496.34
+                },
+                "memberRate": {
+                  "ratePlanCode": "SCPM",
+                  "roomCode": "NK1",
+                  "availabilityStatus": "AVAILABLE",
+                  "currencyCode": "USD",
+                  "points": 0.0,
+                  "amountAfterTaxFees": 1127.96,
+                  "amountBeforeTaxFees": 948.66,
+                  "amount": 962.89,
+                  "fees": {
+                    "total": 14.23,
+                    "itemizedValues": {
+                      "HOTEL_DESTINATION_FEE": 14.23
+                    }
+                  },
+                  "avgNightlyPoints": 0.0,
+                  "avgNightlyAmountAfterTaxFees": 563.98,
+                  "avgNightlyAmountBeforeTaxFees": 474.33,
+                  "avgNightlyAmount": 481.45
+                }
+              },
+              {
+                "defaultRate": {
+                  "ratePlanCode": "SRD",
+                  "roomCode": "NK1",
+                  "availabilityStatus": "AVAILABLE",
+                  "currencyCode": "XLY",
+                  "points": 80000.0,
+                  "amountAfterTaxFees": 0.0,
+                  "amountBeforeTaxFees": 0.0,
+                  "amount": 0.0,
+                  "fees": {
+                    "total": 0,
+                    "itemizedValues": {}
+                  },
+                  "avgNightlyPoints": 40000.0,
+                  "avgNightlyAmountAfterTaxFees": 0.0,
+                  "avgNightlyAmountBeforeTaxFees": 0.0,
+                  "avgNightlyAmount": 0.0
+                },
+                "memberRate": null
+              }
+            ]
+          }
+        }
+      ],
+      "ratePlans": [
+        {
+          "key": "RACK",
+          "value": {
+            "ratePlanCategories": [
+              "OTHER"
+            ],
+            "name": "Flexible Rate"
+          }
+        },
+        {
+          "key": "SAPR1",
+          "value": {
+            "ratePlanCategories": [
+              "PREPD",
+              "OTHER"
+            ],
+            "name": "Pay Now and Save"
+          }
+        },
+        {
+          "key": "SRD",
+          "value": {
+            "ratePlanCategories": [
+              "OTHER"
+            ],
+            "name": "Choice Privileges Reward Night"
+          }
+        },
+        {
+          "key": "SAPR1M",
+          "value": {
+            "ratePlanCategories": [
+              "FENCD",
+              "PREPD",
+              "OTHER"
+            ],
+            "name": "Pay Now and Save"
+          }
+        },
+        {
+          "key": "SCPM",
+          "value": {
+            "ratePlanCategories": [
+              "FENCD",
+              "OTHER"
+            ],
+            "name": "Flexible Rate"
+          }
+        },
+        {
+          "key": "S10M2M",
+          "value": {
+            "ratePlanCategories": [
+              "FENCD",
+              "PROMO",
+              "OTHER"
+            ],
+            "name": "Stay 2 Nights, Get 10% Off"
+          }
+        }
+      ],
+      "fees": [
+        {
+          "amount": 0.0,
+          "currencyCode": "",
+          "description": {
+            "shortText": "Destination Fee",
+            "longText": "Chicago Tourism Improvement District fee"
+          },
+          "endDate": "2026-09-20",
+          "frequency": "",
+          "percentage": 1.5,
+          "startDate": "2026-09-18",
+          "type": "HOTEL_DESTINATION_FEE"
+        }
+      ]
+    }
+  }
+}
