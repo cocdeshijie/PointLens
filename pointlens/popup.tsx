@@ -15,6 +15,7 @@ import { useEffect, useState } from "react"
 import { FiChevronRight, FiSettings } from "react-icons/fi"
 
 import SettingsPage from "./components/SettingsPage"
+import UpdateNotice from "./components/UpdateNotice"
 import type { SiteMeta } from "./components/ValueSettingsPanel"
 import HiltonPopup from "./hotels/hilton/Popup"
 import HyattPopup from "./hotels/hyatt/Popup"
@@ -229,6 +230,8 @@ function IndexPopup() {
           <span style={s.footerVersion}>v{version}</span>
         </footer>
       </main>
+
+      <UpdateNotice />
 
       <style>{`
         * { box-sizing: border-box; }
