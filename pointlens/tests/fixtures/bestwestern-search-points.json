@@ -1,0 +1,34 @@
+[
+  {
+    "resort": "15108",
+    "resortAvailable": "AVAILABLE",
+    "resortSummary": {
+      "name": "Best Western University Inn at Valparaiso",
+      "currencyCode": "USD",
+      "display-taxes-fees-inclusive": false
+    },
+    "resortSearchPoint": {
+      "resortRatePlan": "BWR",
+      "resortRateCode": "FX",
+      "totalPoints": 36000,
+      "resortRoomCategory": "2345447",
+      "requested": false
+    }
+  },
+  {
+    "resort": "15067",
+    "resortAvailable": "AVAILABLE",
+    "resortSummary": {
+      "name": "Best Western Crossroads Inn",
+      "currencyCode": "USD",
+      "display-taxes-fees-inclusive": false
+    },
+    "resortSearchPoint": {
+      "resortRatePlan": "BWR",
+      "resortRateCode": "FX",
+      "totalPoints": 32000,
+      "resortRoomCategory": "2230264",
+      "requested": false
+    }
+  }
+]

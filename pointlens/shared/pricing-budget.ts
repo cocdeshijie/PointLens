@@ -3,7 +3,7 @@ type BudgetDecision = { allowed: boolean; retryAt?: number }
 
 // A single serialized budget per brand across tabs and service-worker restarts.
 export function registerPricingBudget(
-  brand: "hyatt" | "marriott" | "wyndham" | "choice"
+  brand: "hyatt" | "marriott" | "wyndham" | "choice" | "bestwestern" | "sonesta"
 ) {
   let queue = Promise.resolve()
   const key = `pointlens:${brand}:pricing-budget`
@@ -74,7 +74,7 @@ export function registerPricingBudget(
 }
 
 export function installBudgetBridge(
-  brand: "hyatt" | "marriott" | "wyndham" | "choice"
+  brand: "hyatt" | "marriott" | "wyndham" | "choice" | "bestwestern" | "sonesta"
 ) {
   window.addEventListener("message", (event) => {
     if (
@@ -103,7 +103,7 @@ export function installBudgetBridge(
 }
 
 export function requestPricingBudgetDecision(
-  brand: "hyatt" | "marriott" | "wyndham" | "choice",
+  brand: "hyatt" | "marriott" | "wyndham" | "choice" | "bestwestern" | "sonesta",
   status?: number,
   details: BudgetDetails = {}
 ): Promise<BudgetDecision> {
@@ -139,7 +139,7 @@ export function requestPricingBudgetDecision(
 }
 
 export async function requestPricingBudget(
-  brand: "hyatt" | "marriott" | "wyndham" | "choice",
+  brand: "hyatt" | "marriott" | "wyndham" | "choice" | "bestwestern" | "sonesta",
   status?: number,
   details: BudgetDetails = {}
 ): Promise<boolean> {

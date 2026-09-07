@@ -17,7 +17,7 @@ module.exports = () => {
   const directory = process.env.PLASMO_BUILD_DIR || path.resolve("build")
   const filename = path.join(directory, `${target}-${tag}`, "manifest.json")
   const manifest = JSON.parse(fs.readFileSync(filename, "utf8"))
-  for (const brand of ["hyatt", "ihg", "marriott", "wyndham", "choice"]) {
+  for (const brand of ["hyatt", "ihg", "marriott", "wyndham", "choice", "bestwestern", "sonesta"]) {
     const entries = manifest.content_scripts.filter(
       (entry) =>
         entry.matches?.includes(

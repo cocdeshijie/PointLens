@@ -1,0 +1,27 @@
+{
+  "rateCode": "2UB",
+  "roomDetailsList": [
+    {
+      "roomCategoryCode": "2345271",
+      "dailyPriceMap": {
+        "2026-09-18": 195,
+        "2026-09-19": 199
+      },
+      "description": "1 KING BED,NSMK,SOFBD,MINFRG,WIFI,FULL BREAKFAST",
+      "inventory": true,
+      "restriction": "NO_RESTRICTION"
+    },
+    {
+      "roomCategoryCode": "2345447",
+      "dailyPriceMap": {
+        "2026-09-18": 195,
+        "2026-09-19": 199
+      },
+      "description": "2 QUEEN BEDS,NSMK,MINFRG,WIFI,FULL BREAKFAST",
+      "inventory": true,
+      "restriction": "NO_RESTRICTION"
+    }
+  ],
+  "taxIncluded": false,
+  "resort": "15108"
+}
