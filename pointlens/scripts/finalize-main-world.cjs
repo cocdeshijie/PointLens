@@ -17,11 +17,12 @@ module.exports = () => {
   const directory = process.env.PLASMO_BUILD_DIR || path.resolve("build")
   const filename = path.join(directory, `${target}-${tag}`, "manifest.json")
   const manifest = JSON.parse(fs.readFileSync(filename, "utf8"))
-  for (const brand of ["hyatt", "ihg", "marriott"]) {
+  for (const brand of ["hyatt", "ihg", "marriott", "wyndham"]) {
     const entries = manifest.content_scripts.filter(
       (entry) =>
-        entry.matches?.includes(`https://www.${brand}.com/*`) &&
-        entry.js?.some((file) => /^content-main\.[\w]+\.js$/.test(file))
+        entry.matches?.includes(
+          `https://www.${brand === "wyndham" ? "wyndhamhotels" : brand}.com/*`
+        ) && entry.js?.some((file) => /^content-main\.[\w]+\.js$/.test(file))
     )
     if (entries.length !== 1)
       throw Error(`Expected one ${brand} MAIN-world entry`)

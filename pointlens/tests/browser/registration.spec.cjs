@@ -42,7 +42,8 @@ test("static MAIN scripts load once and replace legacy registrations with missin
     expect(main.map((s) => s.matches[0]).sort()).toEqual([
       "https://www.hyatt.com/*",
       "https://www.ihg.com/*",
-      "https://www.marriott.com/*"
+      "https://www.marriott.com/*",
+      "https://www.wyndhamhotels.com/*"
     ])
     expect(main.every((s) => s.run_at === "document_start")).toBe(true)
     for (const entry of main) {

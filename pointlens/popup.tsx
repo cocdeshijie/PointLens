@@ -3,6 +3,7 @@ import hiltonIcon from "data-base64:~assets/hilton.png"
 import hyattIcon from "data-base64:~assets/hyatt.png"
 import ihgIcon from "data-base64:~assets/ihg.png"
 import marriottIcon from "data-base64:~assets/marriott.png"
+import wyndhamIcon from "data-base64:~assets/wyndham.svg"
 import { useAtomValue } from "jotai"
 import { useEffect, useState } from "react"
 import { FiChevronRight, FiSettings } from "react-icons/fi"
@@ -13,6 +14,7 @@ import HiltonPopup from "./hotels/hilton/Popup"
 import HyattPopup from "./hotels/hyatt/Popup"
 import IhgPopup from "./hotels/ihg/Popup"
 import MarriottPopup from "./hotels/marriott/Popup"
+import WyndhamPopup from "./hotels/wyndham/Popup"
 import { type Palette, paletteAtom } from "./state/theme"
 
 const POPUP_WIDTH = 380
@@ -28,7 +30,8 @@ const SUPPORTED_SITES: readonly Site[] = [
   { id: "ihg", name: "IHG", domain: "ihg.com", accent: "#C8102E", icon: ihgIcon },
   { id: "hilton", name: "Hilton", domain: "hilton.com", accent: "#1C3D6E", icon: hiltonIcon },
   { id: "marriott", name: "Marriott", domain: "marriott.com", accent: "#9A1C36", icon: marriottIcon },
-  { id: "hyatt", name: "Hyatt", domain: "hyatt.com", accent: "#0072CE", icon: hyattIcon }
+  { id: "hyatt", name: "Hyatt", domain: "hyatt.com", accent: "#0072CE", icon: hyattIcon },
+  { id: "wyndham", name: "Wyndham", domain: "wyndhamhotels.com", accent: "#003c5a", icon: wyndhamIcon },
 ] as const
 
 function IndexPopup() {
@@ -98,6 +101,8 @@ function IndexPopup() {
       icon: site.icon
     }
     switch (site.id) {
+      case "wyndham":
+        return <WyndhamPopup onBack={goHome} site={meta} />
       case "ihg":
         return <IhgPopup onBack={goHome} site={meta} />
       case "hilton":

@@ -2,6 +2,7 @@ import { registerHiltonListeners } from "./hotels/hilton/background"
 import { registerHyattListeners } from "./hotels/hyatt/background"
 import { registerIhgWebRequestListeners } from "./hotels/ihg/background"
 import { registerMarriottListeners } from "./hotels/marriott/background"
+import { registerWyndhamListeners } from "./hotels/wyndham/background"
 
 // MAIN-world scripts are declared in the manifest. Remove this extension's
 // legacy dynamic registrations, including entries whose old bundles vanished.
@@ -16,3 +17,5 @@ registerHiltonListeners()
 registerIhgWebRequestListeners()
 registerMarriottListeners()
 registerHyattListeners()
+
+registerWyndhamListeners()

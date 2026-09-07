@@ -1,0 +1,75 @@
+{
+  "status": "OK",
+  "availability": {
+    "hostBrand": {
+      "availability": []
+    },
+    "altSell": {
+      "availability": [
+        {
+          "hotelCode": "52843",
+          "hotelId": "52843",
+          "brand": "LQ",
+          "hotelName": "La Quinta Inn & Suites by Wyndham Chicago Downtown",
+          "sort": null,
+          "fnsAvailable": true,
+          "fnsPoints": "30000",
+          "totalFnsPoints": "60000",
+          "rate": {
+            "displayRate": 449.1,
+            "displayRateProcessed": 449.1,
+            "priceDisplayType": "RRT",
+            "strikethroughRate": 0,
+            "strikethroughRatePlanId": null,
+            "ratePlanId": "SPD4",
+            "currencyCode": "USD",
+            "message": null,
+            "errorCode": null,
+            "cugRate": false,
+            "alternate": false,
+            "pacRate": {
+              "pacRate": 399.2,
+              "pacPoints": "4000",
+              "totalPacPoints": "8000",
+              "pacRatePlan": true,
+              "pacRatePlanName": "SRB7",
+              "pacRateAfterTax": 474.63
+            },
+            "totalAfterTax": 551.58
+          }
+        },
+        {
+          "hotelCode": "10073",
+          "hotelId": "10073",
+          "brand": "TL",
+          "hotelName": "Travelodge by Wyndham Downtown Chicago",
+          "sort": null,
+          "fnsAvailable": true,
+          "fnsPoints": "30000",
+          "totalFnsPoints": "60000",
+          "rate": {
+            "displayRate": 399,
+            "displayRateProcessed": 399,
+            "priceDisplayType": "RRT",
+            "strikethroughRate": 0,
+            "strikethroughRatePlanId": null,
+            "ratePlanId": "RROD",
+            "currencyCode": "USD",
+            "message": null,
+            "errorCode": null,
+            "cugRate": false,
+            "alternate": false,
+            "pacRate": {
+              "pacRate": null,
+              "pacPoints": null,
+              "totalPacPoints": null,
+              "pacRatePlan": false,
+              "pacRatePlanName": null
+            },
+            "totalAfterTax": 468.43
+          }
+        }
+      ]
+    }
+  }
+}
