@@ -1,0 +1,138 @@
+{
+  "data": {
+    "hotelAvailablity": {
+      "queryHotel": {
+        "id": "10054",
+        "name": "The Royal Sonesta Chicago Downtown",
+        "redemptionItem": {
+          "redemptionItemCode": "FN09",
+          "currencyRequired": "30000.00"
+        },
+        "rooms": [
+          {
+            "code": "D2QNC",
+            "name": "Two Queens - City View",
+            "quantity": 3,
+            "roomRates": [
+              {
+                "rateCode": "TPMEM",
+                "currencyCode": "USD",
+                "roomRateWithFees": 571.0,
+                "subTotal": 1142.0,
+                "taxes": 215.86,
+                "fees": 0.0,
+                "resortFee": 0,
+                "total": 1357.86,
+                "name": "Sonesta Travel Pass Member Rate",
+                "isRedemptionRate": false
+              },
+              {
+                "rateCode": "DBAR",
+                "currencyCode": "USD",
+                "roomRateWithFees": 660.91,
+                "subTotal": 1268.0,
+                "taxes": 249.84,
+                "fees": 53.82,
+                "resortFee": 0,
+                "total": 1571.66,
+                "name": "Best Flexible Rate",
+                "isRedemptionRate": false
+              },
+              {
+                "rateCode": "TPMEMAP",
+                "currencyCode": "USD",
+                "roomRateWithFees": 562.5,
+                "subTotal": 1125.0,
+                "taxes": 212.63,
+                "fees": 0.0,
+                "resortFee": 0,
+                "total": 1337.63,
+                "name": "Travel Pass Member Advanced Purchase",
+                "isRedemptionRate": false
+              },
+              {
+                "rateCode": "SONAP",
+                "currencyCode": "USD",
+                "roomRateWithFees": 600.91,
+                "subTotal": 1148.0,
+                "taxes": 227.17,
+                "fees": 53.82,
+                "resortFee": 0,
+                "total": 1428.99,
+                "name": "Book now and save Advance Purchase",
+                "isRedemptionRate": false
+              },
+              {
+                "rateCode": "TPRNR1",
+                "currencyCode": "USD",
+                "roomRateWithFees": 151.91,
+                "subTotal": 250.0,
+                "taxes": 57.46,
+                "fees": 53.82,
+                "resortFee": 0,
+                "total": 361.28,
+                "name": "Rewards Points",
+                "isRedemptionRate": true
+              }
+            ]
+          },
+          {
+            "code": "P2QNC",
+            "name": "Deluxe - Two Queens - City View",
+            "quantity": 1,
+            "roomRates": [
+              {
+                "rateCode": "TPMEM",
+                "currencyCode": "USD",
+                "roomRateWithFees": 589.0,
+                "subTotal": 1178.0,
+                "taxes": 222.67,
+                "fees": 0.0,
+                "resortFee": 0,
+                "total": 1400.67,
+                "name": "Sonesta Travel Pass Member Rate",
+                "isRedemptionRate": false
+              },
+              {
+                "rateCode": "DBAR",
+                "currencyCode": "USD",
+                "roomRateWithFees": 680.91,
+                "subTotal": 1308.0,
+                "taxes": 257.4,
+                "fees": 53.82,
+                "resortFee": 0,
+                "total": 1619.22,
+                "name": "Best Flexible Rate",
+                "isRedemptionRate": false
+              },
+              {
+                "rateCode": "TPMEMAP",
+                "currencyCode": "USD",
+                "roomRateWithFees": 579.5,
+                "subTotal": 1159.0,
+                "taxes": 219.07,
+                "fees": 0.0,
+                "resortFee": 0,
+                "total": 1378.07,
+                "name": "Travel Pass Member Advanced Purchase",
+                "isRedemptionRate": false
+              },
+              {
+                "rateCode": "SONAP",
+                "currencyCode": "USD",
+                "roomRateWithFees": 618.41,
+                "subTotal": 1183.0,
+                "taxes": 233.78,
+                "fees": 53.82,
+                "resortFee": 0,
+                "total": 1470.6,
+                "name": "Book now and save Advance Purchase",
+                "isRedemptionRate": false
+              }
+            ]
+          }
+        ]
+      }
+    }
+  }
+}

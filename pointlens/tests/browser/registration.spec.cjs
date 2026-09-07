@@ -40,10 +40,12 @@ test("static MAIN scripts load once and replace legacy registrations with missin
     )
     const main = manifest.content_scripts.filter((s) => s.world === "MAIN")
     expect(main.map((s) => s.matches[0]).sort()).toEqual([
+      "https://www.bestwestern.com/*",
       "https://www.choicehotels.com/*",
       "https://www.hyatt.com/*",
       "https://www.ihg.com/*",
       "https://www.marriott.com/*",
+      "https://www.sonesta.com/*",
       "https://www.wyndhamhotels.com/*"
     ])
     expect(main.every((s) => s.run_at === "document_start")).toBe(true)

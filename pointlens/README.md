@@ -111,3 +111,23 @@ The adapter reuses native GraphQL responses and direct-page pricing hydration.
 Missing comparison rates use a batched, rate-limited supplement; it does not
 request each hotel separately. See [Choice request findings](../findings/choicehotels-com/network.md)
 for sources, fee treatment and live coverage.
+
+## Best Western and Sonesta
+
+Both integrations use the compact CPP / opposite-payment badge and shared
+keyboard, hover, and click tooltip. Search results and map previews can use the
+lowest available room; individual room/rate cards require an exact room match.
+Missing award rooms show an unavailable state. Each brand has its own popup
+settings for thresholds and tax basis.
+
+Best Western reuses native search and daily room-rate responses, retaining early
+responses until the property currency appears. It fills a missing search side
+with one batch, or a missing room award plan with one lookup, using the shared
+cross-tab request budget and cooldown. Missing taxes remain explicitly unknown.
+Sonesta reuses native GraphQL availability without extra pricing requests. A
+hotel tier alone never counts as award availability; an actual reward rate must
+exist for the selected room and stay. Estimated award taxes and fees are shown
+in the tooltip and deducted from cash savings.
+
+See [Best Western findings](../findings/bestwestern-com/network.md) and
+[Sonesta findings](../findings/sonesta-com/network.md) for live coverage and limits.

@@ -1,3 +1,5 @@
+import { registerBestwesternListeners } from "./hotels/bestwestern/background"
+import { registerSonestaListeners } from "./hotels/sonesta/background"
 import { registerChoiceListeners } from "./hotels/choice/background"
 import { registerHiltonListeners } from "./hotels/hilton/background"
 import { registerHyattListeners } from "./hotels/hyatt/background"
@@ -22,3 +24,6 @@ registerHyattListeners()
 registerWyndhamListeners()
 
 registerChoiceListeners()
+
+registerBestwesternListeners()
+registerSonestaListeners()

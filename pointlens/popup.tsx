@@ -1,11 +1,15 @@
-import choiceIcon from "data-base64:~assets/choice.svg"
+import bestwesternIcon from "data-base64:~assets/bestwestern.png"
+import sonestaIcon from "data-base64:~assets/sonesta.png"
+import BestwesternPopup from "./hotels/bestwestern/Popup"
+import SonestaPopup from "./hotels/sonesta/Popup"
+import choiceIcon from "data-base64:~assets/choice.png"
 import ChoicePopup from "./hotels/choice/Popup"
 import appIcon from "data-base64:~assets/icon.png"
 import hiltonIcon from "data-base64:~assets/hilton.png"
 import hyattIcon from "data-base64:~assets/hyatt.png"
 import ihgIcon from "data-base64:~assets/ihg.png"
 import marriottIcon from "data-base64:~assets/marriott.png"
-import wyndhamIcon from "data-base64:~assets/wyndham.svg"
+import wyndhamIcon from "data-base64:~assets/wyndham.png"
 import { useAtomValue } from "jotai"
 import { useEffect, useState } from "react"
 import { FiChevronRight, FiSettings } from "react-icons/fi"
@@ -35,6 +39,8 @@ const SUPPORTED_SITES: readonly Site[] = [
   { id: "hyatt", name: "Hyatt", domain: "hyatt.com", accent: "#0072CE", icon: hyattIcon },
   { id: "wyndham", name: "Wyndham", domain: "wyndhamhotels.com", accent: "#003c5a", icon: wyndhamIcon },
   { id: "choice", name: "Choice Hotels", domain: "choicehotels.com", accent: "#ec6b24", icon: choiceIcon },
+  { id: "bestwestern", name: "Best Western", domain: "bestwestern.com", accent: "#123f77", icon: bestwesternIcon },
+  { id: "sonesta", name: "Sonesta", domain: "sonesta.com", accent: "#552b80", icon: sonestaIcon },
 ] as const
 
 function IndexPopup() {
@@ -104,6 +110,8 @@ function IndexPopup() {
       icon: site.icon
     }
     switch (site.id) {
+      case "bestwestern": return <BestwesternPopup onBack={goHome} site={meta} />
+      case "sonesta": return <SonestaPopup onBack={goHome} site={meta} />
       case "choice":
         return <ChoicePopup onBack={goHome} site={meta} />
       case "wyndham":
