@@ -10,13 +10,14 @@ a fresh build.
 
 Usage:
     cd pointlens && npm run build          # produce build/chrome-mv3-prod
-    python3 scripts/reload_extension.py <cdp-url>
-    # e.g. python3 scripts/reload_extension.py http://172.19.176.1:9322
+    POINTLENS_STAGE_DIR=/mnt/c/PointLens/extension python3 scripts/reload_extension.py <cdp-url>
+    # e.g. python3 scripts/reload_extension.py http://<windows-host>:9322
 """
 from __future__ import annotations
 
 import asyncio
 import json
+import os
 import subprocess
 import sys
 import urllib.request
@@ -24,7 +25,8 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 BUILD = REPO / "pointlens" / "build" / "chrome-mv3-prod"
-STAGE_MNT = Path("/mnt/c/PointLens/extension")
+# Use a dedicated staging folder: rsync --delete removes files within it.
+STAGE_DIR_ENV = "POINTLENS_STAGE_DIR"
 
 
 def mnt_to_windows(p: Path) -> str:
@@ -37,9 +39,15 @@ def mnt_to_windows(p: Path) -> str:
 def stage() -> str:
     if not (BUILD / "manifest.json").is_file():
         sys.exit(f"no build at {BUILD} — run `cd pointlens && npm run build` first")
-    STAGE_MNT.mkdir(parents=True, exist_ok=True)
-    subprocess.run(["rsync", "-a", "--delete", str(BUILD) + "/", str(STAGE_MNT) + "/"], check=True)
-    win = mnt_to_windows(STAGE_MNT)
+    configured = os.environ.get(STAGE_DIR_ENV)
+    if not configured:
+        sys.exit(f"set {STAGE_DIR_ENV} to a dedicated /mnt/<drive>/... extension staging folder")
+    stage_mnt = Path(configured).expanduser().resolve()
+    win = mnt_to_windows(stage_mnt)
+    if len(stage_mnt.parts) < 5:
+        sys.exit("staging folder must be a dedicated subfolder, not a drive root")
+    stage_mnt.mkdir(parents=True, exist_ok=True)
+    subprocess.run(["rsync", "-a", "--delete", str(BUILD) + "/", str(stage_mnt) + "/"], check=True)
     print(f"[reload] staged {BUILD} -> {win}")
     return win
 
@@ -60,7 +68,7 @@ async def load_unpacked(ws_url: str, win_path: str) -> str:
 
 def main() -> None:
     if len(sys.argv) < 2:
-        sys.exit("usage: reload_extension.py <cdp-url>  (e.g. http://172.19.176.1:9322)")
+        sys.exit("usage: reload_extension.py <cdp-url>  (e.g. http://<windows-host>:9322)")
     cdp = sys.argv[1].rstrip("/")
     win_path = stage()
     ver = json.load(urllib.request.urlopen(cdp + "/json/version", timeout=5))

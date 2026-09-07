@@ -41,3 +41,16 @@ Thumbs.db
 
 # build artifact
 pointlens/tsconfig.tsbuildinfo
+
+# Local secrets and browser captures must stay out of the repository.
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.har
+storage-state*.json
+storageState*.json
